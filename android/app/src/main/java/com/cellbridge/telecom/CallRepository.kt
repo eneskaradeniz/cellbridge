@@ -1,5 +1,6 @@
 package com.cellbridge.telecom
 
+import android.util.Log
 import com.cellbridge.domain.logic.CallTracker
 import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallSnapshot
@@ -22,6 +23,13 @@ class CallRepository @Inject constructor() {
     val hasLiveCalls: Boolean get() = tracker.hasLiveCalls
 
     fun onCallUpdate(call: CallSnapshot) {
-        tracker.onUpdate(call)?.let { check(_events.tryEmit(it)) { "call event buffer full" } }
+        tracker.onUpdate(call)?.let {
+            Log.i(TAG, "${it::class.simpleName} id=${it.call.id} status=${it.call.status}") // never log the number
+            check(_events.tryEmit(it)) { "call event buffer full" }
+        }
+    }
+
+    private companion object {
+        const val TAG = "CellBridge"
     }
 }
