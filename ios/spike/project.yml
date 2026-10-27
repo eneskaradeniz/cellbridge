@@ -1,0 +1,24 @@
+name: Spike
+options:
+  bundleIdPrefix: com.eneskaradeniz
+targets:
+  Spike:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [Sources]
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: CB Spike
+        UILaunchScreen: {}
+        UIBackgroundModes: [audio, voip]
+        NSLocalNetworkUsageDescription: Talks to the CellBridge host on the local network.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.eneskaradeniz.cellbridge.spike
+        DEVELOPMENT_TEAM: ABCDE12345
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"

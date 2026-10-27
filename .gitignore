@@ -1,0 +1,10 @@
+.DS_Store
+build/
+DerivedData/
+*.xcodeproj
+.gradle/
+local.properties
+*.iml
+.idea/
+venv/
+__pycache__/
