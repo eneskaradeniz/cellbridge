@@ -19,6 +19,21 @@ Reset both controls to 0 after use.
 - First DL capture was all zeros; later ones had speech. Cause not isolated (far end silent vs. route timing). Re-verify in the daemon with continuous far-end audio.
 - `VOC_REC_DL` and `VOC_REC_UL` toggled on one `MultiMedia1` front end; the values read back as `On, Off` (first value is the one set).
 
+## M1 findings (daemon, live CS call, 2026-10-27)
+- **Use `PCM_MMAP` for both directions.** The plain read/write ioctl path of the `msm-pcm-q6-v2` driver breaks after ~36-39 calls regardless of
+  period size (DL: `msm_pcm_capture_copy: Invalid dsp buf offset`, EFAULT; UL: writes fill the buffer, then DSP stops consuming,
+  `msm_pcm_playback_copy: wait_event_timeout failed`, process stuck in `D` state until the mixer route is set to 0).
+  With mmap: DL 20 s / 1000 periods and UL 400 periods, zero errors. Reproduces without a call too, so it is not a voice-session issue.
+- **Working config:** 16 kHz, mono, S16_LE, period 320 frames (20 ms). DL 4 periods, UL 8 periods (UL 1024x4 was audibly choppy; 2048x4 and 320x8 were fine).
+- **The CPU must not suspend during a call.** Without a wakelock the DSP feed stalls 300-450 ms (writes block, speech has 80-160 ms holes:
+  7/114 loud frames missing in the `VOC_REC_UL` capture). With a wakelock: max write 21-43 ms, 0 holes. The Android app must hold
+  a `PARTIAL_WAKE_LOCK` while a call is active (not the daemon: a sysfs wakelock leaks if the daemon is killed).
+- **Test signals:** a steady sine is gated by the voice codec / noise suppression ("dit dit dit"); judge quality with speech
+  (`say -v Yelda ... ; afconvert -d LEI16@16000 -c 1`), not tones.
+- **Loopback check without the far end:** `VOC_REC_UL` (same front end as `VOC_REC_DL`) records the uplink including injected audio,
+  so injection can be inspected locally by comparing 20 ms RMS envelopes.
+- The `adb shell` user is already root (`adb root`); the device has no `su`, so an app cannot start the daemon itself.
+
 ## Open questions
 - VoLTE / VoWiFi calls may use other voice front ends (`VoLTE`, `VoWLAN` in `PRI_RX_Voice Mixer`); only CS voice tested.
 - Mute own mic (`setMicrophoneMute` / `Voice Tx Mute`) while injecting, to avoid mixing room sound into the call.

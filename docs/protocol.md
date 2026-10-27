@@ -9,12 +9,16 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | type | dir | fields |
 |---|---|---|
 | `hello` | iOS -> host | `version` |
+| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`) |
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
 | `ended` | host -> iOS | `callId`, `reason?` |
 | `dial` | iOS -> host | `number` |
 | `sms` | host -> iOS | `id`, `from`, `body`, `ts` |
 | `sms_send` | iOS -> host | `to`, `body` |
+
+`audio` is advertised only when the root audio daemon is reachable; without it the host runs in control-only mode
+(calls and SMS work, call audio stays on the phone) and the client must not open the audio channel.
 
 Keep-alive: WebSocket ping every 10 s; client reconnects after 2 s.
 

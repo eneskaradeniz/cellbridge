@@ -1,0 +1,3 @@
+[submodule "android/daemon/third_party/tinyalsa"]
+	path = android/daemon/third_party/tinyalsa
+	url = https://github.com/tinyalsa/tinyalsa.git
