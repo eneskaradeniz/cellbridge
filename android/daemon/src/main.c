@@ -6,6 +6,9 @@
 #include <time.h>
 
 #include "audio.h"
+#include "server.h"
+
+#define DEFAULT_PORT 8766
 
 static volatile sig_atomic_t stop_requested;
 
@@ -13,6 +16,7 @@ static void on_signal(int sig)
 {
     (void)sig;
     stop_requested = 1;
+    server_request_stop();
 }
 
 static long long now_ms(void)
@@ -101,7 +105,8 @@ static int inject(const struct profile *p, const char *path)
 static int usage(const char *argv0)
 {
     fprintf(stderr, "usage: %s <profile> capture <out.raw> <seconds>\n"
-                    "       %s <profile> inject <in.raw>   (16 kHz S16_LE mono, raw)\n", argv0, argv0);
+                    "       %s <profile> inject <in.raw>   (16 kHz S16_LE mono, raw)\n"
+                    "       %s <profile> serve <token> [port]\n", argv0, argv0, argv0);
     return 64;
 }
 
@@ -118,5 +123,7 @@ int main(int argc, char **argv)
         return capture(&p, argv[3], (unsigned int)atoi(argv[4]));
     if (!strcmp(argv[2], "inject") && argc == 4)
         return inject(&p, argv[3]);
+    if (!strcmp(argv[2], "serve") && (argc == 4 || argc == 5))
+        return server_run(&p, argv[3], argc == 5 ? (unsigned short)atoi(argv[4]) : DEFAULT_PORT);
     return usage(argv[0]);
 }

@@ -26,3 +26,21 @@ Keep-alive: WebSocket ping every 10 s; client reconnects after 2 s.
 16 kHz, 16-bit, mono PCM, 20 ms frames (320 samples = 640 bytes) + 4-byte header: `u16 seq`, `u16 reserved`.
 Receiver runs a small adaptive jitter buffer (target 40-80 ms). Opus may replace PCM later.
 Ports: TBD (host binds one port, client announces its port in the `answer` message).
+
+## Audio daemon (on the Android host only, not seen by iOS)
+Root daemon `cellbridge_audiod serve <profile> <token>` <-> Android app, TCP `127.0.0.1:8766`, one client at a time.
+Frame: `u8 type`, `u16 len` (little endian), `len` bytes payload. Audio payloads are exactly one period
+(profile `period_frames`, 16-bit mono -> 640 bytes at 320 frames). The first frame must be `AUTH`; anything else closes the socket.
+
+| type | dir | payload |
+|---|---|---|
+| `0x00` AUTH | app -> daemon | token (bytes) |
+| `0x01` START | app -> daemon | `u8 flags`: bit0 = capture DL, bit1 = inject UL |
+| `0x02` STOP | app -> daemon | - |
+| `0x10` DL frame | daemon -> app | PCM period (only while started with DL) |
+| `0x11` UL frame | app -> daemon | PCM period (only while started with UL) |
+| `0x80` OK | daemon -> app | ack of AUTH / START / STOP |
+| `0x81` ERR | daemon -> app | UTF-8 reason; the request had no effect |
+
+STOP, a closed socket, or SIGTERM switch every mixer route off. The app must hold a `PARTIAL_WAKE_LOCK` while started,
+otherwise the CPU suspends and the DSP feed stalls (see spike-a doc).
