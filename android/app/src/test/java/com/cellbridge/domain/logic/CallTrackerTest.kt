@@ -11,7 +11,6 @@ import com.cellbridge.domain.model.CallStatus.DISCONNECTED
 import com.cellbridge.domain.model.CallStatus.HOLDING
 import com.cellbridge.domain.model.CallStatus.RINGING
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -76,15 +75,16 @@ class CallTrackerTest {
             CallEvent.Ended(incoming(DISCONNECTED, id = "second"), missed = true),
             tracker.onUpdate(incoming(DISCONNECTED, id = "second")),
         )
-        assertTrue(tracker.hasLiveCalls)
+        assertEquals(listOf(incoming(ACTIVE, id = "first")), tracker.liveCalls)
     }
 
     @Test
-    fun `hasLiveCalls follows the call lifecycle`() {
-        assertFalse(tracker.hasLiveCalls)
+    fun `liveCalls follows the call lifecycle and keeps the latest snapshot`() {
+        assertTrue(tracker.liveCalls.isEmpty())
         tracker.onUpdate(incoming(RINGING))
-        assertTrue(tracker.hasLiveCalls)
+        tracker.onUpdate(incoming(ACTIVE))
+        assertEquals(listOf(incoming(ACTIVE)), tracker.liveCalls)
         tracker.onUpdate(incoming(DISCONNECTED))
-        assertFalse(tracker.hasLiveCalls)
+        assertTrue(tracker.liveCalls.isEmpty())
     }
 }

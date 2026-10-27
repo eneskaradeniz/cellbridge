@@ -8,8 +8,9 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 
 | type | dir | fields |
 |---|---|---|
-| `hello` | iOS -> host | `version` |
+| `hello` | iOS -> host | `version` (int, currently 1), `token` |
 | `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`) |
+| `error` | host -> iOS | `code`, `message?` |
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
 | `ended` | host -> iOS | `callId`, `reason?` |
@@ -19,6 +20,12 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 
 `audio` is advertised only when the root audio daemon is reachable; without it the host runs in control-only mode
 (calls and SMS work, call audio stays on the phone) and the client must not open the audio channel.
+
+`hello` must be the first message. The `token` is the pairing secret shown on the host's screen, entered once on the iPhone;
+a wrong token, wrong version or any other first message gets `error` (`unauthorized` / `unsupported_version` / `expected_hello`)
+and the host closes the socket. Later errors (`bad_message`, `unknown_call`) leave the session open.
+`ended.reason` is `missed` for an incoming call that was never answered. After `hello_ack` the host re-sends `ring` for every
+call that is still ringing, so a reconnecting client catches up; clients dedupe by `callId`.
 
 Keep-alive: WebSocket ping every 10 s; client reconnects after 2 s.
 

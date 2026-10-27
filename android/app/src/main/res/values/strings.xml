@@ -6,4 +6,5 @@
     <string name="role_missing">Not granted</string>
     <string name="role_unavailable">Unavailable on this device</string>
     <string name="role_request">Request</string>
+    <string name="pairing_token">Pairing token (enter it on the iPhone)</string>
 </resources>

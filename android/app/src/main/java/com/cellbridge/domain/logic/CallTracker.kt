@@ -13,15 +13,15 @@ import com.cellbridge.domain.model.CallStatus
  * - A call is "missed" when an incoming call is DISCONNECTED without ever having been ACTIVE.
  * - A DISCONNECTED snapshot for a call we never saw is ignored.
  *
- * Pure Kotlin. Not thread-safe: callers serialize access (telecom callbacks arrive on the main thread).
+ * Pure Kotlin. Not thread-safe: callers serialize access.
  */
 class CallTracker {
-    private class Entry(var status: CallStatus, var answered: Boolean)
+    private class Entry(var snapshot: CallSnapshot, var answered: Boolean)
 
     private val calls = LinkedHashMap<String, Entry>()
 
-    /** True while any call has not yet disconnected. */
-    val hasLiveCalls: Boolean get() = calls.isNotEmpty()
+    /** Latest snapshot of every call that has not yet disconnected. */
+    val liveCalls: List<CallSnapshot> get() = calls.values.map { it.snapshot }
 
     fun onUpdate(call: CallSnapshot): CallEvent? {
         val known = calls[call.id]
@@ -32,7 +32,7 @@ class CallTracker {
         }
 
         if (known == null) {
-            calls[call.id] = Entry(call.status, answered = call.status == CallStatus.ACTIVE)
+            calls[call.id] = Entry(call, answered = call.status == CallStatus.ACTIVE)
             return when {
                 call.status == CallStatus.ACTIVE -> CallEvent.Answered(call)
                 call.direction == CallDirection.INCOMING -> CallEvent.Ringing(call)
@@ -40,8 +40,9 @@ class CallTracker {
             }
         }
 
-        if (known.status == call.status) return null
-        known.status = call.status
+        val statusChanged = known.snapshot.status != call.status
+        known.snapshot = call
+        if (!statusChanged) return null
         if (call.status == CallStatus.ACTIVE && !known.answered) {
             known.answered = true
             return CallEvent.Answered(call)

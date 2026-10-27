@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.cellbridge.server.PairingToken
 import com.cellbridge.telecom.AppRole
 import com.cellbridge.telecom.DefaultRoles
 import dagger.hilt.android.AndroidEntryPoint
@@ -30,6 +32,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var roles: DefaultRoles
+    @Inject lateinit var pairingToken: PairingToken
 
     /** Bumped on resume and after a role dialog so the role rows re-read the platform state. */
     private var refresh by mutableIntStateOf(0)
@@ -45,6 +48,8 @@ class MainActivity : ComponentActivity() {
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium)
                     RoleRow(AppRole.DIALER, R.string.role_dialer)
                     RoleRow(AppRole.SMS, R.string.role_sms)
+                    Text(stringResource(R.string.pairing_token), style = MaterialTheme.typography.bodySmall)
+                    SelectionContainer { Text(pairingToken.value, style = MaterialTheme.typography.headlineSmall) }
                 }
             }
         }

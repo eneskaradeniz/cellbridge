@@ -1,7 +1,10 @@
 package com.cellbridge.telecom
 
 import android.telecom.Call
+import android.os.Handler
+import android.os.Looper
 import android.telecom.InCallService
+import android.telecom.VideoProfile
 import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallSnapshot
 import com.cellbridge.domain.model.CallStatus
@@ -13,16 +16,20 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class CellBridgeInCallService : InCallService() {
     @Inject lateinit var repository: CallRepository
+    @Inject lateinit var registry: CallRegistry
     @Inject lateinit var wakeLock: CallWakeLock
 
     private val ids = HashMap<Call, String>()
+    private val main = Handler(Looper.getMainLooper())
 
     private val callback = object : Call.Callback() {
         override fun onStateChanged(call: Call, state: Int) = report(call, state)
     }
 
     override fun onCallAdded(call: Call) {
-        ids[call] = UUID.randomUUID().toString()
+        val id = UUID.randomUUID().toString()
+        ids[call] = id
+        registry.register(id, handleFor(call))
         call.registerCallback(callback)
         report(call, stateOf(call))
     }
@@ -30,12 +37,19 @@ class CellBridgeInCallService : InCallService() {
     override fun onCallRemoved(call: Call) {
         call.unregisterCallback(callback)
         report(call, Call.STATE_DISCONNECTED) // no-op if already reported
-        ids.remove(call)
+        ids.remove(call)?.let(registry::unregister)
     }
 
     override fun onDestroy() {
         wakeLock.setHeld(false)
         super.onDestroy()
+    }
+
+    /** Control-server commands arrive on Ktor threads; telecom calls are made on the main thread. */
+    private fun handleFor(call: Call) = object : CallHandle {
+        override fun answer() { main.post { call.answer(VideoProfile.STATE_AUDIO_ONLY) } }
+        override fun reject() { main.post { call.reject(false, null) } }
+        override fun hangup() { main.post { call.disconnect() } }
     }
 
     private fun report(call: Call, state: Int) {
