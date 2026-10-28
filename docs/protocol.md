@@ -31,7 +31,7 @@ rejected it on the client's request; it is absent for a call that was answered. 
 call that is still ringing, so a reconnecting client catches up; clients dedupe by `callId`.
 
 SMS delivery is lossless: the host stores every incoming message in the system SMS database first, then sends `sms`. `sms_ack`
-acknowledges that message **and every earlier one**; after `hello_ack` the host re-sends everything newer than the last
+acknowledges that message **and every earlier one** (ids only ever increase and are never reused, even after a text is deleted on the host); after `hello_ack` the host re-sends everything newer than the last
 acknowledged id, so a client that was offline (or crashed before saving) catches up. Clients persist a message before acking it and
 dedupe by `id`. `sms` is advertised in `capabilities` only while the host app is the default SMS app.
 `sms_send` is answered by exactly one `sms_result` with the same `clientId`; `ok:false` carries a short `error`
