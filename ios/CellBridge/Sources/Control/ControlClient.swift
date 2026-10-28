@@ -19,6 +19,8 @@ final class ControlClient: ObservableObject {
     private let session: URLSession
     private var task: URLSessionWebSocketTask?
     private var runner: Task<Void, Never>?
+    private var hostProvider: (() -> String)?
+    private var token = ""
 
     init() {
         let configuration = URLSessionConfiguration.default
@@ -26,14 +28,23 @@ final class ControlClient: ObservableObject {
         session = URLSession(configuration: configuration)
     }
 
-    func connect(host: String, token: String) {
+    /// `host` is asked again before every attempt, so a host that moved (the hotspot's subnet changed) is found again.
+    func connect(host: @escaping () -> String, token: String) {
         disconnect()
-        guard let url = URL(string: "ws://\(host):8765/") else { return onLog?("bad host \(host)") ?? () }
+        hostProvider = host
+        self.token = token
         state = .connecting
-        runner = Task { await run(url: url, token: token) }
+        runner = Task { await run() }
+    }
+
+    /// Drops the current connection (if any) and starts over at once; a no-op when the user disconnected.
+    func restart() {
+        guard let hostProvider, runner != nil else { return }
+        connect(host: hostProvider, token: token)
     }
 
     func disconnect() {
+        hostProvider = nil
         runner?.cancel()
         runner = nil
         task?.cancel(with: .goingAway, reason: nil)
@@ -49,8 +60,14 @@ final class ControlClient: ObservableObject {
 
     // MARK: connection loop
 
-    private func run(url: URL, token: String) async {
+    private func run() async {
         while !Task.isCancelled {
+            let host = hostProvider?() ?? ""
+            guard !host.isEmpty, let url = URL(string: "ws://\(host):8765/") else {
+                state = .connecting // no address yet (the gateway is still being discovered): look again shortly
+                try? await Task.sleep(for: .seconds(1))
+                continue
+            }
             let task = session.webSocketTask(with: url)
             self.task = task
             task.resume()

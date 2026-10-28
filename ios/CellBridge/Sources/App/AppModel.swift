@@ -16,6 +16,7 @@ final class AppModel: ObservableObject {
     let gateway = GatewayDiscovery()
     private var calls: CallCoordinator!
     private let callLog: CallLog
+    private let eventLog: EventLog
     private var keepAlive: KeepAlive!
     private var bag = Set<AnyCancellable>()
     private let stamp: DateFormatter = {
@@ -30,6 +31,8 @@ final class AppModel: ObservableObject {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         callLog = CallLog(url: support.appendingPathComponent("CellBridge/calls.json"))
         recents = callLog.entries
+        eventLog = EventLog(url: support.appendingPathComponent("CellBridge/events.log"))
+        events = eventLog.recent(40).reversed()
         keepAlive = KeepAlive(log: { [weak self] in self?.log($0) })
         let audio = AudioBridge(keepAlive: keepAlive, log: { [weak self] in self?.log($0) })
         calls = CallCoordinator(
@@ -60,6 +63,12 @@ final class AppModel: ObservableObject {
             if case .connected = state { return }
             self?.messages.connectionLost()
         }.store(in: &bag)
+        // A new gateway means the host is somewhere else now (hotspot toggled, Wi-Fi changed): do not wait for a timeout.
+        gateway.$address.removeDuplicates().dropFirst().sink { [weak self] _ in
+            guard let self, wantsConnection else { return }
+            log("network changed, reconnecting")
+            client.restart()
+        }.store(in: &bag)
         messages.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         // Forward state changes of the nested object so the main screen refreshes.
         client.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
@@ -78,14 +87,32 @@ final class AppModel: ObservableObject {
 
     var canConnect: Bool { !effectiveHost.isEmpty && !token.isEmpty }
 
+    /// True while the user wants to be connected: survives restarts, so the app reconnects on its own when reopened.
+    private var wantsConnection: Bool {
+        get { UserDefaults.standard.bool(forKey: "wantsConnection") }
+        set { UserDefaults.standard.set(newValue, forKey: "wantsConnection") }
+    }
+
+    /// Called when the app comes to the front: iOS may have suspended it and left the socket dead.
+    func resumeIfNeeded() {
+        guard wantsConnection, canConnect else { return }
+        if case .connected = client.state { return }
+        client.restart()
+        if client.state == .idle { connect() } // the app was relaunched and nothing is running yet
+    }
+
     func connect() {
+        wantsConnection = true
         Task { _ = await AVAudioApplication.requestRecordPermission() } // ask now, not in the middle of a call
         notifier.requestPermission()
         keepAlive.start()
-        client.connect(host: effectiveHost, token: token.uppercased())
+        client.connect(host: { [weak self] in self?.effectiveHost ?? "" }, token: token.uppercased())
     }
 
-    func disconnect() { client.disconnect() }
+    func disconnect() {
+        wantsConnection = false
+        client.disconnect()
+    }
 
     var activeCalls: [ActiveCall] { calls.active }
 
@@ -131,7 +158,14 @@ final class AppModel: ObservableObject {
 
     private func log(_ text: String) {
         events = Array(([stamp.string(from: Date()) + " " + text] + events).prefix(40))
+        eventLog.append(Self.fileStamp.string(from: Date()) + " " + text)
     }
+
+    private static let fileStamp: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MM-dd HH:mm:ss"
+        return f
+    }()
 
     private static func describe(_ message: ServerMessage) -> String {
         switch message {

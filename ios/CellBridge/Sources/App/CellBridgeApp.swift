@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct CellBridgeApp: App {
     @StateObject private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +17,7 @@ struct CellBridgeApp: App {
                 InCallView().environmentObject(model)
             }
             .environmentObject(model)
+            .onChange(of: scenePhase) { _, phase in if phase == .active { model.resumeIfNeeded() } }
         }
     }
 }
