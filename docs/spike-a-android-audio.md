@@ -34,6 +34,14 @@ Reset both controls to 0 after use.
   so injection can be inspected locally by comparing 20 ms RMS envelopes.
 - The `adb shell` user is already root (`adb root`); the device has no `su`, so an app cannot start the daemon itself.
 
+## Network prerequisites (found while verifying the control server, 2026-10-28)
+- **`settings get global restricted_networking_mode` must be `0`.** With `1` every app UID is blocked (`dumpsys netpolicy` shows
+  `blocked=RESTRICTED_MODE`), loopback included: a plain `ServerSocket` never accepted a connection and the app could not connect out either.
+  Symptom: the server logs "Responding" and listens, but requests hang. Fix: `adb shell settings put global restricted_networking_mode 0`.
+- **The app must be a foreground process.** With the screen off (`Dozing`) the app is `blocked=APP_BACKGROUND` and incoming TCP is dropped.
+  Reachable with the app in the foreground (`curl http://<phone>:8765/` answers 400, the expected reply to a non-WebSocket request).
+  The control server therefore has to live in a foreground service (step 3b).
+
 ## Open questions
 - VoLTE / VoWiFi calls may use other voice front ends (`VoLTE`, `VoWLAN` in `PRI_RX_Voice Mixer`); only CS voice tested.
 - Mute own mic (`setMicrophoneMute` / `Voice Tx Mute`) while injecting, to avoid mixing room sound into the call.
