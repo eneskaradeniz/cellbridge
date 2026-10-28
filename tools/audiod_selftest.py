@@ -120,6 +120,26 @@ def main():
     adb("shell", "pkill -f 'cellbridge_audiod .* serve' || true", check=False)
     time.sleep(0.5)
     results.append(check("routes off after daemon killed", routes_off()))
+
+    # Token from a file ("@path"): what an init-started daemon uses; the file is re-read on every AUTH.
+    token_file = f"{DEV}/token.txt"
+    adb("shell", f"rm -f {token_file}; cd {DEV} && (setsid ./cellbridge_audiod platina.profile serve @{token_file} > serve2.log 2>&1 &)")
+    time.sleep(1)
+
+    def auth_with(token):
+        s = connect(); send(s, AUTH, token); typ, _ = recv(s); s.close(); return typ
+
+    results.append(check("file token: missing file -> nothing matches", auth_with(b"anything") == ERR))
+    adb("shell", f"printf 'filetoken\\n' > {token_file}")
+    results.append(check("file token: written after start -> accepted (trailing newline ignored)", auth_with(b"filetoken") == OK))
+    results.append(check("file token: wrong value -> ERR", auth_with(b"filetokeN") == ERR))
+    adb("shell", f"printf 'rotated' > {token_file}")
+    results.append(check("file token: changed file -> new value accepted", auth_with(b"rotated") == OK))
+    results.append(check("file token: old value no longer accepted", auth_with(b"filetoken") == ERR))
+    adb("shell", f": > {token_file}")
+    results.append(check("file token: empty file -> even an empty token is refused", auth_with(b"") == ERR))
+    adb("shell", "pkill -f 'cellbridge_audiod .* serve' || true", check=False)
+    adb("shell", f"rm -f {token_file}")
     adb("forward", "--remove", f"tcp:{PORT}", check=False)
     print(f"{sum(results)}/{len(results)} passed")
     return 0 if all(results) else 1

@@ -1,0 +1,9 @@
+# Starts the CellBridge call-audio daemon at boot. Installed by tools/install-daemon-system.sh.
+#
+# The token is read from the app's file on every authentication, so the daemon may start before the app has run
+# (and before the user has unlocked the phone, when that file is not readable yet).
+service cellbridge_audiod /system/bin/cellbridge_audiod /system/etc/cellbridge/platina.profile serve @/data/data/com.cellbridge/files/daemon.token
+    class main
+    user root
+    group root audio
+    seclabel u:r:su:s0

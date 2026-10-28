@@ -173,6 +173,26 @@ static bool token_matches(const unsigned char *got, unsigned int len, const char
     return diff == 0;
 }
 
+/* `spec` is the token itself, or "@/path" to read it from a file on every check, so an init-started daemon follows
+ * the app's token (which may not exist yet, or change). An empty or missing file never matches. */
+static bool token_ok(const unsigned char *got, unsigned int len, const char *spec)
+{
+    if (spec[0] != '@')
+        return token_matches(got, len, spec);
+    char buf[128];
+    FILE *f = fopen(spec + 1, "r");
+    if (!f)
+        return false;
+    size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+    fclose(f);
+    while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r' || buf[n - 1] == ' '))
+        n--;
+    if (n == 0)
+        return false;
+    buf[n] = '\0';
+    return token_matches(got, len, buf);
+}
+
 /* Reads one frame; returns 0 on success, -1 on EOF/error/oversize. */
 static int read_frame(int fd, unsigned char *type, unsigned char *payload, unsigned int *len)
 {
@@ -193,7 +213,7 @@ static void serve_client(int fd, const struct profile *p, const char *token, uns
     unsigned char type, payload[MAX_PAYLOAD];
     unsigned int len;
 
-    if (read_frame(fd, &type, payload, &len) != 0 || type != MSG_AUTH || !token_matches(payload, len, token)) {
+    if (read_frame(fd, &type, payload, &len) != 0 || type != MSG_AUTH || !token_ok(payload, len, token)) {
         send_err(&s, "auth failed");
         return;
     }
