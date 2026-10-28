@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Debug builds only: fake incoming calls so the call path can be tested without a second phone. -->
+    <application>
+        <service
+            android:name=".debug.FakeCallService"
+            android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+
+        <receiver android:name=".debug.FakeCallReceiver" android:exported="true" />
+    </application>
+</manifest>

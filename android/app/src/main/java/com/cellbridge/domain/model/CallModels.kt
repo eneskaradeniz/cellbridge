@@ -14,7 +14,12 @@ data class CallSnapshot(
     val number: String?,
     val direction: CallDirection,
     val status: CallStatus,
+    /** Only meaningful once DISCONNECTED: the platform says this side declined the call. */
+    val rejected: Boolean = false,
 )
+
+/** Why an incoming call ended without being answered. */
+enum class EndReason { MISSED, REJECTED }
 
 /** What a call's progress means for the client; at most one event per real transition. */
 sealed interface CallEvent {
@@ -24,6 +29,6 @@ sealed interface CallEvent {
     data class Dialing(override val call: CallSnapshot) : CallEvent
     data class Answered(override val call: CallSnapshot) : CallEvent
 
-    /** [missed] is true for an incoming call that ended without ever being answered. */
-    data class Ended(override val call: CallSnapshot, val missed: Boolean) : CallEvent
+    /** [reason] is null for a call that was answered (or an outgoing one). */
+    data class Ended(override val call: CallSnapshot, val reason: EndReason?) : CallEvent
 }

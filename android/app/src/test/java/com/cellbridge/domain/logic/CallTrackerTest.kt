@@ -10,6 +10,7 @@ import com.cellbridge.domain.model.CallStatus.DIALING
 import com.cellbridge.domain.model.CallStatus.DISCONNECTED
 import com.cellbridge.domain.model.CallStatus.HOLDING
 import com.cellbridge.domain.model.CallStatus.RINGING
+import com.cellbridge.domain.model.EndReason
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -25,19 +26,28 @@ class CallTrackerTest {
     fun `incoming call that is answered and hung up is not missed`() {
         assertEquals(CallEvent.Ringing(incoming(RINGING)), tracker.onUpdate(incoming(RINGING)))
         assertEquals(CallEvent.Answered(incoming(ACTIVE)), tracker.onUpdate(incoming(ACTIVE)))
-        assertEquals(CallEvent.Ended(incoming(DISCONNECTED), missed = false), tracker.onUpdate(incoming(DISCONNECTED)))
+        assertEquals(CallEvent.Ended(incoming(DISCONNECTED), reason = null), tracker.onUpdate(incoming(DISCONNECTED)))
     }
 
     @Test
     fun `incoming call that never became active is missed`() {
         tracker.onUpdate(incoming(RINGING))
-        assertEquals(CallEvent.Ended(incoming(DISCONNECTED), missed = true), tracker.onUpdate(incoming(DISCONNECTED)))
+        assertEquals(CallEvent.Ended(incoming(DISCONNECTED), reason = EndReason.MISSED), tracker.onUpdate(incoming(DISCONNECTED)))
+    }
+
+    @Test
+    fun `incoming call declined by this side is rejected, not missed`() {
+        tracker.onUpdate(incoming(RINGING))
+        assertEquals(
+            CallEvent.Ended(incoming(DISCONNECTED).copy(rejected = true), reason = EndReason.REJECTED),
+            tracker.onUpdate(incoming(DISCONNECTED).copy(rejected = true)),
+        )
     }
 
     @Test
     fun `outgoing call ending unanswered is never reported as missed`() {
         assertEquals(CallEvent.Dialing(outgoing(DIALING)), tracker.onUpdate(outgoing(DIALING)))
-        assertEquals(CallEvent.Ended(outgoing(DISCONNECTED), missed = false), tracker.onUpdate(outgoing(DISCONNECTED)))
+        assertEquals(CallEvent.Ended(outgoing(DISCONNECTED), reason = null), tracker.onUpdate(outgoing(DISCONNECTED)))
     }
 
     @Test
@@ -52,13 +62,13 @@ class CallTrackerTest {
         tracker.onUpdate(incoming(ACTIVE))
         assertNull(tracker.onUpdate(incoming(HOLDING)))
         assertNull(tracker.onUpdate(incoming(ACTIVE)))
-        assertEquals(CallEvent.Ended(incoming(DISCONNECTED), missed = false), tracker.onUpdate(incoming(DISCONNECTED)))
+        assertEquals(CallEvent.Ended(incoming(DISCONNECTED), reason = null), tracker.onUpdate(incoming(DISCONNECTED)))
     }
 
     @Test
     fun `call first seen as active counts as answered`() {
         assertEquals(CallEvent.Answered(incoming(ACTIVE)), tracker.onUpdate(incoming(ACTIVE)))
-        assertEquals(CallEvent.Ended(incoming(DISCONNECTED), missed = false), tracker.onUpdate(incoming(DISCONNECTED)))
+        assertEquals(CallEvent.Ended(incoming(DISCONNECTED), reason = null), tracker.onUpdate(incoming(DISCONNECTED)))
     }
 
     @Test
@@ -72,7 +82,7 @@ class CallTrackerTest {
         tracker.onUpdate(incoming(ACTIVE, id = "first"))
         assertEquals(CallEvent.Ringing(incoming(RINGING, id = "second")), tracker.onUpdate(incoming(RINGING, id = "second")))
         assertEquals(
-            CallEvent.Ended(incoming(DISCONNECTED, id = "second"), missed = true),
+            CallEvent.Ended(incoming(DISCONNECTED, id = "second"), reason = EndReason.MISSED),
             tracker.onUpdate(incoming(DISCONNECTED, id = "second")),
         )
         assertEquals(listOf(incoming(ACTIVE, id = "first")), tracker.liveCalls)

@@ -4,6 +4,7 @@ import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallSnapshot
 import com.cellbridge.domain.model.CallStatus
+import com.cellbridge.domain.model.EndReason
 import com.cellbridge.protocol.ClientMessage
 import com.cellbridge.protocol.PROTOCOL_VERSION
 import com.cellbridge.protocol.ProtocolJson
@@ -117,8 +118,17 @@ class ControlServerTest {
     fun `missed call is forwarded as ended with reason`() = withServer { connect ->
         connect {
             login()
-            feed.flow.emit(CallEvent.Ended(incomingRinging.copy(status = CallStatus.DISCONNECTED), missed = true))
+            feed.flow.emit(CallEvent.Ended(incomingRinging.copy(status = CallStatus.DISCONNECTED), reason = EndReason.MISSED))
             assertEquals("""{"type":"ended","callId":"c1","reason":"missed"}""", hear().toString())
+        }
+    }
+
+    @Test
+    fun `rejected call is forwarded as ended with reason rejected`() = withServer { connect ->
+        connect {
+            login()
+            feed.flow.emit(CallEvent.Ended(incomingRinging.copy(status = CallStatus.DISCONNECTED), reason = EndReason.REJECTED))
+            assertEquals("""{"type":"ended","callId":"c1","reason":"rejected"}""", hear().toString())
         }
     }
 
@@ -126,7 +136,7 @@ class ControlServerTest {
     fun `answered call ends without a reason`() = withServer { connect ->
         connect {
             login()
-            feed.flow.emit(CallEvent.Ended(incomingRinging.copy(status = CallStatus.DISCONNECTED), missed = false))
+            feed.flow.emit(CallEvent.Ended(incomingRinging.copy(status = CallStatus.DISCONNECTED), reason = null))
             assertNull(hear().str("reason"))
         }
     }

@@ -3,6 +3,7 @@ package com.cellbridge.telecom
 import android.telecom.Call
 import android.os.Handler
 import android.os.Looper
+import android.telecom.DisconnectCause
 import android.telecom.InCallService
 import android.telecom.VideoProfile
 import com.cellbridge.domain.model.CallDirection
@@ -61,7 +62,8 @@ class CellBridgeInCallService : InCallService() {
             CallDirection.OUTGOING
         }
         val number = call.details.handle?.schemeSpecificPart?.takeIf { it.isNotBlank() }
-        repository.onCallUpdate(CallSnapshot(id, number, direction, status))
+        val rejected = status == CallStatus.DISCONNECTED && call.details.disconnectCause?.code == DisconnectCause.REJECTED
+        repository.onCallUpdate(CallSnapshot(id, number, direction, status, rejected))
         wakeLock.setHeld(repository.hasLiveCalls)
     }
 

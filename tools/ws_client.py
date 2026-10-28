@@ -3,6 +3,7 @@
 
 usage: ws_client.py <token> [listen_seconds]   (adb forward tcp:8765 tcp:8765 first, or pass HOST=...)
 With no call activity it checks the handshake and error paths, then prints every message for listen_seconds.
+AUTO=answer|reject replies to every incoming `ring` with that command; HANGUP_AFTER=<seconds> then sends `hangup`.
 """
 import asyncio, json, os, sys
 import websockets
@@ -44,6 +45,14 @@ async def main(token, listen):
                 async with asyncio.timeout(listen):
                     async for msg in ws:
                         print("rx", msg, flush=True)
+                        event = json.loads(msg)
+                        if event.get("type") == "ring" and os.environ.get("AUTO"):
+                            await ws.send(json.dumps({"type": os.environ["AUTO"], "callId": event["callId"]}))
+                            print("tx", os.environ["AUTO"], flush=True)
+                            if os.environ.get("HANGUP_AFTER"):
+                                await asyncio.sleep(float(os.environ["HANGUP_AFTER"]))
+                                await ws.send(json.dumps({"type": "hangup", "callId": event["callId"]}))
+                                print("tx hangup", flush=True)
             except TimeoutError:
                 pass
     return 0 if ok else 1

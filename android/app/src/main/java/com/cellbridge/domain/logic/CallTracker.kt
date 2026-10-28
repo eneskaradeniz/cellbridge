@@ -4,13 +4,15 @@ import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallSnapshot
 import com.cellbridge.domain.model.CallStatus
+import com.cellbridge.domain.model.EndReason
 
 /**
  * Turns telecom call snapshots into [CallEvent]s.
  *
  * - Repeated snapshots with an unchanged status produce nothing.
  * - HOLDING <-> ACTIVE after the call was answered produce nothing.
- * - A call is "missed" when an incoming call is DISCONNECTED without ever having been ACTIVE.
+ * - An incoming call DISCONNECTED without ever having been ACTIVE ended "rejected" if the platform says
+ *   this side declined it, otherwise "missed".
  * - A DISCONNECTED snapshot for a call we never saw is ignored.
  *
  * Pure Kotlin. Not thread-safe: callers serialize access.
@@ -28,7 +30,7 @@ class CallTracker {
 
         if (call.status == CallStatus.DISCONNECTED) {
             calls.remove(call.id)
-            return known?.let { CallEvent.Ended(call, missed = call.direction == CallDirection.INCOMING && !it.answered) }
+            return known?.let { CallEvent.Ended(call, endReason(call, it.answered)) }
         }
 
         if (known == null) {
@@ -48,5 +50,11 @@ class CallTracker {
             return CallEvent.Answered(call)
         }
         return null
+    }
+
+    private fun endReason(call: CallSnapshot, answered: Boolean): EndReason? = when {
+        call.direction != CallDirection.INCOMING || answered -> null
+        call.rejected -> EndReason.REJECTED
+        else -> EndReason.MISSED
     }
 }

@@ -185,6 +185,6 @@ private class Session(
 
 private fun CallEvent.toMessage(): ServerMessage? = when (this) {
     is CallEvent.Ringing -> ServerMessage.Ring(call.id, call.number)
-    is CallEvent.Ended -> ServerMessage.Ended(call.id, reason = if (missed) "missed" else null)
+    is CallEvent.Ended -> ServerMessage.Ended(call.id, reason = reason?.name?.lowercase())
     is CallEvent.Dialing, is CallEvent.Answered -> null
 }
