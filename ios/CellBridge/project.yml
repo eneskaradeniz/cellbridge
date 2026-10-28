@@ -17,6 +17,7 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes: [audio, voip]
         NSLocalNetworkUsageDescription: Talks to the CellBridge host on the local network.
+        NSContactsUsageDescription: Shows who is calling or texting and lets you pick a number from your contacts. Contacts stay on this phone.
         NSMicrophoneUsageDescription: Sends your voice to the call on the phone you are bridging.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

@@ -9,7 +9,11 @@ struct MessagesView: View {
             List(model.messages.conversations) { conversation in
                 NavigationLink(value: conversation.key) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(conversation.peer).font(.headline)
+                        HStack {
+                            Text(model.displayName(for: conversation.peer)).font(.headline)
+                            Spacer()
+                            Text(MessageDisplay.timestamp(conversation.last.date)).font(.caption).foregroundStyle(.secondary)
+                        }
                         Text(conversation.last.body).lineLimit(1).foregroundStyle(.secondary)
                     }
                 }
@@ -41,7 +45,12 @@ struct ThreadView: View {
         VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    ForEach(conversation?.messages ?? []) { Bubble(message: $0) }
+                    ForEach(MessageDisplay.days(conversation?.messages ?? []), id: \.day) { day in
+                        Text(MessageDisplay.dayTitle(day.day)).font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                        ForEach(day.messages) { message in
+                            Bubble(message: message) { model.messages.retry(message) }
+                        }
+                    }
                 }
                 .padding()
             }
@@ -59,13 +68,14 @@ struct ThreadView: View {
             }
             .padding(8)
         }
-        .navigationTitle(conversation?.peer ?? "")
+        .navigationTitle(model.displayName(for: conversation?.peer ?? ""))
         .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 private struct Bubble: View {
     let message: TextMessage
+    let retry: () -> Void
 
     var body: some View {
         let outgoing = message.direction == .outgoing
@@ -75,33 +85,36 @@ private struct Bubble: View {
                 .background(outgoing ? Color.accentColor : Color(.secondarySystemBackground))
                 .foregroundStyle(outgoing ? Color.white : Color.primary)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
-            if let note = statusNote { Text(note).font(.caption2).foregroundStyle(.secondary) }
+            let line = MessageDisplay.statusLine(for: message)
+            Text(line.text).font(.caption2).foregroundStyle(line.failed ? Color.red : Color.secondary)
+            if line.failed { Button("Try again", action: retry).font(.caption) }
         }
         .frame(maxWidth: .infinity, alignment: outgoing ? .trailing : .leading)
-    }
-
-    private var statusNote: String? {
-        switch message.status {
-        case .sending: return "Sending…"
-        case .failed(let reason): return "Not sent (\(reason))"
-        case .sent, .received: return nil
-        }
     }
 }
 
 struct NewMessageView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var to = ""
+    @State private var to: String
     @State private var body_ = ""
+    @State private var choosing = false
+
+    init(initialTo: String = "") { _to = State(initialValue: initialTo) }
 
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Number", text: $to).keyboardType(.phonePad)
+                HStack {
+                    TextField("Number", text: $to).keyboardType(.phonePad)
+                    Button { choosing = true } label: { Image(systemName: "person.crop.circle") }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Choose from contacts")
+                }
                 TextField("Message", text: $body_, axis: .vertical).lineLimit(3...8)
             }
             .navigationTitle("New message")
+            .sheet(isPresented: $choosing) { ContactsView(onPick: { to = $0 }) }
             .dismissibleKeyboard()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

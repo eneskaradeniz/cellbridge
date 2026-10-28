@@ -75,4 +75,28 @@ final class MessageCoordinatorTests: XCTestCase {
         c.connectionLost() // the second never got an answer
         XCTAssertEqual(c.conversations[0].messages.map(\.status), [.failed("invalid"), .failed("not confirmed")])
     }
+
+    func testRetryReplacesTheFailedTextWithANewSend() {
+        let c = coordinator()
+        c.send(to: "+905551112233", body: "bir")
+        guard case .smsSend(let firstId, _, _)? = sent.first else { return XCTFail("nothing sent") }
+        c.handle(.smsResult(clientId: firstId, ok: false, error: "failed"))
+        let failed = c.conversations[0].last
+        XCTAssertEqual(failed.status, .failed("failed"))
+
+        c.retry(failed)
+        XCTAssertEqual(c.conversations[0].messages.count, 1) // no duplicate
+        XCTAssertEqual(c.conversations[0].last.status, .sending)
+        XCTAssertEqual(sent.count, 2)
+        guard case .smsSend(let secondId, _, let body)? = sent.last else { return XCTFail("not sent again") }
+        XCTAssertNotEqual(secondId, firstId)
+        XCTAssertEqual(body, "bir")
+    }
+
+    func testOnlyAFailedOutgoingTextCanBeRetried() {
+        let c = coordinator()
+        c.send(to: "+905551112233", body: "bir")
+        c.retry(c.conversations[0].last) // still sending: ignored
+        XCTAssertEqual(sent.count, 1)
+    }
 }

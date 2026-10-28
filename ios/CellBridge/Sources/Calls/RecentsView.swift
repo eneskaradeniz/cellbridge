@@ -11,7 +11,9 @@ struct RecentsView: View {
     var body: some View {
         NavigationStack {
             List(shown) { record in
-                Button { model.dial(record.number) } label: { Row(record: record) }
+                Button { model.dial(record.number) } label: {
+                    Row(record: record, name: model.displayName(for: record.number, fallback: record.title))
+                }
                     .disabled(!model.canDial || record.number.isEmpty)
             }
             .listStyle(.plain)
@@ -40,6 +42,7 @@ struct RecentsView: View {
 
     private struct Row: View {
         let record: CallRecord
+        let name: String
 
         var body: some View {
             HStack {
@@ -47,7 +50,7 @@ struct RecentsView: View {
                     .foregroundStyle(record.isMissed ? .red : .secondary)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(record.title.isEmpty ? record.number : record.title)
+                    Text(name)
                         .font(.headline)
                         .foregroundStyle(record.isMissed ? .red : .primary)
                     Text(detail).font(.subheadline).foregroundStyle(.secondary)

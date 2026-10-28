@@ -26,9 +26,12 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     private let send: (ClientMessage) -> Void
     private let log: (String) -> Void
     private let onFinished: (CallRecord) -> Void
+    private let nameFor: (String) -> String?
 
     init(audio: AudioBridge, host: @escaping () -> String, hostOffersAudio: @escaping () -> Bool,
-         send: @escaping (ClientMessage) -> Void, onFinished: @escaping (CallRecord) -> Void, log: @escaping (String) -> Void) {
+         nameFor: @escaping (String) -> String?, send: @escaping (ClientMessage) -> Void,
+         onFinished: @escaping (CallRecord) -> Void, log: @escaping (String) -> Void) {
+        self.nameFor = nameFor
         self.onFinished = onFinished
         self.audio = audio
         self.host = host
@@ -119,6 +122,20 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         provider.reportCall(with: uuid, endedAt: Date(), reason: .failed)
     }
 
+    /// Only what the bridge can do: no hold, no tones, no conference. A control the system shows for a call that cannot
+    /// do it leads to an action nobody handles.
+    private static func callUpdate(handle: CXHandle, title: String) -> CXCallUpdate {
+        let update = CXCallUpdate()
+        update.remoteHandle = handle
+        update.localizedCallerName = title
+        update.hasVideo = false
+        update.supportsHolding = false
+        update.supportsDTMF = false
+        update.supportsGrouping = false
+        update.supportsUngrouping = false
+        return update
+    }
+
     /// Writes the call to the history (once) and forgets it.
     private func finish(_ uuid: UUID, by ender: CallRecord.Ender) {
         logFinished(uuid, by: ender)
@@ -146,12 +163,9 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     }
 
     private func ring(callId: String, number: String?, name: String?) {
-        let title = name ?? number ?? "Unknown caller"
+        let title = name ?? number.flatMap(nameFor) ?? number ?? "Unknown caller"
         guard let uuid = book.ring(callId: callId, title: title, number: number ?? "") else { return }
-        let update = CXCallUpdate()
-        update.remoteHandle = number.map { CXHandle(type: .phoneNumber, value: $0) } ?? CXHandle(type: .generic, value: "unknown")
-        update.localizedCallerName = title
-        update.hasVideo = false
+        let update = Self.callUpdate(handle: number.map { CXHandle(type: .phoneNumber, value: $0) } ?? CXHandle(type: .generic, value: "unknown"), title: title)
         provider.reportNewIncomingCall(with: uuid, update: update) { [weak self] error in
             guard let error else { return }
             Task { @MainActor in
@@ -182,11 +196,13 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         Task { @MainActor in
             let uuid = action.callUUID
             let number = action.handle.value
-            self.book.startOutgoing(uuid, title: number)
+            let title = self.nameFor(number) ?? number
+            self.book.startOutgoing(uuid, title: title, number: number)
             // The UDP port goes into the dial so the host can stream to us the moment the far end answers.
             let port = self.hostOffersAudio() ? self.audio.prepare(host: self.host()) : nil
             self.send(.dial(clientId: uuid.uuidString, number: number, udpPort: port.map(Int.init)))
             action.fulfill()
+            self.provider.reportCall(with: uuid, updated: Self.callUpdate(handle: action.handle, title: title))
         }
     }
 

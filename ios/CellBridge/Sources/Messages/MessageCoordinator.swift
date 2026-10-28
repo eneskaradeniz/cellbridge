@@ -44,6 +44,13 @@ final class MessageCoordinator: ObservableObject {
         }
     }
 
+    /// Sends a failed text again as a new one (the failed entry goes), so a retry never leaves two copies on screen.
+    func retry(_ message: TextMessage) {
+        guard message.direction == .outgoing, case .failed = message.status else { return }
+        do { try store.remove(id: message.id) } catch { return log("could not retry: \(error.localizedDescription)") }
+        send(to: message.peer, body: message.body)
+    }
+
     /// The connection dropped: sends the host never answered cannot be confirmed, and the host will replay unacked texts.
     func connectionLost() {
         ackBlocked = false

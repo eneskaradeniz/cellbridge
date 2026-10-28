@@ -88,4 +88,13 @@ final class MessageStoreTests: XCTestCase {
         XCTAssertThrowsError(try store.receive(hostId: "7", from: "+905551112233", body: "x", date: t0))
         XCTAssertTrue(store.messages.isEmpty)
     }
+
+    func testRemoveForgetsOnlyThatText() throws {
+        let store = MessageStore(url: nil)
+        let keep = try store.queueOutgoing(to: "+905551112233", body: "kalsin")
+        let drop = try store.queueOutgoing(to: "+905551112233", body: "gitsin")
+        try store.remove(id: drop.id)
+        try store.remove(id: "nope") // unknown ids change nothing
+        XCTAssertEqual(store.messages.map(\.id), [keep.id])
+    }
 }

@@ -69,6 +69,17 @@ final class MessageStore {
         try update { $0.status == .sending } to: { $0.status = .failed(reason) }
     }
 
+    /// Forgets one text (a failed one that is being sent again).
+    func remove(id: String) throws {
+        let before = messages
+        messages.removeAll { $0.id == id }
+        guard messages != before else { return }
+        do { try persist() } catch {
+            messages = before
+            throw error
+        }
+    }
+
     var conversations: [Conversation] {
         Dictionary(grouping: messages, by: { Self.key(for: $0.peer) })
             .map { Conversation(key: $0.key, messages: $0.value.sorted { $0.date < $1.date }) }

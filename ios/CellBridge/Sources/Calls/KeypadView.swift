@@ -4,6 +4,7 @@ import SwiftUI
 struct KeypadView: View {
     @EnvironmentObject var model: AppModel
     @State private var number = ""
+    @State private var choosing = false
 
     private struct Key: Identifiable {
         let digit: String
@@ -38,7 +39,11 @@ struct KeypadView: View {
                 }
             }
             HStack(spacing: 24) {
-                Color.clear.frame(width: 78, height: 78)
+                Button { choosing = true } label: {
+                    Image(systemName: "person.crop.circle").font(.system(size: 28)).foregroundStyle(.secondary)
+                        .frame(width: 78, height: 78)
+                }
+                .accessibilityLabel("Choose from contacts")
                 Button {
                     model.dial(number)
                     number = ""
@@ -58,6 +63,7 @@ struct KeypadView: View {
             Spacer(minLength: 0)
         }
         .padding(.bottom, 8)
+        .sheet(isPresented: $choosing) { ContactsView(onPick: { number = $0 }) }
     }
 
     private var canCall: Bool { !number.isEmpty && model.canDial }

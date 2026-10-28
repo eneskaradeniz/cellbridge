@@ -1,5 +1,6 @@
 import AVFoundation
 import Combine
+import Contacts
 import Foundation
 
 /// Wires the pieces together and owns the settings the user edits on the main screen.
@@ -10,6 +11,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var events: [String] = []
     @Published private(set) var recents: [CallRecord] = []
     @Published private(set) var audioTestRunning = false
+    @Published private(set) var contactBook = ContactBook()
+    @Published private(set) var contactsAuthorized = false
+    private let contactProvider = ContactStoreProvider()
 
     let client = ControlClient()
     private(set) var messages: MessageCoordinator!
@@ -32,6 +36,7 @@ final class AppModel: ObservableObject {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         callLog = CallLog(url: support.appendingPathComponent("CellBridge/calls.json"))
         recents = callLog.entries
+        contactsAuthorized = contactProvider.isAuthorized
         eventLog = EventLog(url: support.appendingPathComponent("CellBridge/events.log"))
         events = eventLog.recent(40).reversed()
         keepAlive = KeepAlive(log: { [weak self] in self?.log($0) })
@@ -43,6 +48,7 @@ final class AppModel: ObservableObject {
                 if case .connected(let capabilities) = self?.client.state { return capabilities.contains("audio") }
                 return false
             },
+            nameFor: { [weak self] in self?.contactBook.name(for: $0) },
             send: { [weak self] in self?.client.send($0) },
             onFinished: { [weak self] in self?.record($0) },
             log: { [weak self] in self?.log($0) }
@@ -70,6 +76,10 @@ final class AppModel: ObservableObject {
             log("network changed, reconnecting")
             client.restart()
         }.store(in: &bag)
+        NotificationCenter.default.publisher(for: .CNContactStoreDidChange).sink { [weak self] _ in
+            self?.refreshContacts()
+        }.store(in: &bag)
+        refreshContacts()
         messages.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         // Forward state changes of the nested object so the main screen refreshes.
         client.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
@@ -84,6 +94,27 @@ final class AppModel: ObservableObject {
     var canSendSms: Bool {
         if case .connected(let capabilities) = client.state { return capabilities.contains("sms") }
         return false
+    }
+
+    /// The contact's name for a number, else `fallback`, else the number itself.
+    func displayName(for number: String, fallback: String = "") -> String {
+        contactBook.name(for: number) ?? (fallback.isEmpty ? number : fallback)
+    }
+
+    /// False once the user said no: the system asks only once, after that it is a Settings switch.
+    var canAskForContacts: Bool { contactProvider.status == .notDetermined }
+
+    func requestContacts() {
+        Task {
+            _ = await contactProvider.requestAccess()
+            refreshContacts()
+        }
+    }
+
+    func refreshContacts() {
+        contactsAuthorized = contactProvider.isAuthorized
+        guard contactsAuthorized else { return }
+        Task { contactBook = ContactBook(contacts: await contactProvider.load()) }
     }
 
     var canConnect: Bool { !effectiveHost.isEmpty && !token.isEmpty }
@@ -106,6 +137,7 @@ final class AppModel: ObservableObject {
         wantsConnection = true
         Task { _ = await AVAudioApplication.requestRecordPermission() } // ask now, not in the middle of a call
         notifier.requestPermission()
+        if canAskForContacts { requestContacts() }
         keepAlive.start()
         client.connect(host: { [weak self] in self?.effectiveHost ?? "" }, token: token.uppercased())
     }

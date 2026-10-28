@@ -9,6 +9,7 @@ struct CellBridgeApp: App {
         WindowGroup {
             TabView {
                 RecentsView().tabItem { Label("Recents", systemImage: "clock") }
+                ContactsView().tabItem { Label("Contacts", systemImage: "person.crop.circle") }
                 KeypadView().tabItem { Label("Keypad", systemImage: "circle.grid.3x3.fill") }
                 MessagesView().tabItem { Label("Messages", systemImage: "message") }
                 ContentView().tabItem { Label("Settings", systemImage: "gearshape") }
