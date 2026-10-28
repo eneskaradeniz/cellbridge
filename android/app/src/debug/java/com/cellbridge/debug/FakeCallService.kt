@@ -3,6 +3,8 @@ package com.cellbridge.debug
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.telecom.Connection
 import android.telecom.ConnectionRequest
 import android.telecom.ConnectionService
@@ -24,6 +26,16 @@ class FakeCallService : ConnectionService() {
         current = it
         it.setRinging()
     }
+
+    /** A call placed through the fake account rings "remotely" for a moment and is then answered. */
+    override fun onCreateOutgoingConnection(account: PhoneAccountHandle?, request: ConnectionRequest): Connection =
+        FakeConnection(request.address).also { connection ->
+            current = connection
+            connection.setDialing()
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (connection.state == Connection.STATE_DIALING) connection.setActive()
+            }, ANSWER_DELAY_MS)
+        }
 
     class FakeConnection(address: Uri?) : Connection() {
         init {
@@ -51,6 +63,7 @@ class FakeCallService : ConnectionService() {
 
     companion object {
         private const val ACCOUNT_ID = "fake"
+        private const val ANSWER_DELAY_MS = 1_500L
         var current: FakeConnection? = null
 
         fun register(context: Context): PhoneAccountHandle {

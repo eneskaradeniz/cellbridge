@@ -14,7 +14,9 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
 | `ended` | host -> iOS | `callId`, `reason?` |
-| `dial` | iOS -> host | `number` |
+| `dial` | iOS -> host | `clientId`, `number`, `udpPort?` |
+| `dial_result` | host -> iOS | `clientId`, `ok`, `callId?`, `error?` |
+| `answered` | host -> iOS | `callId` |
 | `sms` | host -> iOS | `id` (string), `from`, `body`, `ts` (ms since epoch) |
 | `sms_ack` | iOS -> host | `id` |
 | `sms_send` | iOS -> host | `clientId`, `to`, `body` |
@@ -29,6 +31,13 @@ and the host closes the socket. Later errors (`bad_message`, `unknown_call`) lea
 `ended.reason` is `missed` for an incoming call that ended without being answered (the caller gave up), `rejected` when the host
 rejected it on the client's request; it is absent for a call that was answered. After `hello_ack` the host re-sends `ring` for every
 call that is still ringing, so a reconnecting client catches up; clients dedupe by `callId`.
+
+Outgoing calls: `dial` is answered by exactly one `dial_result` with the same `clientId`. On `ok:true` the call exists on the host
+under `callId` (dialing); `answered` follows when the far end picks up (it is also sent for incoming calls once they are
+active, clients may ignore it there) and `ended` when the call is over. `udpPort` works as in `answer`: audio starts when the call
+becomes active. `ok:false` carries `error`: `invalid` (not a plain phone number; `*`/`#` codes are refused), `emergency`
+(emergency numbers are never dialed through the bridge), `busy` (an outgoing call is already in progress), `failed`
+(the platform refused or did not start the call in time).
 
 SMS delivery is lossless: the host stores every incoming message in the system SMS database first, then sends `sms`. `sms_ack`
 acknowledges that message **and every earlier one** (ids only ever increase and are never reused, even after a text is deleted on the host); after `hello_ack` the host re-sends everything newer than the last

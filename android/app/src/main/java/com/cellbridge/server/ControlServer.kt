@@ -8,6 +8,8 @@ import com.cellbridge.domain.model.CallStatus
 import com.cellbridge.domain.model.IncomingSms
 import com.cellbridge.domain.model.SendResult
 import com.cellbridge.sms.SmsGateway
+import com.cellbridge.telecom.CallDialer
+import com.cellbridge.telecom.DialOutcome
 import com.cellbridge.protocol.ClientMessage
 import com.cellbridge.protocol.PROTOCOL_VERSION
 import com.cellbridge.protocol.ServerMessage
@@ -65,6 +67,7 @@ class ControlServer @Inject constructor(
     private val commands: CallCommands,
     private val audio: CallAudioBridge,
     private val sms: SmsGateway,
+    private val dialer: CallDialer,
     private val pairingToken: PairingToken,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
@@ -88,7 +91,7 @@ class ControlServer @Inject constructor(
                 CIO,
                 rootConfig = serverConfig {
                     parentCoroutineContext = onFailure
-                    module { controlModule(feed, commands, audio, sms, pairingToken.value, capabilities = ::capabilities) }
+                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities) }
                 },
                 configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
             ).also { server ->
@@ -131,6 +134,7 @@ fun Application.controlModule(
     commands: CallCommands,
     audio: CallAudioBridge,
     sms: SmsGateway,
+    dialer: CallDialer,
     token: String,
     capabilities: suspend () -> List<String>,
     authFailureDelay: Duration = 1.seconds,
@@ -141,7 +145,7 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, audio, sms, token, capabilities, authFailureDelay).run() }
+        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay).run() }
     }
 }
 
@@ -153,6 +157,7 @@ private class Session(
     private val commands: CallCommands,
     private val audio: CallAudioBridge,
     private val sms: SmsGateway,
+    private val dialer: CallDialer,
     private val token: String,
     private val capabilities: suspend () -> List<String>,
     private val authFailureDelay: Duration,
@@ -211,6 +216,20 @@ private class Session(
             }
             is ClientMessage.Reject -> message.callId to commands.reject(message.callId)
             is ClientMessage.Hangup -> message.callId to commands.hangup(message.callId)
+            is ClientMessage.Dial -> {
+                // Placing a call takes a moment; keep reading frames meanwhile.
+                scope.launch {
+                    val reply = when (val outcome = dialer.dial(message.number)) {
+                        is DialOutcome.Placed -> {
+                            audioPeer(message.udpPort)?.let { audio.expect(outcome.callId, it) }
+                            ServerMessage.DialResult(message.clientId, ok = true, callId = outcome.callId)
+                        }
+                        is DialOutcome.Failed -> ServerMessage.DialResult(message.clientId, ok = false, error = outcome.error)
+                    }
+                    send(reply)
+                }
+                return
+            }
             is ClientMessage.SmsAck -> {
                 message.id.toLongOrNull()?.let { sms.acknowledge(it) } ?: send(ServerMessage.Error("bad_message"))
                 return
@@ -251,5 +270,6 @@ private fun IncomingSms.toMessage() = ServerMessage.Sms(id.toString(), from, bod
 private fun CallEvent.toMessage(): ServerMessage? = when (this) {
     is CallEvent.Ringing -> ServerMessage.Ring(call.id, call.number)
     is CallEvent.Ended -> ServerMessage.Ended(call.id, reason = reason?.name?.lowercase())
-    is CallEvent.Dialing, is CallEvent.Answered -> null
+    is CallEvent.Answered -> ServerMessage.Answered(call.id)
+    is CallEvent.Dialing -> null
 }

@@ -61,4 +61,14 @@ class MessagesTest {
         )
         assertNull(decodeClientMessage("""{"type":"sms_send","to":"+90555"}"""))
     }
+
+    @Test
+    fun `dial is decoded and its result and answered are encoded`() {
+        assertEquals(ClientMessage.Dial("d1", "+90555", 40000), decodeClientMessage("""{"type":"dial","clientId":"d1","number":"+90555","udpPort":40000}"""))
+        assertEquals(ClientMessage.Dial("d1", "+90555", null), decodeClientMessage("""{"type":"dial","clientId":"d1","number":"+90555"}"""))
+        assertNull(decodeClientMessage("""{"type":"dial","number":"+90555"}"""))
+        assertEquals("""{"type":"dial_result","clientId":"d1","ok":true,"callId":"o1"}""", ServerMessage.DialResult("d1", true, callId = "o1").encode())
+        assertEquals("""{"type":"dial_result","clientId":"d1","ok":false,"error":"busy"}""", ServerMessage.DialResult("d1", false, error = "busy").encode())
+        assertEquals("""{"type":"answered","callId":"o1"}""", ServerMessage.Answered("o1").encode())
+    }
 }

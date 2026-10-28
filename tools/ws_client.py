@@ -5,6 +5,7 @@ usage: ws_client.py <token> [listen_seconds]   (adb forward tcp:8765 tcp:8765 fi
 With no call activity it checks the handshake and error paths, then prints every message for listen_seconds.
 AUTO=answer|reject replies to every incoming `ring` with that command; HANGUP_AFTER=<seconds> then sends `hangup`.
 SMS_ACK=1 acknowledges every `sms`; SEND_SMS="<to>|<body>" sends one text right after hello and prints the result.
+DIAL=<number> places a call right after hello (add HANGUP_AFTER=<s> to hang up that long after `answered`).
 UDP_PORT=<port> is announced in `answer` so the host streams call audio to that port (on the address it sees us from).
 """
 import asyncio, json, os, sys
@@ -13,12 +14,14 @@ import websockets
 URL = f"ws://{os.environ.get('HOST', '127.0.0.1')}:8765"
 
 
-EVENTS = {"ring", "ended", "sms", "sms_result"}
+EVENTS = {"ring", "ended", "answered", "sms", "sms_result", "dial_result"}
 
 
 async def react(ws, event):
     """Prints a host event and answers it as the AUTO / SMS_ACK / UDP_PORT / HANGUP_AFTER options ask."""
     print("rx", json.dumps(event, separators=(",", ":")), flush=True)
+    if os.environ.get("DIAL"):
+        await react_dial(ws, event)
     if event.get("type") == "sms" and os.environ.get("SMS_ACK"):
         await ws.send(json.dumps({"type": "sms_ack", "id": event["id"]}))
         print("tx sms_ack", event["id"], flush=True)
@@ -32,6 +35,14 @@ async def react(ws, event):
             await asyncio.sleep(float(os.environ["HANGUP_AFTER"]))
             await ws.send(json.dumps({"type": "hangup", "callId": event["callId"]}))
             print("tx hangup", flush=True)
+
+
+async def react_dial(ws, event):
+    """Outgoing-call follow-ups for the DIAL option."""
+    if event.get("type") == "answered" and os.environ.get("HANGUP_AFTER"):
+        await asyncio.sleep(float(os.environ["HANGUP_AFTER"]))
+        await ws.send(json.dumps({"type": "hangup", "callId": event["callId"]}))
+        print("tx hangup", flush=True)
 
 
 async def ask(ws, message):
@@ -68,6 +79,12 @@ async def main(token, listen):
         check("garbage -> bad_message, session stays open", reply.get("code") == "bad_message")
         reply = await ask(ws, {"type": "answer", "callId": "no-such-call"})
         check("answer unknown call -> unknown_call", reply.get("code") == "unknown_call")
+        if os.environ.get("DIAL"):
+            message = {"type": "dial", "clientId": "dial-1", "number": os.environ["DIAL"]}
+            if os.environ.get("UDP_PORT"):
+                message["udpPort"] = int(os.environ["UDP_PORT"])
+            await ws.send(json.dumps(message))
+            print("tx dial", flush=True)
         if os.environ.get("SEND_SMS"):
             to, body = os.environ["SEND_SMS"].split("|", 1)
             await ws.send(json.dumps({"type": "sms_send", "clientId": "cli-1", "to": to, "body": body}))

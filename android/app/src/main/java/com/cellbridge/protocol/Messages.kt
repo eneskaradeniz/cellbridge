@@ -27,6 +27,9 @@ sealed interface ClientMessage {
     @Serializable @SerialName("hangup")
     data class Hangup(val callId: String) : ClientMessage
 
+    @Serializable @SerialName("dial")
+    data class Dial(val clientId: String, val number: String, val udpPort: Int? = null) : ClientMessage
+
     @Serializable @SerialName("sms_ack")
     data class SmsAck(val id: String) : ClientMessage
 
@@ -44,6 +47,12 @@ sealed interface ServerMessage {
 
     @Serializable @SerialName("ended")
     data class Ended(val callId: String, val reason: String? = null) : ServerMessage
+
+    @Serializable @SerialName("dial_result")
+    data class DialResult(val clientId: String, val ok: Boolean, val callId: String? = null, val error: String? = null) : ServerMessage
+
+    @Serializable @SerialName("answered")
+    data class Answered(val callId: String) : ServerMessage
 
     @Serializable @SerialName("sms")
     data class Sms(val id: String, val from: String, val body: String, val ts: Long) : ServerMessage

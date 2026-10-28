@@ -14,6 +14,8 @@ import com.cellbridge.protocol.ClientMessage
 import com.cellbridge.protocol.PROTOCOL_VERSION
 import com.cellbridge.protocol.ProtocolJson
 import com.cellbridge.telecom.CallCommands
+import com.cellbridge.telecom.CallDialer
+import com.cellbridge.telecom.DialOutcome
 import com.cellbridge.telecom.CallFeed
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets
@@ -58,6 +60,13 @@ class ControlServerTest {
         override fun hangup(callId: String) = callId == "c1".also { calls += "hangup:$callId" }
     }
 
+    private class FakeDialer : CallDialer {
+        val numbers = mutableListOf<String>()
+        var outcome: DialOutcome = DialOutcome.Placed("o1")
+        override suspend fun dial(number: String): DialOutcome = outcome.also { numbers += number }
+    }
+
+    private val dialer = FakeDialer()
     private val feed = FakeFeed()
     private val commands = FakeCommands()
     private val audio = FakeAudio()
@@ -69,7 +78,7 @@ class ControlServerTest {
         testApplication {
             application {
                 controlModule(
-                    feed, commands, bridge, sms, token = "SECRET",
+                    feed, commands, bridge, sms, dialer, token = "SECRET",
                     capabilities = { listOf("calls") + if (audio.isAvailable()) listOf("audio") else emptyList() },
                     authFailureDelay = Duration.ZERO,
                 )
@@ -296,6 +305,50 @@ class ControlServerTest {
             sms.sendResult = SendResult.Failed("failed")
             say("""{"type":"sms_send","clientId":"k2","to":"+90555","body":"yine"}""")
             assertEquals("""{"type":"sms_result","clientId":"k2","ok":false,"error":"failed"}""", hear().toString())
+        }
+    }
+
+    @Test
+    fun `dial is answered with the id of the new call`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"dial","clientId":"d1","number":"+905551112233"}""")
+            assertEquals("""{"type":"dial_result","clientId":"d1","ok":true,"callId":"o1"}""", hear().toString())
+            assertEquals(listOf("+905551112233"), dialer.numbers)
+        }
+    }
+
+    @Test
+    fun `a refused dial reports why`() = withServer { connect ->
+        dialer.outcome = DialOutcome.Failed("emergency")
+        connect {
+            login()
+            say("""{"type":"dial","clientId":"d2","number":"112"}""")
+            assertEquals("""{"type":"dial_result","clientId":"d2","ok":false,"error":"emergency"}""", hear().toString())
+        }
+    }
+
+    @Test
+    fun `audio follows an outgoing call once the far end answers`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"dial","clientId":"d1","number":"+905551112233","udpPort":40222}""")
+            hear() // dial_result
+            val outgoing = CallSnapshot("o1", "+905551112233", CallDirection.OUTGOING, CallStatus.ACTIVE)
+            feed.flow.emit(CallEvent.Answered(outgoing))
+            assertEquals("""{"type":"answered","callId":"o1"}""", hear().toString())
+            assertEquals(listOf(40222), audio.started.map { it.port })
+            feed.flow.emit(CallEvent.Ended(outgoing.copy(status = CallStatus.DISCONNECTED), reason = null))
+            assertEquals(1, audio.stops)
+        }
+    }
+
+    @Test
+    fun `an answered call is announced to the client`() = withServer { connect ->
+        connect {
+            login()
+            feed.flow.emit(CallEvent.Answered(incomingRinging.copy(status = CallStatus.ACTIVE)))
+            assertEquals("""{"type":"answered","callId":"c1"}""", hear().toString())
         }
     }
 }
