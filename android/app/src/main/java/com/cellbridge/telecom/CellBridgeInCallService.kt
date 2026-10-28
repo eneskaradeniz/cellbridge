@@ -1,6 +1,10 @@
 package com.cellbridge.telecom
 
+import android.content.Intent
 import android.telecom.Call
+import android.util.Log
+import com.cellbridge.server.ControlService
+import com.cellbridge.ui.InCallActivity
 import android.os.Handler
 import android.os.Looper
 import android.telecom.DisconnectCause
@@ -27,12 +31,24 @@ class CellBridgeInCallService : InCallService() {
         override fun onStateChanged(call: Call, state: Int) = report(call, state)
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        // A call can start this process while the server is down (killed in the background): bring it up too.
+        ControlService.start(this)
+    }
+
     override fun onCallAdded(call: Call) {
         val id = UUID.randomUUID().toString()
         ids[call] = id
         registry.register(id, handleFor(call))
         call.registerCallback(callback)
         report(call, stateOf(call))
+        showCallScreen()
+    }
+
+    private fun showCallScreen() {
+        runCatching { startActivity(Intent(this, InCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            .onFailure { Log.w(TAG, "call screen not shown: ${it::class.simpleName}") }
     }
 
     override fun onCallRemoved(call: Call) {
@@ -78,5 +94,9 @@ class CellBridgeInCallService : InCallService() {
         Call.STATE_HOLDING -> CallStatus.HOLDING
         Call.STATE_DISCONNECTED -> CallStatus.DISCONNECTED
         else -> null // DISCONNECTING: wait for DISCONNECTED
+    }
+
+    private companion object {
+        const val TAG = "CellBridge"
     }
 }

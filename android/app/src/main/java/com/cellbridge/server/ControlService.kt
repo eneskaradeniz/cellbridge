@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.cellbridge.MainActivity
@@ -58,7 +59,10 @@ class ControlService : Service() {
         private const val CHANNEL_ID = "control"
         private const val NOTIFICATION_ID = 1
 
-        fun start(context: Context) =
-            ContextCompat.startForegroundService(context, Intent(context, ControlService::class.java))
+        /** Safe to call from anywhere: Android may refuse a foreground start from the background, which must not crash. */
+        fun start(context: Context) {
+            runCatching { ContextCompat.startForegroundService(context, Intent(context, ControlService::class.java)) }
+                .onFailure { Log.w("CellBridge", "control service not started: ${it::class.simpleName}") }
+        }
     }
 }

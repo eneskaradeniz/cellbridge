@@ -13,4 +13,12 @@
     <string name="notification_starting">Starting…</string>
     <string name="notification_running">Running — pairing code is on the app screen</string>
     <string name="notification_failed">Could not start (is port 8765 in use?)</string>
+    <string name="incall_unknown">Unknown number</string>
+    <string name="incall_incoming">Incoming call</string>
+    <string name="incall_dialing">Calling…</string>
+    <string name="incall_active">In call</string>
+    <string name="incall_holding">On hold</string>
+    <string name="incall_answer">Answer</string>
+    <string name="incall_reject">Decline</string>
+    <string name="incall_end">End call</string>
 </resources>
