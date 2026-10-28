@@ -1,5 +1,7 @@
 package com.cellbridge.server
 
+import com.cellbridge.audio.CallAudioBridge
+import com.cellbridge.audio.FakeAudio
 import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallSnapshot
@@ -16,6 +18,12 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.server.testing.testApplication
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.serialization.json.Json
@@ -49,12 +57,18 @@ class ControlServerTest {
 
     private val feed = FakeFeed()
     private val commands = FakeCommands()
+    private val audio = FakeAudio()
+    private val bridge = CallAudioBridge(feed, audio).also { it.start(CoroutineScope(Dispatchers.Unconfined + Job())) }
     private val incomingRinging = CallSnapshot("c1", "+90555", CallDirection.INCOMING, CallStatus.RINGING)
 
     private fun withServer(block: suspend (connect: suspend (suspend DefaultClientWebSocketSession.() -> Unit) -> Unit) -> Unit) =
         testApplication {
             application {
-                controlModule(feed, commands, token = "SECRET", capabilities = { listOf("calls") }, authFailureDelay = Duration.ZERO)
+                controlModule(
+                    feed, commands, bridge, token = "SECRET",
+                    capabilities = { listOf("calls") + if (audio.isAvailable()) listOf("audio") else emptyList() },
+                    authFailureDelay = Duration.ZERO,
+                )
             }
             val client = createClient { install(WebSockets) }
             block { session -> client.webSocket("/") { session() } }
@@ -70,13 +84,18 @@ class ControlServerTest {
         assertEquals("hello_ack", hear()["type"]?.jsonPrimitive?.content)
     }
 
+    /** The server handles client messages asynchronously; wait until [check] holds (real time, not test time). */
+    private suspend fun eventually(check: () -> Boolean) = withContext(Dispatchers.Default) {
+        withTimeout(5_000) { while (!check()) delay(10) }
+    }
+
     private fun JsonObject.str(key: String) = get(key)?.jsonPrimitive?.content
 
     @Test
     fun `valid hello is acked with version and capabilities`() = withServer { connect ->
         connect {
             say("""{"type":"hello","version":1,"token":"SECRET"}""")
-            assertEquals("""{"type":"hello_ack","version":1,"capabilities":["calls"]}""", hear().toString())
+            assertEquals("""{"type":"hello_ack","version":1,"capabilities":["calls","audio"]}""", hear().toString())
         }
     }
 
@@ -172,6 +191,52 @@ class ControlServerTest {
             assertEquals("bad_message", hear().str("code"))
             feed.flow.emit(CallEvent.Ringing(incomingRinging))
             assertEquals("ring", hear().str("type"))
+        }
+    }
+
+    @Test
+    fun `hello_ack advertises audio only while the daemon is available`() = withServer { connect ->
+        connect {
+            say("""{"type":"hello","version":$PROTOCOL_VERSION,"token":"SECRET"}""")
+            assertEquals("""["calls","audio"]""", hear()["capabilities"].toString())
+        }
+        audio.available = false
+        connect {
+            say("""{"type":"hello","version":$PROTOCOL_VERSION,"token":"SECRET"}""")
+            assertEquals("""["calls"]""", hear()["capabilities"].toString())
+        }
+    }
+
+    @Test
+    fun `answer with a udp port starts audio towards the client once the call is active`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"answer","callId":"c1","udpPort":40123}""")
+            eventually { "answer:c1" in commands.calls } // the platform's Answered event follows answer()
+            feed.flow.emit(CallEvent.Answered(incomingRinging.copy(status = CallStatus.ACTIVE)))
+            assertEquals(listOf(40123), audio.started.map { it.port })
+            feed.flow.emit(CallEvent.Ended(incomingRinging.copy(status = CallStatus.DISCONNECTED), reason = null))
+            assertEquals(1, audio.stops)
+        }
+    }
+
+    @Test
+    fun `answer without a udp port keeps the call control-only`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"answer","callId":"c1"}""")
+            eventually { "answer:c1" in commands.calls }
+            feed.flow.emit(CallEvent.Answered(incomingRinging.copy(status = CallStatus.ACTIVE)))
+            assertEquals(emptyList<Int>(), audio.started.map { it.port })
+        }
+    }
+
+    @Test
+    fun `answer for an unknown call forgets the announced peer`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"answer","callId":"nope","udpPort":40123}""")
+            assertEquals("unknown_call", hear().str("code"))
         }
     }
 }

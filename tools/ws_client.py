@@ -4,6 +4,7 @@
 usage: ws_client.py <token> [listen_seconds]   (adb forward tcp:8765 tcp:8765 first, or pass HOST=...)
 With no call activity it checks the handshake and error paths, then prints every message for listen_seconds.
 AUTO=answer|reject replies to every incoming `ring` with that command; HANGUP_AFTER=<seconds> then sends `hangup`.
+UDP_PORT=<port> is announced in `answer` so the host streams call audio to that port (on the address it sees us from).
 """
 import asyncio, json, os, sys
 import websockets
@@ -35,6 +36,7 @@ async def main(token, listen):
     async with websockets.connect(URL, open_timeout=90) as ws:
         reply = await ask(ws, {"type": "hello", "version": 1, "token": token})
         check("hello -> hello_ack with capabilities", reply.get("type") == "hello_ack" and "calls" in reply.get("capabilities", []))
+        print("capabilities:", reply.get("capabilities"))
         reply = await ask(ws, "not json")
         check("garbage -> bad_message, session stays open", reply.get("code") == "bad_message")
         reply = await ask(ws, {"type": "answer", "callId": "no-such-call"})
@@ -47,7 +49,10 @@ async def main(token, listen):
                         print("rx", msg, flush=True)
                         event = json.loads(msg)
                         if event.get("type") == "ring" and os.environ.get("AUTO"):
-                            await ws.send(json.dumps({"type": os.environ["AUTO"], "callId": event["callId"]}))
+                            reply = {"type": os.environ["AUTO"], "callId": event["callId"]}
+                            if os.environ.get("UDP_PORT") and reply["type"] == "answer":
+                                reply["udpPort"] = int(os.environ["UDP_PORT"])
+                            await ws.send(json.dumps(reply))
                             print("tx", os.environ["AUTO"], flush=True)
                             if os.environ.get("HANGUP_AFTER"):
                                 await asyncio.sleep(float(os.environ["HANGUP_AFTER"]))

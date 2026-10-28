@@ -1,6 +1,7 @@
 package com.cellbridge.server
 
 import android.util.Log
+import com.cellbridge.audio.CallAudioBridge
 import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallStatus
@@ -29,6 +30,10 @@ import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.coroutineScope
@@ -39,6 +44,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import java.net.Inet4Address
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -52,10 +60,12 @@ const val CONTROL_PORT = 8765
 class ControlServer @Inject constructor(
     private val feed: CallFeed,
     private val commands: CallCommands,
+    private val audio: CallAudioBridge,
     private val pairingToken: PairingToken,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
     private val _running = MutableStateFlow(false)
+    private var scope: CoroutineScope? = null
 
     /** True while the server is listening; false before start, after stop, and when binding failed. */
     val running: StateFlow<Boolean> = _running.asStateFlow()
@@ -74,7 +84,7 @@ class ControlServer @Inject constructor(
                 CIO,
                 rootConfig = serverConfig {
                     parentCoroutineContext = onFailure
-                    module { controlModule(feed, commands, pairingToken.value, capabilities = { listOf("calls") }) }
+                    module { controlModule(feed, commands, audio, pairingToken.value, capabilities = ::capabilities) }
                 },
                 configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
             ).also { server ->
@@ -83,15 +93,25 @@ class ControlServer @Inject constructor(
             }
         }.onSuccess {
             engine = it
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also(audio::start)
             _running.value = true
         }.onFailure { Log.e(TAG, "control server failed to start", it) }
     }
 
     @Synchronized
     fun stop() {
+        audio.stop()
+        scope?.cancel()
+        scope = null
         engine?.stop(gracePeriodMillis = 500, timeoutMillis = 1_000)
         engine = null
         _running.value = false
+    }
+
+    /** `audio` only while the root daemon answers; otherwise the host runs control-only (docs/protocol.md). */
+    private suspend fun capabilities(): List<String> = buildList {
+        add("calls")
+        if (audio.isAvailable()) add("audio")
     }
 
     private companion object {
@@ -104,8 +124,9 @@ class ControlServer @Inject constructor(
 fun Application.controlModule(
     feed: CallFeed,
     commands: CallCommands,
+    audio: CallAudioBridge,
     token: String,
-    capabilities: () -> List<String>,
+    capabilities: suspend () -> List<String>,
     authFailureDelay: Duration = 1.seconds,
 ) {
     install(WebSockets) {
@@ -114,7 +135,7 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, token, capabilities, authFailureDelay).run() }
+        webSocket("/") { Session(this, feed, commands, audio, token, capabilities, authFailureDelay).run() }
     }
 }
 
@@ -124,8 +145,9 @@ private class Session(
     private val ws: DefaultWebSocketServerSession,
     private val feed: CallFeed,
     private val commands: CallCommands,
+    private val audio: CallAudioBridge,
     private val token: String,
-    private val capabilities: () -> List<String>,
+    private val capabilities: suspend () -> List<String>,
     private val authFailureDelay: Duration,
 ) {
     suspend fun run() {
@@ -164,12 +186,25 @@ private class Session(
 
     private suspend fun handle(message: ClientMessage?) {
         val (callId, accepted) = when (message) {
-            is ClientMessage.Answer -> message.callId to commands.answer(message.callId)
+            is ClientMessage.Answer -> {
+                // Register the audio peer first: the call's Answered event may arrive before answer() returns.
+                audioPeer(message.udpPort)?.let { audio.expect(message.callId, it) }
+                val accepted = commands.answer(message.callId)
+                if (!accepted) audio.forget(message.callId)
+                message.callId to accepted
+            }
             is ClientMessage.Reject -> message.callId to commands.reject(message.callId)
             is ClientMessage.Hangup -> message.callId to commands.hangup(message.callId)
             is ClientMessage.Hello, null -> return send(ServerMessage.Error("bad_message"))
         }
         if (!accepted) send(ServerMessage.Error("unknown_call", callId))
+    }
+
+    /** The client's address as seen on this connection plus the UDP port it announced; null means no audio. */
+    private fun audioPeer(udpPort: Int?): InetSocketAddress? {
+        if (udpPort == null || udpPort !in 1..65535) return null
+        val address = runCatching { InetAddress.getByName(ws.call.request.local.remoteAddress) }.getOrNull()
+        return (address as? Inet4Address)?.let { InetSocketAddress(it, udpPort) }
     }
 
     private suspend fun reject(code: String) {

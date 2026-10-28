@@ -19,7 +19,7 @@ sealed interface ClientMessage {
     data class Hello(val version: Int, val token: String) : ClientMessage
 
     @Serializable @SerialName("answer")
-    data class Answer(val callId: String) : ClientMessage
+    data class Answer(val callId: String, val udpPort: Int? = null) : ClientMessage
 
     @Serializable @SerialName("reject")
     data class Reject(val callId: String) : ClientMessage
