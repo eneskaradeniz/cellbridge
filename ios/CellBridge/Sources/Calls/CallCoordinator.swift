@@ -54,7 +54,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         let action = CXStartCallAction(call: UUID(), handle: CXHandle(type: .phoneNumber, value: number))
         controller.request(CXTransaction(action: action)) { [weak self] error in
             guard let error else { return }
-            Task { @MainActor in self?.dialError = "Could not start the call: \(error.localizedDescription)" }
+            Task { @MainActor in self?.dialError = String(localized: "Could not start the call: \(error.localizedDescription)") }
         }
     }
 
@@ -155,15 +155,15 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
 
     nonisolated static func message(forDialError code: String?) -> String {
         switch code {
-        case "invalid": return "That is not a valid phone number."
-        case "emergency": return "Emergency numbers cannot be dialed through CellBridge. Use the phone itself."
-        case "busy": return "Another outgoing call is already in progress."
-        default: return "The phone could not start the call."
+        case "invalid": return String(localized: "That is not a valid phone number.")
+        case "emergency": return String(localized: "Emergency numbers cannot be dialed through CellBridge. Use the phone itself.")
+        case "busy": return String(localized: "Another outgoing call is already in progress.")
+        default: return String(localized: "The phone could not start the call.")
         }
     }
 
     private func ring(callId: String, number: String?, name: String?) {
-        let title = name ?? number.flatMap(nameFor) ?? number ?? "Unknown caller"
+        let title = name ?? number.flatMap(nameFor) ?? number ?? String(localized: "Unknown caller")
         guard let uuid = book.ring(callId: callId, title: title, number: number ?? "") else { return }
         let update = Self.callUpdate(handle: number.map { CXHandle(type: .phoneNumber, value: $0) } ?? CXHandle(type: .generic, value: "unknown"), title: title)
         provider.reportNewIncomingCall(with: uuid, update: update) { [weak self] error in

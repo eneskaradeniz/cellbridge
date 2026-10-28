@@ -30,7 +30,7 @@ and the radio. No internet and no cloud: everything stays on the local network (
 - **Android host:** a rooted, Qualcomm-based phone whose DSP exposes the voice record / incall-music mixer controls
   (reference: **Xiaomi Mi 8 Lite "platina", LineageOS 22.2, Android 15, `userdebug`**), a SIM, Android 10+ (minSdk 29).
   Without root the app still handles calls and SMS but **call audio cannot be bridged** (the host then advertises no `audio`).
-- **iPhone:** iOS 17+, Xcode, an Apple ID. With a free Apple ID the app expires after **7 days** and must be reinstalled.
+- **iPhone:** iOS 26.1+, Xcode, an Apple ID. With a free Apple ID the app expires after **7 days** and must be reinstalled.
 - Both phones on the same Wi-Fi (the Android phone's hotspot works well).
 
 ## Quick start

@@ -19,54 +19,73 @@ struct KeypadView: View {
         [Key(digit: "*", letters: ""), Key(digit: "0", letters: "+"), Key(digit: "#", letters: "")],
     ]
 
+    private let keySize: CGFloat = 78
+
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             Spacer(minLength: 0)
-            Text(number.isEmpty ? " " : number)
-                .font(.system(size: 36, weight: .light))
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal)
-            if let error = model.dialError {
-                Text(error).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center).padding(.horizontal)
-            } else if !model.canDial {
-                Text("Not connected. Open Settings to connect.").font(.footnote).foregroundStyle(.secondary)
+            VStack(spacing: 4) {
+                Text(number.isEmpty ? " " : number)
+                    .font(.system(size: 40, weight: .light))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal)
+                Text(hint ?? " ")
+                    .font(.footnote)
+                    .foregroundStyle(model.dialError == nil ? Color.secondary : Color.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
             }
-            ForEach(rows.indices, id: \.self) { row in
-                HStack(spacing: 24) {
-                    ForEach(rows[row]) { key in keyView(key) }
+            GlassEffectContainer(spacing: 20) {
+                VStack(spacing: 16) {
+                    ForEach(rows.indices, id: \.self) { row in
+                        HStack(spacing: 24) {
+                            ForEach(rows[row]) { key in keyView(key) }
+                        }
+                    }
+                    HStack(spacing: 24) {
+                        Button { choosing = true } label: {
+                            Image(systemName: "person.crop.circle").font(.system(size: 28)).foregroundStyle(.secondary)
+                                .frame(width: keySize, height: keySize)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Choose from contacts")
+                        Button {
+                            model.dial(number)
+                            number = ""
+                        } label: {
+                            Image(systemName: "phone.fill").font(.system(size: 30)).foregroundStyle(.white)
+                                .frame(width: keySize, height: keySize)
+                                .glassEffect(.regular.tint(.green.opacity(canCall ? 1 : 0.4)).interactive(), in: .circle)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canCall)
+                        .accessibilityLabel("Call")
+                        Button { if !number.isEmpty { number.removeLast() } } label: {
+                            Image(systemName: "delete.left").font(.system(size: 26)).foregroundStyle(.secondary)
+                                .frame(width: keySize, height: keySize)
+                        }
+                        .buttonStyle(.plain)
+                        .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in number = "" })
+                        .opacity(number.isEmpty ? 0 : 1)
+                        .accessibilityLabel("Delete")
+                    }
                 }
-            }
-            HStack(spacing: 24) {
-                Button { choosing = true } label: {
-                    Image(systemName: "person.crop.circle").font(.system(size: 28)).foregroundStyle(.secondary)
-                        .frame(width: 78, height: 78)
-                }
-                .accessibilityLabel("Choose from contacts")
-                Button {
-                    model.dial(number)
-                    number = ""
-                } label: {
-                    Image(systemName: "phone.fill").font(.system(size: 30)).foregroundStyle(.white)
-                        .frame(width: 78, height: 78)
-                        .background(canCall ? Color.green : Color.green.opacity(0.35), in: Circle())
-                }
-                .disabled(!canCall)
-                Button { if !number.isEmpty { number.removeLast() } } label: {
-                    Image(systemName: "delete.left").font(.system(size: 26)).foregroundStyle(.secondary)
-                        .frame(width: 78, height: 78)
-                }
-                .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in number = "" })
-                .opacity(number.isEmpty ? 0 : 1)
             }
             Spacer(minLength: 0)
         }
         .padding(.bottom, 8)
+        .sensoryFeedback(.selection, trigger: number)
         .sheet(isPresented: $choosing) { ContactsView(onPick: { number = $0 }) }
     }
 
     private var canCall: Bool { !number.isEmpty && model.canDial }
+
+    private var hint: String? {
+        if let error = model.dialError { return error }
+        return model.canDial ? nil : String(localized: "Not connected. Open Settings to connect.")
+    }
 
     /// `*` and `#` are shown for the familiar layout but stay inactive: the host refuses service codes.
     private func keyView(_ key: Key) -> some View {
@@ -75,12 +94,14 @@ struct KeypadView: View {
             Text(key.digit).font(.system(size: 34, weight: .regular))
             Text(key.letters.isEmpty ? " " : key.letters).font(.system(size: 11, weight: .semibold)).tracking(2)
         }
-        .frame(width: 78, height: 78)
-        .background(Color(.systemGray5), in: Circle())
+        .frame(width: keySize, height: keySize)
+        .glassEffect(enabled ? .regular.interactive() : .regular, in: .circle)
         .opacity(enabled ? 1 : 0.4)
         .contentShape(Circle())
         .onTapGesture { if enabled { number += key.digit } }
         .onLongPressGesture(minimumDuration: 0.5) { if key.digit == "0" { number += "+" } }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(key.digit)
+        .accessibilityAddTraits(.isButton)
     }
 }

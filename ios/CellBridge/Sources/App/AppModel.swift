@@ -33,8 +33,15 @@ final class AppModel: ObservableObject {
     init() {
         host = UserDefaults.standard.string(forKey: "host") ?? ""
         token = TokenStore.load()
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        var support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #if DEBUG
+        let sampling = Sample.enabled
+        if sampling { support = FileManager.default.temporaryDirectory.appendingPathComponent("CellBridgeSample-\(UUID().uuidString)") }
+        #endif
         callLog = CallLog(url: support.appendingPathComponent("CellBridge/calls.json"))
+        #if DEBUG
+        if sampling { Sample.seed(messages: MessageStore(url: support.appendingPathComponent("CellBridge/messages.json")), calls: callLog) }
+        #endif
         recents = callLog.entries
         contactsAuthorized = contactProvider.isAuthorized
         eventLog = EventLog(url: support.appendingPathComponent("CellBridge/events.log"))
@@ -80,6 +87,12 @@ final class AppModel: ObservableObject {
             self?.refreshContacts()
         }.store(in: &bag)
         refreshContacts()
+        #if DEBUG
+        if sampling {
+            contactsAuthorized = true
+            contactBook = ContactBook(contacts: Sample.contacts)
+        }
+        #endif
         messages.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         // Forward state changes of the nested object so the main screen refreshes.
         client.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
@@ -112,6 +125,9 @@ final class AppModel: ObservableObject {
     }
 
     func refreshContacts() {
+        #if DEBUG
+        if Sample.enabled { return }
+        #endif
         contactsAuthorized = contactProvider.isAuthorized
         guard contactsAuthorized else { return }
         Task { contactBook = ContactBook(contacts: await contactProvider.load()) }

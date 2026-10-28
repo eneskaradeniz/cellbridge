@@ -2,7 +2,7 @@
 
 ## 1. Build and install
 
-You need a recent Xcode (iOS 17+ SDK), [xcodegen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`) and an Apple ID
+You need a recent Xcode (iOS 26+ SDK), [xcodegen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`) and an Apple ID
 added to Xcode.
 
 ```

@@ -14,11 +14,17 @@ struct RecentsView: View {
                 Button { model.dial(record.number) } label: {
                     Row(record: record, name: model.displayName(for: record.number, fallback: record.title))
                 }
-                    .disabled(!model.canDial || record.number.isEmpty)
+                .buttonStyle(.plain)
+                .allowsHitTesting(model.canDial && !record.number.isEmpty)
             }
             .listStyle(.plain)
             .overlay {
-                if shown.isEmpty { ContentUnavailableView(missedOnly ? "No missed calls" : "No recent calls", systemImage: "phone") }
+                if shown.isEmpty {
+                    ContentUnavailableView(
+                        missedOnly ? "No Missed Calls" : "No Recent Calls",
+                        systemImage: missedOnly ? "phone.arrow.down.left" : "phone",
+                        description: Text(missedOnly ? "Calls you did not answer show up here." : "Calls made and received through the phone show up here."))
+                }
             }
             .navigationTitle("Recents")
             .toolbar {
@@ -35,7 +41,7 @@ struct RecentsView: View {
                 }
             }
             .confirmationDialog("Clear all recent calls?", isPresented: $confirmingClear, titleVisibility: .visible) {
-                Button("Clear All", role: .destructive) { model.clearRecents() }
+                Button("Clear All Recents", role: .destructive) { model.clearRecents() }
             }
         }
     }
@@ -45,29 +51,34 @@ struct RecentsView: View {
         let name: String
 
         var body: some View {
-            HStack {
-                Image(systemName: record.direction == .outgoing ? "phone.arrow.up.right" : "phone.arrow.down.left")
-                    .foregroundStyle(record.isMissed ? .red : .secondary)
-                    .frame(width: 24)
+            HStack(spacing: 12) {
+                Avatar(name: name, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name)
                         .font(.headline)
-                        .foregroundStyle(record.isMissed ? .red : .primary)
-                    Text(detail).font(.subheadline).foregroundStyle(.secondary)
+                        .foregroundStyle(record.isMissed ? Color.red : Color.primary)
+                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Image(systemName: record.direction == .outgoing ? "phone.arrow.up.right" : "phone.arrow.down.left")
+                        Text(detail)
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 Text(Self.when(record.date)).font(.subheadline).foregroundStyle(.secondary)
             }
             .contentShape(Rectangle())
+            .accessibilityElement(children: .combine)
         }
 
         private var detail: String {
             switch record.outcome {
             case .answered: return Self.duration(record.duration)
-            case .missed: return "Missed"
-            case .declined: return "Declined"
-            case .noAnswer: return "No answer"
-            case .failed: return "Failed"
+            case .missed: return String(localized: "Missed")
+            case .declined: return String(localized: "Declined")
+            case .noAnswer: return String(localized: "No answer")
+            case .failed: return String(localized: "Failed")
             }
         }
 
