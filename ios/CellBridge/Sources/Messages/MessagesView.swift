@@ -45,6 +45,7 @@ struct ThreadView: View {
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
             Divider()
             HStack {
                 TextField("Message", text: $draft, axis: .vertical).textFieldStyle(.roundedBorder).lineLimit(1...4)
@@ -101,6 +102,7 @@ struct NewMessageView: View {
                 TextField("Message", text: $body_, axis: .vertical).lineLimit(3...8)
             }
             .navigationTitle("New message")
+            .dismissibleKeyboard()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

@@ -59,4 +59,20 @@ final class MessagesTests: XCTestCase {
                        .smsResult(clientId: "k1", ok: false, error: "invalid"))
         XCTAssertNil(ServerMessage.decode(#"{"type":"sms","id":"7"}"#))
     }
+
+    func testDialEncodingWithAndWithoutUdpPort() {
+        XCTAssertEqual(ClientMessage.dial(clientId: "d1", number: "+90555", udpPort: nil).encoded(),
+                       #"{"clientId":"d1","number":"+90555","type":"dial"}"#)
+        XCTAssertEqual(ClientMessage.dial(clientId: "d1", number: "+90555", udpPort: 40000).encoded(),
+                       #"{"clientId":"d1","number":"+90555","type":"dial","udpPort":40000}"#)
+    }
+
+    func testDecodesDialResultAndAnswered() {
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"dial_result","clientId":"d1","ok":true,"callId":"o1"}"#),
+                       .dialResult(clientId: "d1", ok: true, callId: "o1", error: nil))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"dial_result","clientId":"d1","ok":false,"error":"emergency"}"#),
+                       .dialResult(clientId: "d1", ok: false, callId: nil, error: "emergency"))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"answered","callId":"o1"}"#), .answered(callId: "o1"))
+        XCTAssertNil(ServerMessage.decode(#"{"type":"dial_result","ok":true}"#))
+    }
 }

@@ -8,6 +8,7 @@ enum ClientMessage: Equatable {
     case answer(callId: String, udpPort: Int?)
     case reject(callId: String)
     case hangup(callId: String)
+    case dial(clientId: String, number: String, udpPort: Int?)
     case smsAck(id: String)
     case smsSend(clientId: String, to: String, body: String)
 
@@ -23,6 +24,9 @@ enum ClientMessage: Equatable {
             object = ["type": "reject", "callId": callId]
         case .hangup(let callId):
             object = ["type": "hangup", "callId": callId]
+        case .dial(let clientId, let number, let udpPort):
+            object = ["type": "dial", "clientId": clientId, "number": number]
+            if let udpPort { object["udpPort"] = udpPort }
         case .smsAck(let id):
             object = ["type": "sms_ack", "id": id]
         case .smsSend(let clientId, let to, let body):
@@ -41,6 +45,8 @@ enum ServerMessage: Equatable {
     case helloAck(version: Int, capabilities: [String])
     case ring(callId: String, number: String?, name: String?)
     case ended(callId: String, reason: EndReason?)
+    case dialResult(clientId: String, ok: Bool, callId: String?, error: String?)
+    case answered(callId: String)
     case sms(id: String, from: String, body: String, ts: Int64)
     case smsResult(clientId: String, ok: Bool, error: String?)
     case error(code: String, message: String?)
@@ -60,6 +66,12 @@ enum ServerMessage: Equatable {
         case "ended":
             guard let callId = object["callId"] as? String else { return nil }
             return .ended(callId: callId, reason: (object["reason"] as? String).flatMap(EndReason.init(rawValue:)))
+        case "dial_result":
+            guard let clientId = object["clientId"] as? String, let ok = object["ok"] as? Bool else { return nil }
+            return .dialResult(clientId: clientId, ok: ok, callId: object["callId"] as? String, error: object["error"] as? String)
+        case "answered":
+            guard let callId = object["callId"] as? String else { return nil }
+            return .answered(callId: callId)
         case "sms":
             guard let id = object["id"] as? String, let from = object["from"] as? String,
                   let body = object["body"] as? String, let ts = (object["ts"] as? NSNumber)?.int64Value else { return nil }

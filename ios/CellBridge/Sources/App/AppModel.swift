@@ -88,6 +88,16 @@ final class AppModel: ObservableObject {
 
     var speakerOn: Bool { calls.speaker }
 
+    var dialError: String? { calls.dialError }
+
+    /// Calls can be placed while connected to the host.
+    var canDial: Bool {
+        if case .connected = client.state { return true }
+        return false
+    }
+
+    func dial(_ number: String) { calls.dial(number) }
+
     func toggleSpeaker() { calls.speaker.toggle() }
 
     private func log(_ text: String) {
@@ -99,6 +109,8 @@ final class AppModel: ObservableObject {
         case .helloAck(_, let capabilities): return "connected, host offers \(capabilities.joined(separator: ", "))"
         case .ring(let callId, _, _): return "ring \(callId.prefix(8))"
         case .ended(let callId, let reason): return "ended \(callId.prefix(8)) \(reason?.rawValue ?? "")"
+        case .dialResult(let clientId, let ok, _, let error): return "dial \(clientId.prefix(8)) \(ok ? "placed" : "refused: \(error ?? "?")")"
+        case .answered(let callId): return "answered \(callId.prefix(8))"
         case .sms(let id, _, _, _): return "sms \(id)" // never log the sender or the text
         case .smsResult(let clientId, let ok, _): return "sms result \(clientId.prefix(8)) \(ok ? "sent" : "failed")"
         case .error(let code, _): return "error \(code)"
