@@ -9,6 +9,7 @@
 #include "server.h"
 
 #define DEFAULT_PORT 8766
+#define DEFAULT_UDP_PORT 8767
 
 static volatile sig_atomic_t stop_requested;
 
@@ -106,7 +107,7 @@ static int usage(const char *argv0)
 {
     fprintf(stderr, "usage: %s <profile> capture <out.raw> <seconds>\n"
                     "       %s <profile> inject <in.raw>   (16 kHz S16_LE mono, raw)\n"
-                    "       %s <profile> serve <token> [port]\n", argv0, argv0, argv0);
+                    "       %s <profile> serve <token> [tcp_port [udp_port]]\n", argv0, argv0, argv0);
     return 64;
 }
 
@@ -123,7 +124,8 @@ int main(int argc, char **argv)
         return capture(&p, argv[3], (unsigned int)atoi(argv[4]));
     if (!strcmp(argv[2], "inject") && argc == 4)
         return inject(&p, argv[3]);
-    if (!strcmp(argv[2], "serve") && (argc == 4 || argc == 5))
-        return server_run(&p, argv[3], argc == 5 ? (unsigned short)atoi(argv[4]) : DEFAULT_PORT);
+    if (!strcmp(argv[2], "serve") && argc >= 4 && argc <= 6)
+        return server_run(&p, argv[3], argc >= 5 ? (unsigned short)atoi(argv[4]) : DEFAULT_PORT,
+                          argc == 6 ? (unsigned short)atoi(argv[5]) : DEFAULT_UDP_PORT);
     return usage(argv[0]);
 }

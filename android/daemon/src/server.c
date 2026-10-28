@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "audio.h"
+#include "stream.h"
 
 enum {
     MSG_AUTH = 0x00,
@@ -34,6 +35,7 @@ struct session {
     int fd;
     pthread_mutex_t send_lock;
     struct audio *audio;
+    struct stream *stream; /* set when audio flows over UDP instead of TCP frames */
     unsigned int flags;
     pthread_t dl_thread;
     bool dl_thread_running;
@@ -112,6 +114,8 @@ static void *dl_loop(void *arg)
 
 static void stop_audio(struct session *s)
 {
+    stream_stop(s->stream);
+    s->stream = NULL;
     if (s->dl_thread_running) {
         atomic_store(&s->dl_stop, true);
         pthread_join(s->dl_thread, NULL);
@@ -122,7 +126,9 @@ static void stop_audio(struct session *s)
     s->flags = 0;
 }
 
-static void start_audio(struct session *s, const struct profile *p, unsigned int flags)
+/* `peer` is non-NULL when the START named a UDP peer. */
+static void start_audio(struct session *s, const struct profile *p, unsigned int flags,
+                        const struct sockaddr_in *peer, unsigned short udp_port)
 {
     if (s->audio) {
         send_err(s, "already started");
@@ -138,6 +144,16 @@ static void start_audio(struct session *s, const struct profile *p, unsigned int
         return;
     }
     s->flags = flags;
+    if (peer) {
+        s->stream = stream_start(s->audio, p, flags & START_DL, flags & START_UL, peer, udp_port);
+        if (!s->stream) {
+            stop_audio(s);
+            send_err(s, "udp stream start failed");
+            return;
+        }
+        send_frame(s, MSG_OK, NULL, 0);
+        return;
+    }
     atomic_store(&s->dl_stop, false);
     if ((flags & START_DL) && pthread_create(&s->dl_thread, NULL, dl_loop, s) != 0) {
         stop_audio(s);
@@ -170,7 +186,7 @@ static int read_frame(int fd, unsigned char *type, unsigned char *payload, unsig
     return *len ? read_full(fd, payload, *len) : 0;
 }
 
-static void serve_client(int fd, const struct profile *p, const char *token)
+static void serve_client(int fd, const struct profile *p, const char *token, unsigned short udp_port)
 {
     struct session s = { .fd = fd, .send_lock = PTHREAD_MUTEX_INITIALIZER };
     atomic_init(&s.dl_stop, false);
@@ -186,14 +202,22 @@ static void serve_client(int fd, const struct profile *p, const char *token)
     while (!stop_requested && read_frame(fd, &type, payload, &len) == 0) {
         switch (type) {
         case MSG_START:
-            start_audio(&s, p, len == 1 ? payload[0] : 0);
+            if (len == 1) {
+                start_audio(&s, p, payload[0], NULL, udp_port);
+            } else if (len == 7) { /* flags, ipv4[4], port (LE) */
+                struct sockaddr_in peer = { .sin_family = AF_INET, .sin_port = htons((unsigned short)(payload[5] | (payload[6] << 8))) };
+                memcpy(&peer.sin_addr.s_addr, payload + 1, 4);
+                start_audio(&s, p, payload[0], &peer, udp_port);
+            } else {
+                send_err(&s, "bad start");
+            }
             break;
         case MSG_STOP:
             stop_audio(&s);
             send_frame(&s, MSG_OK, NULL, 0);
             break;
         case MSG_UL_FRAME:
-            if (!s.audio || !(s.flags & START_UL))
+            if (!s.audio || !(s.flags & START_UL) || s.stream)
                 send_err(&s, "uplink not started");
             else if (len != audio_period_bytes(s.audio))
                 send_err(&s, "bad uplink frame size");
@@ -207,7 +231,7 @@ static void serve_client(int fd, const struct profile *p, const char *token)
     stop_audio(&s);
 }
 
-int server_run(const struct profile *p, const char *token, unsigned short port)
+int server_run(const struct profile *p, const char *token, unsigned short port, unsigned short udp_port)
 {
     signal(SIGPIPE, SIG_IGN);
     int listener = socket(AF_INET, SOCK_STREAM, 0);
@@ -231,7 +255,7 @@ int server_run(const struct profile *p, const char *token, unsigned short port)
         if (fd < 0)
             continue; /* EINTR from a signal re-checks stop_requested */
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-        serve_client(fd, p, token);
+        serve_client(fd, p, token, udp_port);
         close(fd);
     }
     close(listener);

@@ -31,9 +31,13 @@ call that is still ringing, so a reconnecting client catches up; clients dedupe 
 Keep-alive: WebSocket ping every 10 s; client reconnects after 2 s.
 
 ## Audio channel — UDP
-16 kHz, 16-bit, mono PCM, 20 ms frames (320 samples = 640 bytes) + 4-byte header: `u16 seq`, `u16 reserved`.
-Receiver runs a small adaptive jitter buffer (target 40-80 ms). Opus may replace PCM later.
-Ports: TBD (host binds one port, client announces its port in the `answer` message).
+16 kHz, 16-bit, mono PCM, 20 ms frames (320 samples = 640 bytes) + 4-byte header: `u16 seq`, `u16 reserved` (little endian).
+The audio daemon on the host talks UDP directly to the client; the Android app only tells it who the peer is.
+Host port: **8767** (fixed, `cellbridge_audiod serve ... [udp_port]`). The client announces its own UDP port in `answer`
+(`{"type":"answer","callId":...,"udpPort":N}`) and sends from that port; the host sends downlink frames to it and drops uplink
+packets from any other address. Downlink and uplink run for as long as the call is active.
+Both ends run a small adaptive jitter buffer (target 40-80 ms, starts at 60 ms, grows by 20 ms after a starvation, shrinks after
+5 s without one). A missing frame is replaced by silence; packets that arrive too late are dropped. Opus may replace PCM later.
 
 ## Audio daemon (on the Android host only, not seen by iOS)
 Root daemon `cellbridge_audiod serve <profile> <token>` <-> Android app, TCP `127.0.0.1:8766`, one client at a time.
@@ -43,8 +47,8 @@ Frame: `u8 type`, `u16 len` (little endian), `len` bytes payload. Audio payloads
 | type | dir | payload |
 |---|---|---|
 | `0x00` AUTH | app -> daemon | token (bytes) |
-| `0x01` START | app -> daemon | `u8 flags`: bit0 = capture DL, bit1 = inject UL |
-| `0x02` STOP | app -> daemon | - |
+| `0x01` START | app -> daemon | `u8 flags`: bit0 = capture DL, bit1 = inject UL; optional `u8[4] peer ipv4`, `u16 peer port` (LE): audio then flows over UDP (see above) instead of `0x10`/`0x11` frames |
+| `0x02` STOP | app -> daemon | - (the daemon logs stream statistics to stderr) |
 | `0x10` DL frame | daemon -> app | PCM period (only while started with DL) |
 | `0x11` UL frame | app -> daemon | PCM period (only while started with UL) |
 | `0x80` OK | daemon -> app | ack of AUTH / START / STOP |
