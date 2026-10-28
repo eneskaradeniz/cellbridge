@@ -1,0 +1,46 @@
+import XCTest
+@testable import CellBridge
+
+final class MessagesTests: XCTestCase {
+    func testHelloCarriesVersionAndToken() {
+        XCTAssertEqual(ClientMessage.hello(token: "ABC23456").encoded(), #"{"token":"ABC23456","type":"hello","version":1}"#)
+    }
+
+    func testAnswerOmitsAbsentUdpPortAndIncludesPresentOne() {
+        XCTAssertEqual(ClientMessage.answer(callId: "c1", udpPort: nil).encoded(), #"{"callId":"c1","type":"answer"}"#)
+        XCTAssertEqual(ClientMessage.answer(callId: "c1", udpPort: 40123).encoded(), #"{"callId":"c1","type":"answer","udpPort":40123}"#)
+    }
+
+    func testRejectAndHangup() {
+        XCTAssertEqual(ClientMessage.reject(callId: "c1").encoded(), #"{"callId":"c1","type":"reject"}"#)
+        XCTAssertEqual(ClientMessage.hangup(callId: "c1").encoded(), #"{"callId":"c1","type":"hangup"}"#)
+    }
+
+    func testDecodesHelloAckWithCapabilities() {
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"hello_ack","version":1,"capabilities":["calls","audio"]}"#),
+                       .helloAck(version: 1, capabilities: ["calls", "audio"]))
+    }
+
+    func testDecodesRingWithAndWithoutOptionalFields() {
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"ring","callId":"c1"}"#), .ring(callId: "c1", number: nil, name: nil))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"ring","callId":"c1","number":"+90555","name":"Ali"}"#),
+                       .ring(callId: "c1", number: "+90555", name: "Ali"))
+    }
+
+    func testDecodesEndedReasons() {
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"ended","callId":"c1"}"#), .ended(callId: "c1", reason: nil))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"ended","callId":"c1","reason":"missed"}"#), .ended(callId: "c1", reason: .missed))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"ended","callId":"c1","reason":"rejected"}"#), .ended(callId: "c1", reason: .rejected))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"ended","callId":"c1","reason":"future"}"#), .ended(callId: "c1", reason: nil))
+    }
+
+    func testDecodesError() {
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"error","code":"unauthorized"}"#), .error(code: "unauthorized", message: nil))
+    }
+
+    func testIgnoresUnknownTypesAndGarbage() {
+        XCTAssertNil(ServerMessage.decode(#"{"type":"sms","id":"1"}"#))
+        XCTAssertNil(ServerMessage.decode("not json"))
+        XCTAssertNil(ServerMessage.decode(#"{"type":"ring"}"#))
+    }
+}

@@ -1,0 +1,45 @@
+name: CellBridge
+options:
+  bundleIdPrefix: com.eneskaradeniz
+targets:
+  CellBridge:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [Sources]
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: CellBridge
+        UILaunchScreen: {}
+        UIBackgroundModes: [audio, voip]
+        NSLocalNetworkUsageDescription: Talks to the CellBridge host on the local network.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.eneskaradeniz.cellbridge
+        DEVELOPMENT_TEAM: ABCDE12345
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
+  CellBridgeTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [Tests]
+    dependencies:
+      - target: CellBridge
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.eneskaradeniz.cellbridge.tests
+        GENERATE_INFOPLIST_FILE: YES
+        DEVELOPMENT_TEAM: ABCDE12345
+        SWIFT_VERSION: "5.0"
+schemes:
+  CellBridge:
+    build:
+      targets:
+        CellBridge: all
+        CellBridgeTests: [test]
+    test:
+      targets: [CellBridgeTests]

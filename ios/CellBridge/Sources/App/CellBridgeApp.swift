@@ -1,0 +1,67 @@
+import SwiftUI
+
+@main
+struct CellBridgeApp: App {
+    @StateObject private var model = AppModel()
+
+    var body: some Scene {
+        WindowGroup { ContentView().environmentObject(model) }
+    }
+}
+
+struct ContentView: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        Form {
+            if !model.activeCalls.isEmpty {
+                Section("Calls") {
+                    ForEach(model.activeCalls) { call in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(call.title).font(.headline)
+                                if let answeredAt = call.answeredAt {
+                                    Text(answeredAt, style: .timer).font(.subheadline).monospacedDigit()
+                                } else {
+                                    Text("Ringing…").font(.subheadline)
+                                }
+                            }
+                            Spacer()
+                            Button(call.isAnswered ? "End" : "Decline", role: .destructive) { model.endCall(call.id) }
+                                .buttonStyle(.borderedProminent)
+                        }
+                    }
+                }
+            }
+            Section("Host") {
+                TextField(model.gateway.address.map { "Detected: \($0)" } ?? "Host address", text: $model.host)
+                    .keyboardType(.numbersAndPunctuation)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                TextField("Pairing code (shown on the phone)", text: $model.token)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.characters)
+            }
+            Section("Connection") {
+                Text(statusText)
+                if model.client.state == .idle {
+                    Button("Connect") { model.connect() }.disabled(!model.canConnect)
+                } else {
+                    Button("Disconnect", role: .destructive) { model.disconnect() }
+                }
+            }
+            Section("Events") {
+                ForEach(model.events, id: \.self) { Text($0).font(.system(size: 12, design: .monospaced)) }
+            }
+        }
+    }
+
+    private var statusText: String {
+        switch model.client.state {
+        case .idle: return "Not connected"
+        case .connecting: return "Connecting…"
+        case .connected(let capabilities): return "Connected (\(capabilities.joined(separator: ", ")))"
+        case .rejected(let code): return "Host refused: \(code) — check the pairing code"
+        }
+    }
+}
