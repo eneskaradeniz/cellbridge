@@ -8,6 +8,8 @@ enum ClientMessage: Equatable {
     case answer(callId: String, udpPort: Int?)
     case reject(callId: String)
     case hangup(callId: String)
+    case smsAck(id: String)
+    case smsSend(clientId: String, to: String, body: String)
 
     func encoded() -> String {
         var object: [String: Any]
@@ -21,6 +23,10 @@ enum ClientMessage: Equatable {
             object = ["type": "reject", "callId": callId]
         case .hangup(let callId):
             object = ["type": "hangup", "callId": callId]
+        case .smsAck(let id):
+            object = ["type": "sms_ack", "id": id]
+        case .smsSend(let clientId, let to, let body):
+            object = ["type": "sms_send", "clientId": clientId, "to": to, "body": body]
         }
         let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
         return String(decoding: data, as: UTF8.self)
@@ -35,6 +41,8 @@ enum ServerMessage: Equatable {
     case helloAck(version: Int, capabilities: [String])
     case ring(callId: String, number: String?, name: String?)
     case ended(callId: String, reason: EndReason?)
+    case sms(id: String, from: String, body: String, ts: Int64)
+    case smsResult(clientId: String, ok: Bool, error: String?)
     case error(code: String, message: String?)
 
     /// Returns nil for anything that is not a message this client understands; unknown types are ignored on purpose
@@ -52,6 +60,13 @@ enum ServerMessage: Equatable {
         case "ended":
             guard let callId = object["callId"] as? String else { return nil }
             return .ended(callId: callId, reason: (object["reason"] as? String).flatMap(EndReason.init(rawValue:)))
+        case "sms":
+            guard let id = object["id"] as? String, let from = object["from"] as? String,
+                  let body = object["body"] as? String, let ts = (object["ts"] as? NSNumber)?.int64Value else { return nil }
+            return .sms(id: id, from: from, body: body, ts: ts)
+        case "sms_result":
+            guard let clientId = object["clientId"] as? String, let ok = object["ok"] as? Bool else { return nil }
+            return .smsResult(clientId: clientId, ok: ok, error: object["error"] as? String)
         case "error":
             guard let code = object["code"] as? String else { return nil }
             return .error(code: code, message: object["message"] as? String)

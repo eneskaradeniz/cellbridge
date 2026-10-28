@@ -5,7 +5,13 @@ struct CellBridgeApp: App {
     @StateObject private var model = AppModel()
 
     var body: some Scene {
-        WindowGroup { ContentView().environmentObject(model) }
+        WindowGroup {
+            TabView {
+                ContentView().tabItem { Label("Connection", systemImage: "antenna.radiowaves.left.and.right") }
+                MessagesView().tabItem { Label("Messages", systemImage: "message") }
+            }
+            .environmentObject(model)
+        }
     }
 }
 

@@ -43,4 +43,20 @@ final class MessagesTests: XCTestCase {
         XCTAssertNil(ServerMessage.decode("not json"))
         XCTAssertNil(ServerMessage.decode(#"{"type":"ring"}"#))
     }
+
+    func testSmsAckAndSendEncoding() {
+        XCTAssertEqual(ClientMessage.smsAck(id: "7").encoded(), #"{"id":"7","type":"sms_ack"}"#)
+        XCTAssertEqual(ClientMessage.smsSend(clientId: "k1", to: "+90555", body: "selam").encoded(),
+                       #"{"body":"selam","clientId":"k1","to":"+90555","type":"sms_send"}"#)
+    }
+
+    func testDecodesSmsAndItsResult() {
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"sms","id":"7","from":"+90555","body":"selam","ts":1700000000000}"#),
+                       .sms(id: "7", from: "+90555", body: "selam", ts: 1_700_000_000_000))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"sms_result","clientId":"k1","ok":true}"#),
+                       .smsResult(clientId: "k1", ok: true, error: nil))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"sms_result","clientId":"k1","ok":false,"error":"invalid"}"#),
+                       .smsResult(clientId: "k1", ok: false, error: "invalid"))
+        XCTAssertNil(ServerMessage.decode(#"{"type":"sms","id":"7"}"#))
+    }
 }
