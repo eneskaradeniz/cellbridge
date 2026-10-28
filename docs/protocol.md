@@ -15,8 +15,10 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
 | `ended` | host -> iOS | `callId`, `reason?` |
 | `dial` | iOS -> host | `number` |
-| `sms` | host -> iOS | `id`, `from`, `body`, `ts` |
-| `sms_send` | iOS -> host | `to`, `body` |
+| `sms` | host -> iOS | `id` (string), `from`, `body`, `ts` (ms since epoch) |
+| `sms_ack` | iOS -> host | `id` |
+| `sms_send` | iOS -> host | `clientId`, `to`, `body` |
+| `sms_result` | host -> iOS | `clientId`, `ok`, `error?` |
 
 `audio` is advertised only when the root audio daemon is reachable; without it the host runs in control-only mode
 (calls and SMS work, call audio stays on the phone) and the client must not open the audio channel.
@@ -27,6 +29,14 @@ and the host closes the socket. Later errors (`bad_message`, `unknown_call`) lea
 `ended.reason` is `missed` for an incoming call that ended without being answered (the caller gave up), `rejected` when the host
 rejected it on the client's request; it is absent for a call that was answered. After `hello_ack` the host re-sends `ring` for every
 call that is still ringing, so a reconnecting client catches up; clients dedupe by `callId`.
+
+SMS delivery is lossless: the host stores every incoming message in the system SMS database first, then sends `sms`. `sms_ack`
+acknowledges that message **and every earlier one**; after `hello_ack` the host re-sends everything newer than the last
+acknowledged id, so a client that was offline (or crashed before saving) catches up. Clients persist a message before acking it and
+dedupe by `id`. `sms` is advertised in `capabilities` only while the host app is the default SMS app.
+`sms_send` is answered by exactly one `sms_result` with the same `clientId`; `ok:false` carries a short `error`
+(`invalid` for a bad number or empty/oversized body, `failed` when the radio refused). Long texts are sent as multipart messages.
+MMS is not supported.
 
 Keep-alive: WebSocket ping every 10 s; client reconnects after 2 s.
 

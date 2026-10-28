@@ -5,6 +5,9 @@ import com.cellbridge.audio.CallAudioBridge
 import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallStatus
+import com.cellbridge.domain.model.IncomingSms
+import com.cellbridge.domain.model.SendResult
+import com.cellbridge.sms.SmsGateway
 import com.cellbridge.protocol.ClientMessage
 import com.cellbridge.protocol.PROTOCOL_VERSION
 import com.cellbridge.protocol.ServerMessage
@@ -61,6 +64,7 @@ class ControlServer @Inject constructor(
     private val feed: CallFeed,
     private val commands: CallCommands,
     private val audio: CallAudioBridge,
+    private val sms: SmsGateway,
     private val pairingToken: PairingToken,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
@@ -84,7 +88,7 @@ class ControlServer @Inject constructor(
                 CIO,
                 rootConfig = serverConfig {
                     parentCoroutineContext = onFailure
-                    module { controlModule(feed, commands, audio, pairingToken.value, capabilities = ::capabilities) }
+                    module { controlModule(feed, commands, audio, sms, pairingToken.value, capabilities = ::capabilities) }
                 },
                 configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
             ).also { server ->
@@ -111,6 +115,7 @@ class ControlServer @Inject constructor(
     /** `audio` only while the root daemon answers; otherwise the host runs control-only (docs/protocol.md). */
     private suspend fun capabilities(): List<String> = buildList {
         add("calls")
+        if (sms.isAvailable()) add("sms")
         if (audio.isAvailable()) add("audio")
     }
 
@@ -125,6 +130,7 @@ fun Application.controlModule(
     feed: CallFeed,
     commands: CallCommands,
     audio: CallAudioBridge,
+    sms: SmsGateway,
     token: String,
     capabilities: suspend () -> List<String>,
     authFailureDelay: Duration = 1.seconds,
@@ -135,7 +141,7 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, audio, token, capabilities, authFailureDelay).run() }
+        webSocket("/") { Session(this, feed, commands, audio, sms, token, capabilities, authFailureDelay).run() }
     }
 }
 
@@ -146,6 +152,7 @@ private class Session(
     private val feed: CallFeed,
     private val commands: CallCommands,
     private val audio: CallAudioBridge,
+    private val sms: SmsGateway,
     private val token: String,
     private val capabilities: suspend () -> List<String>,
     private val authFailureDelay: Duration,
@@ -168,23 +175,32 @@ private class Session(
                     event.toMessage()?.let { send(it) }
                 }
             }
+            val smsForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
+                sms.incoming.collect {
+                    acked.await()
+                    send(it.toMessage())
+                }
+            }
             send(ServerMessage.HelloAck(PROTOCOL_VERSION, capabilities()))
             feed.liveCalls()
                 .filter { it.direction == CallDirection.INCOMING && it.status == CallStatus.RINGING }
                 .forEach { send(ServerMessage.Ring(it.id, it.number)) }
+            // Texts the client has not acknowledged yet (it may have been offline); it dedupes by id.
+            if (sms.isAvailable()) runCatching { sms.unacknowledged() }.getOrDefault(emptyList()).forEach { send(it.toMessage()) }
             acked.complete(Unit)
 
             try {
                 for (frame in ws.incoming) {
-                    if (frame is Frame.Text) handle(decodeClientMessage(frame.readText()))
+                    if (frame is Frame.Text) handle(decodeClientMessage(frame.readText()), scope = this@coroutineScope)
                 }
             } finally {
                 forwarder.cancel()
+                smsForwarder.cancel()
             }
         }
     }
 
-    private suspend fun handle(message: ClientMessage?) {
+    private suspend fun handle(message: ClientMessage?, scope: CoroutineScope) {
         val (callId, accepted) = when (message) {
             is ClientMessage.Answer -> {
                 // Register the audio peer first: the call's Answered event may arrive before answer() returns.
@@ -195,6 +211,18 @@ private class Session(
             }
             is ClientMessage.Reject -> message.callId to commands.reject(message.callId)
             is ClientMessage.Hangup -> message.callId to commands.hangup(message.callId)
+            is ClientMessage.SmsAck -> {
+                message.id.toLongOrNull()?.let { sms.acknowledge(it) } ?: send(ServerMessage.Error("bad_message"))
+                return
+            }
+            is ClientMessage.SmsSend -> {
+                // Sending can take a while; keep reading frames (pings, acks) meanwhile.
+                scope.launch {
+                    val result = sms.send(message.to, message.body)
+                    send(ServerMessage.SmsResult(message.clientId, result is SendResult.Sent, (result as? SendResult.Failed)?.error))
+                }
+                return
+            }
             is ClientMessage.Hello, null -> return send(ServerMessage.Error("bad_message"))
         }
         if (!accepted) send(ServerMessage.Error("unknown_call", callId))
@@ -217,6 +245,8 @@ private class Session(
     private fun tokenMatches(candidate: String): Boolean =
         MessageDigest.isEqual(candidate.toByteArray(), token.toByteArray())
 }
+
+private fun IncomingSms.toMessage() = ServerMessage.Sms(id.toString(), from, body, timestamp)
 
 private fun CallEvent.toMessage(): ServerMessage? = when (this) {
     is CallEvent.Ringing -> ServerMessage.Ring(call.id, call.number)

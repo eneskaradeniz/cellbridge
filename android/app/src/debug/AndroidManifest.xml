@@ -13,5 +13,6 @@
         </service>
 
         <receiver android:name=".debug.FakeCallReceiver" android:exported="true" />
+        <receiver android:name=".debug.FakeSmsReceiver" android:exported="true" />
     </application>
 </manifest>

@@ -2,6 +2,9 @@ package com.cellbridge.server
 
 import com.cellbridge.audio.CallAudioBridge
 import com.cellbridge.audio.FakeAudio
+import com.cellbridge.domain.model.IncomingSms
+import com.cellbridge.domain.model.SendResult
+import com.cellbridge.sms.FakeSmsGateway
 import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallSnapshot
@@ -58,6 +61,7 @@ class ControlServerTest {
     private val feed = FakeFeed()
     private val commands = FakeCommands()
     private val audio = FakeAudio()
+    private val sms = FakeSmsGateway()
     private val bridge = CallAudioBridge(feed, audio).also { it.start(CoroutineScope(Dispatchers.Unconfined + Job())) }
     private val incomingRinging = CallSnapshot("c1", "+90555", CallDirection.INCOMING, CallStatus.RINGING)
 
@@ -65,7 +69,7 @@ class ControlServerTest {
         testApplication {
             application {
                 controlModule(
-                    feed, commands, bridge, token = "SECRET",
+                    feed, commands, bridge, sms, token = "SECRET",
                     capabilities = { listOf("calls") + if (audio.isAvailable()) listOf("audio") else emptyList() },
                     authFailureDelay = Duration.ZERO,
                 )
@@ -237,6 +241,61 @@ class ControlServerTest {
             login()
             say("""{"type":"answer","callId":"nope","udpPort":40123}""")
             assertEquals("unknown_call", hear().str("code"))
+        }
+    }
+
+    @Test
+    fun `a received text is forwarded to the client`() = withServer { connect ->
+        connect {
+            login()
+            sms.flow.emit(IncomingSms(7, "+90555", "selam", 1_700_000_000_000))
+            assertEquals("""{"type":"sms","id":"7","from":"+90555","body":"selam","ts":1700000000000}""", hear().toString())
+        }
+    }
+
+    @Test
+    fun `unacknowledged texts are re-sent after hello_ack`() = withServer { connect ->
+        sms.pending = listOf(IncomingSms(5, "+90555", "bir", 1L), IncomingSms(6, "+90556", "iki", 2L))
+        connect {
+            login()
+            assertEquals("5", hear().str("id"))
+            assertEquals("6", hear().str("id"))
+        }
+    }
+
+    @Test
+    fun `without the sms role nothing is replayed`() = withServer { connect ->
+        sms.available = false
+        sms.pending = listOf(IncomingSms(5, "+90555", "bir", 1L))
+        connect {
+            login()
+            say("""{"type":"sms_ack","id":"zzz"}""") // forces a round trip: the next frame must be the error
+            assertEquals("bad_message", hear().str("code"))
+        }
+    }
+
+    @Test
+    fun `sms_ack acknowledges and a malformed id is a bad_message`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"sms_ack","id":"7"}""")
+            say("""{"type":"sms_ack","id":"seven"}""")
+            assertEquals("bad_message", hear().str("code"))
+            assertEquals(listOf(7L), sms.acknowledged)
+        }
+    }
+
+    @Test
+    fun `sms_send is answered with a result carrying the client id`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"sms_send","clientId":"k1","to":"+90555","body":"selam"}""")
+            assertEquals("""{"type":"sms_result","clientId":"k1","ok":true}""", hear().toString())
+            assertEquals(listOf("+90555" to "selam"), sms.sent)
+
+            sms.sendResult = SendResult.Failed("failed")
+            say("""{"type":"sms_send","clientId":"k2","to":"+90555","body":"yine"}""")
+            assertEquals("""{"type":"sms_result","clientId":"k2","ok":false,"error":"failed"}""", hear().toString())
         }
     }
 }

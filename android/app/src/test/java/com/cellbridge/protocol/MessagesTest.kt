@@ -38,4 +38,27 @@ class MessagesTest {
         assertNull(decodeClientMessage("""{"type":"launch_missiles"}"""))
         assertNull(decodeClientMessage("""{"type":"answer"}"""))
     }
+
+    @Test
+    fun `sms and its result are encoded as in the protocol`() {
+        assertEquals(
+            """{"type":"sms","id":"7","from":"+90555","body":"selam","ts":1700000000000}""",
+            ServerMessage.Sms("7", "+90555", "selam", 1_700_000_000_000).encode(),
+        )
+        assertEquals("""{"type":"sms_result","clientId":"k1","ok":true}""", ServerMessage.SmsResult("k1", true).encode())
+        assertEquals(
+            """{"type":"sms_result","clientId":"k1","ok":false,"error":"failed"}""",
+            ServerMessage.SmsResult("k1", false, "failed").encode(),
+        )
+    }
+
+    @Test
+    fun `sms_ack and sms_send are decoded`() {
+        assertEquals(ClientMessage.SmsAck("7"), decodeClientMessage("""{"type":"sms_ack","id":"7"}"""))
+        assertEquals(
+            ClientMessage.SmsSend("k1", "+90555", "selam"),
+            decodeClientMessage("""{"type":"sms_send","clientId":"k1","to":"+90555","body":"selam"}"""),
+        )
+        assertNull(decodeClientMessage("""{"type":"sms_send","to":"+90555"}"""))
+    }
 }
