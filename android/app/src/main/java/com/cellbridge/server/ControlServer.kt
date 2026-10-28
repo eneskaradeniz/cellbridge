@@ -15,7 +15,9 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
+import io.ktor.server.engine.connector
 import io.ktor.server.engine.embeddedServer
+import io.ktor.server.application.serverConfig
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.DefaultWebSocketServerSession
 import io.ktor.server.websocket.WebSockets
@@ -27,10 +29,16 @@ import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -47,26 +55,48 @@ class ControlServer @Inject constructor(
     private val pairingToken: PairingToken,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
+    private val _running = MutableStateFlow(false)
+
+    /** True while the server is listening; false before start, after stop, and when binding failed. */
+    val running: StateFlow<Boolean> = _running.asStateFlow()
 
     @Synchronized
     fun start() {
         if (engine != null) return
+        // Binding happens in a Ktor coroutine after start() returns, so a failure there (port in use) would
+        // reach the default handler and kill the process. Route it here instead.
+        val onFailure = CoroutineExceptionHandler { _, error ->
+            Log.e(TAG, "control server failed", error)
+            _running.value = false
+        }
         runCatching {
-            embeddedServer(CIO, port = CONTROL_PORT, host = "0.0.0.0") {
-                controlModule(feed, commands, pairingToken.value, capabilities = { listOf("calls") })
-            }.start(wait = false)
-        }.onSuccess { engine = it }
-            .onFailure { Log.e(TAG, "control server failed to start", it) }
+            embeddedServer(
+                CIO,
+                rootConfig = serverConfig {
+                    parentCoroutineContext = onFailure
+                    module { controlModule(feed, commands, pairingToken.value, capabilities = { listOf("calls") }) }
+                },
+                configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
+            ).also { server ->
+                server.start(wait = false)
+                runBlocking { withTimeout(BIND_TIMEOUT_MS) { server.engine.resolvedConnectors() } } // throws if the bind failed
+            }
+        }.onSuccess {
+            engine = it
+            _running.value = true
+        }.onFailure { Log.e(TAG, "control server failed to start", it) }
     }
 
     @Synchronized
     fun stop() {
         engine?.stop(gracePeriodMillis = 500, timeoutMillis = 1_000)
         engine = null
+        _running.value = false
     }
 
     private companion object {
         const val TAG = "CellBridge"
+        const val BIND_TIMEOUT_MS = 5_000L
     }
 }
 

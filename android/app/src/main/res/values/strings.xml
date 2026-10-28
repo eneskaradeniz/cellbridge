@@ -7,4 +7,10 @@
     <string name="role_unavailable">Unavailable on this device</string>
     <string name="role_request">Request</string>
     <string name="pairing_token">Pairing token (enter it on the iPhone)</string>
+    <string name="server_running">Control server running</string>
+    <string name="server_stopped">Control server not running</string>
+    <string name="notification_channel">Control server</string>
+    <string name="notification_starting">Starting…</string>
+    <string name="notification_running">Running — pairing code is on the app screen</string>
+    <string name="notification_failed">Could not start (is port 8765 in use?)</string>
 </resources>

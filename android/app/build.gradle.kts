@@ -11,6 +11,11 @@ android {
     namespace = "com.cellbridge"
     compileSdk = 37
 
+    testOptions {
+        // slf4j-android (Ktor's logging) calls android.util.Log, which is a stub in JVM unit tests.
+        unitTests.isReturnDefaultValues = true
+    }
+
     defaultConfig {
         applicationId = "com.cellbridge"
         // RoleManager (default Dialer / SMS roles) arrived in API 29.

@@ -1,5 +1,7 @@
 package com.cellbridge
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,6 +18,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
@@ -23,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.cellbridge.server.ControlServer
+import com.cellbridge.server.ControlService
 import com.cellbridge.server.PairingToken
 import com.cellbridge.telecom.AppRole
 import com.cellbridge.telecom.DefaultRoles
@@ -33,12 +38,17 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
     @Inject lateinit var roles: DefaultRoles
     @Inject lateinit var pairingToken: PairingToken
+    @Inject lateinit var controlServer: ControlServer
 
     /** Bumped on resume and after a role dialog so the role rows re-read the platform state. */
     private var refresh by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The service runs either way; without the permission only its notification stays hidden.
+        val notifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        ControlService.start(this)
         setContent {
             MaterialTheme {
                 Column(
@@ -48,6 +58,8 @@ class MainActivity : ComponentActivity() {
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium)
                     RoleRow(AppRole.DIALER, R.string.role_dialer)
                     RoleRow(AppRole.SMS, R.string.role_sms)
+                    val running by controlServer.running.collectAsState()
+                    Text(stringResource(if (running) R.string.server_running else R.string.server_stopped))
                     Text(stringResource(R.string.pairing_token), style = MaterialTheme.typography.bodySmall)
                     SelectionContainer { Text(pairingToken.value, style = MaterialTheme.typography.headlineSmall) }
                 }
