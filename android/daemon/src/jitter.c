@@ -7,10 +7,10 @@
 
 enum {
     SLOTS = 32,          /* power of two; also the largest sequence gap we bridge before resyncing */
-    MIN_TARGET = 2,      /* 40 ms at 20 ms frames */
+    MIN_TARGET = 3,      /* 60 ms at 20 ms frames: below that a phone's Wi-Fi power saving (100 ms bursts) starves it */
     START_TARGET = 3,
-    MAX_TARGET = 7,      /* 140 ms: the hotspot's Wi-Fi power saving delivers 100 ms bursts */
-    EXTRA_BEFORE_DROP = 6, /* frames allowed above target before the oldest are discarded */
+    MAX_TARGET = 8,      /* 160 ms */
+    EXTRA_BEFORE_DROP = 10, /* frames allowed above target before the oldest are discarded: a burst after a gap must not be thrown away */
     CALM_FRAMES_TO_SHRINK = 250, /* 5 s */
 };
 

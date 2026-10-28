@@ -62,6 +62,16 @@ def check(name, ok):
 
 
 def main():
+    # A daemon installed as an init service owns the ports (and reads its token from a file): stop it for the run.
+    adb("shell", "stop cellbridge_audiod 2>/dev/null; true", check=False)
+    try:
+        return run()
+    finally:
+        adb("shell", "pkill -f 'cellbridge_audiod .* serve' || true", check=False)
+        adb("shell", "start cellbridge_audiod 2>/dev/null; true", check=False)
+
+
+def run():
     adb("push", "android/daemon/build/cellbridge_audiod", "android/daemon/profiles/platina.profile", DEV)
     adb("shell", "pkill -f 'cellbridge_audiod .* serve' || true", check=False)
     adb("shell", f"cd {DEV} && chmod +x cellbridge_audiod && "

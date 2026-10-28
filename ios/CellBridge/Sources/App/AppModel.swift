@@ -122,6 +122,18 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Settings → Mic test: the call's microphone path with several voice-processing settings, 6 s each.
+    func runMicTest() {
+        guard !audioTestRunning else { return }
+        audioTestRunning = true
+        keepAlive.stop()
+        Task {
+            await AudioSelfTest.micTest(log: { [weak self] in self?.log($0) })
+            keepAlive.start()
+            audioTestRunning = false
+        }
+    }
+
     func disconnect() {
         wantsConnection = false
         client.disconnect()

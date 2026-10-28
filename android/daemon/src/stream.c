@@ -39,6 +39,9 @@ struct stream {
     /* Test mode (CELLBRIDGE_ECHO): the downlink is the uplink played back, so the whole audio chain can be tried
      * without a call. The PCMs stay unused. */
     bool echo;
+    FILE *dump_ul; /* CELLBRIDGE_DUMP_UL=<path>: the uplink exactly as injected (concealed frames as silence) */
+    FILE *dump; /* CELLBRIDGE_DUMP_DL=<path>: the captured downlink as raw 16 kHz S16 mono, to listen to or analyse */
+    bool tone; /* test mode (CELLBRIDGE_TONE): the downlink is a steady 440 Hz tone, no capture, no microphone loop */
     pthread_mutex_t echo_lock;
     unsigned char echo_frames[ECHO_SLOTS][MAX_PERIOD_BYTES];
     unsigned int echo_head, echo_count;
@@ -102,14 +105,23 @@ static void *dl_loop(void *arg)
     double last_send = 0;
     struct timespec next;
     clock_gettime(CLOCK_MONOTONIC, &next);
+    unsigned long long tone_pos = 0;
     while (!atomic_load(&s->stop)) {
-        if (s->echo) {
+        if (s->tone) {
+            add_ns(&next, s->period_ns);
+            clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+            short *pcm = (short *)(packet + STREAM_HEADER_BYTES);
+            for (unsigned int i = 0; i < s->period_bytes / 2; i++, tone_pos++)
+                pcm[i] = (short)(8000 * sin(2 * M_PI * 440 * (double)tone_pos / 16000.0));
+        } else if (s->echo) {
             add_ns(&next, s->period_ns);
             clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
             echo_pop(s, packet + STREAM_HEADER_BYTES);
         } else if (audio_read_dl(s->audio, packet + STREAM_HEADER_BYTES) != 0) {
             continue;
         }
+        if (s->dump)
+            fwrite(packet + STREAM_HEADER_BYTES, 1, s->period_bytes, s->dump);
         s->dl_sum_sq += sum_squares((const short *)(packet + STREAM_HEADER_BYTES), s->period_bytes / 2);
         s->dl_samples += s->period_bytes / 2;
         double sent_at = now_ms();
@@ -185,6 +197,8 @@ static void *play_loop(void *arg)
         add_ns(&next, s->period_ns);
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
         enum jitter_result r = jitter_pop(s->jitter, frame);
+        if (s->dump_ul && r != JITTER_PRIMING)
+            fwrite(frame, 1, s->period_bytes, s->dump_ul);
         if (r == JITTER_FRAME) {
             s->ul_sum_sq += sum_squares((const short *)frame, s->period_bytes / 2);
             s->ul_samples += s->period_bytes / 2;
@@ -192,7 +206,7 @@ static void *play_loop(void *arg)
         double write_start = now_ms();
         if (s->echo)
             echo_push(s, frame);
-        else
+        else if (!s->tone)
             audio_write_ul(s->audio, frame);
         double write_ms = now_ms() - write_start;
         s->play_ticks++;
@@ -229,6 +243,15 @@ struct stream *stream_start(struct audio *a, const struct profile *p, bool dl, b
     atomic_init(&s->stop, false);
     pthread_mutex_init(&s->echo_lock, NULL);
     s->echo = getenv("CELLBRIDGE_ECHO") != NULL;
+    s->tone = getenv("CELLBRIDGE_TONE") != NULL;
+    const char *dump_ul_path = getenv("CELLBRIDGE_DUMP_UL");
+    if (dump_ul_path && !(s->dump_ul = fopen(dump_ul_path, "wb")))
+        daemon_log("stream: cannot write %s: %s\n", dump_ul_path, strerror(errno));
+    const char *dump_path = getenv("CELLBRIDGE_DUMP_DL");
+    if (dump_path && !(s->dump = fopen(dump_path, "wb")))
+        daemon_log("stream: cannot write %s: %s\n", dump_path, strerror(errno));
+    if (s->tone)
+        daemon_log("stream: TONE TEST MODE, the downlink is a steady 440 Hz tone, no call audio\n");
     if (s->echo)
         daemon_log("stream: ECHO TEST MODE, the downlink is the uplink played back, no call audio\n");
 
@@ -289,6 +312,10 @@ void stream_stop(struct stream *s)
     } else {
         daemon_log("stream: dl_sent=%u\n", s->dl_sent);
     }
+    if (s->dump)
+        fclose(s->dump);
+    if (s->dump_ul)
+        fclose(s->dump_ul);
     jitter_destroy(s->jitter);
     if (s->fd >= 0)
         close(s->fd);

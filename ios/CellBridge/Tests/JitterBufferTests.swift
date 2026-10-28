@@ -79,13 +79,13 @@ final class JitterBufferTests: XCTestCase {
 
     func testStarvationDeepensBufferUpToMax() {
         let j = make()
-        for round in 0..<7 {
+        for round in 0..<8 {
             let depth = j.currentStats().target // priming needs `target` frames
             fill(j, from: 1000 + round * 10, count: depth)
             for _ in 0..<depth { XCTAssertEqual(j.pop().result, .frame) }
             XCTAssertEqual(j.pop().result, .concealed) // nothing left: starved
         }
-        XCTAssertEqual(j.currentStats().target, 7) // 3 -> 4 -> ... -> 7, capped
+        XCTAssertEqual(j.currentStats().target, 8) // 3 -> 4 -> ... -> 8, capped
     }
 
     func testCalmPeriodShrinksBuffer() {
@@ -96,7 +96,7 @@ final class JitterBufferTests: XCTestCase {
             push(j, seq); seq += 1
             XCTAssertEqual(j.pop().result, .frame)
         }
-        XCTAssertEqual(j.currentStats().target, 2)
+        XCTAssertEqual(j.currentStats().target, 3) // the floor is 3 now
     }
 
     func testFarJumpResyncs() {
@@ -120,6 +120,6 @@ final class JitterBufferTests: XCTestCase {
         XCTAssertGreaterThan(j.currentStats().overflow, 0)
         let popped = j.pop()
         XCTAssertEqual(popped.result, .frame)
-        XCTAssertEqual(popped.frame[0], marker(14)) // only target + 6 = 9 frames stay: 14..22
+        XCTAssertEqual(popped.frame[0], marker(10)) // only target + 10 = 13 frames stay: 10..22
     }
 }

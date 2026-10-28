@@ -26,7 +26,11 @@ final class AudioBridge {
         do {
             keepAlive.stop() // its playback-only session would fight the call's voice-chat session
             try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .voiceChat, options: [])
-            let pipeline = try AudioPipeline(host: host)
+            let pipeline = try AudioPipeline(
+                host: host,
+                voiceProcessing: Self.storedVoiceProcessing,
+                sentDumpName: UserDefaults.standard.bool(forKey: "recordAudio") ? "tx_capture" : nil
+            )
             pipeline.muted = muted
             self.pipeline = pipeline
             return pipeline.localPort
@@ -87,5 +91,10 @@ final class AudioBridge {
         case .undetermined: return "undetermined"
         @unknown default: return "unknown"
         }
+    }
+
+    /// Settings > Voice processing; `full` unless the user picked another one to compare.
+    static var storedVoiceProcessing: AudioPipeline.VoiceProcessing {
+        UserDefaults.standard.string(forKey: "voiceProcessing").flatMap(AudioPipeline.VoiceProcessing.init(rawValue:)) ?? .full
     }
 }

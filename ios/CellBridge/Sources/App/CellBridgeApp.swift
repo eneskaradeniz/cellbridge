@@ -47,6 +47,19 @@ struct ContentView: View {
             Section("Audio") {
                 Button(model.audioTestRunning ? "Testing… (about 10 s)" : "Audio test") { model.runAudioSelfTest() }
                     .disabled(model.audioTestRunning)
+                Picker("Voice processing", selection: Binding(
+                    get: { AudioBridge.storedVoiceProcessing.rawValue },
+                    set: { UserDefaults.standard.set($0, forKey: "voiceProcessing") })) {
+                    Text("Full (default)").tag("full")
+                    Text("Full, no auto gain").tag("fullNoAGC")
+                    Text("Bypassed").tag("bypassed")
+                    Text("Off").tag("off")
+                }
+                Button(model.audioTestRunning ? "Testing… (about 18 s)" : "Mic test (speak steadily)") { model.runMicTest() }
+                    .disabled(model.audioTestRunning)
+                Toggle("Record the far end (debug)", isOn: Binding(
+                    get: { UserDefaults.standard.bool(forKey: "recordAudio") },
+                    set: { UserDefaults.standard.set($0, forKey: "recordAudio") }))
                 Text("Plays a tone through the call's audio path in four ways and logs what the mixer renders. Turn the volume up; no call needed.")
                     .font(.footnote).foregroundStyle(.secondary)
             }

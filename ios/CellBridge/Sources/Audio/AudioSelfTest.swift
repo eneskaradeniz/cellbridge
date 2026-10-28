@@ -120,4 +120,51 @@ enum AudioSelfTest {
             return (samples > 0 ? (sumSq / Double(samples)).squareRoot() : 0, samples)
         }
     }
+
+    // MARK: microphone test
+
+    private struct MicVariant {
+        let name: String
+        let voiceProcessing: AudioPipeline.VoiceProcessing
+        let mode: AVAudioSession.Mode
+        let method: AudioPipeline.CaptureMethod
+    }
+
+    // Only setups that are known not to raise an Objective-C exception: an exception inside AVAudioEngine cannot be
+    // caught from Swift and ends the app (seen with voice processing bypassed and a tap).
+    private static let micVariants = [
+        MicVariant(name: "full, tap (old call path)", voiceProcessing: .full, mode: .voiceChat, method: .tap),
+        MicVariant(name: "full, sink node (new call path)", voiceProcessing: .full, mode: .voiceChat, method: .sink),
+        MicVariant(name: "full, sink node (again)", voiceProcessing: .full, mode: .voiceChat, method: .sink),
+    ]
+    static let micTestSeconds = 4
+
+    /// Runs the call's real microphone path (AudioPipeline) for a few seconds per setting (about 18 s in all) without a call, keeps each
+    /// recording in Caches/mic_<n>.raw and logs how much of it is digital silence. Speak steadily the whole time.
+    static func micTest(log: @escaping (String) -> Void) async {
+        let session = AVAudioSession.sharedInstance()
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        for (index, variant) in micVariants.enumerated() {
+            do {
+                try session.setCategory(.playAndRecord, mode: variant.mode, options: [])
+                try session.setActive(true)
+                let pipeline = try AudioPipeline(host: "127.0.0.1", voiceProcessing: variant.voiceProcessing, captureMethod: variant.method, sentDumpName: "mic_\(index)")
+                pipeline.rawDumpName = "mic_\(index)_raw"
+                try pipeline.start()
+                try? await Task.sleep(for: .seconds(micTestSeconds))
+                let summary = pipeline.stop()
+                let taps = summary.components(separatedBy: " | ").first { $0.hasPrefix("mic taps=") } ?? "mic taps=?"
+                let raw = (try? Data(contentsOf: caches.appendingPathComponent("mic_\(index).raw"))) ?? Data()
+                let stats = FrameStats(raw: raw)
+                let rawStream = (try? Data(contentsOf: caches.appendingPathComponent("mic_\(index)_raw.raw"))) ?? Data()
+                let artifact = ZeroChops.count(in: rawStream, minRun: 1_000, maxRun: 1_200) // the 1104-frame signature of the fault
+                let pauses = ZeroChops.count(in: rawStream, minRun: 1_201) // longer: real pauses in speech
+                log("mic test \(index) [\(variant.name)]: \(stats.frames) frames, \(stats.zeroPercent)% silence, raw stream: \(artifact.runs) chops of the fault (1104-frame zeros), \(pauses.runs) longer pauses, \(taps.prefix(40))")
+            } catch {
+                log("mic test \(index) [\(variant.name)]: failed: \(error.localizedDescription)")
+            }
+            try? await Task.sleep(for: .seconds(2)) // let the audio hardware settle before the next engine
+        }
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+    }
 }
