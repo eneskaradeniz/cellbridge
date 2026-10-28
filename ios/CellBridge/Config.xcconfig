@@ -1,0 +1,6 @@
+// Build settings shared by every configuration. Put your own values in Local.xcconfig (not committed):
+//   BUNDLE_ID_PREFIX = com.yourname
+//   DEVELOPMENT_TEAM = ABCDE12345
+BUNDLE_ID_PREFIX = com.example
+DEVELOPMENT_TEAM =
+#include? "Local.xcconfig"

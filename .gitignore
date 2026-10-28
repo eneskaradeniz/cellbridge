@@ -8,3 +8,6 @@ local.properties
 .idea/
 venv/
 __pycache__/
+
+CLAUDE.md
+Local.xcconfig

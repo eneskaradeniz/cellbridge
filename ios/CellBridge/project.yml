@@ -1,6 +1,9 @@
 name: CellBridge
 options:
-  bundleIdPrefix: com.eneskaradeniz
+  bundleIdPrefix: com.example
+configFiles:
+  Debug: Config.xcconfig
+  Release: Config.xcconfig
 targets:
   CellBridge:
     type: application
@@ -19,8 +22,7 @@ targets:
           NSAllowsLocalNetworking: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.eneskaradeniz.cellbridge
-        DEVELOPMENT_TEAM: ABCDE12345
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).cellbridge
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "5.0"
   CellBridgeTests:
@@ -32,9 +34,8 @@ targets:
       - target: CellBridge
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.eneskaradeniz.cellbridge.tests
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).cellbridge.tests
         GENERATE_INFOPLIST_FILE: YES
-        DEVELOPMENT_TEAM: ABCDE12345
         SWIFT_VERSION: "5.0"
 schemes:
   CellBridge:

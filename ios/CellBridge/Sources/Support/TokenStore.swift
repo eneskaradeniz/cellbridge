@@ -5,7 +5,7 @@ import Security
 enum TokenStore {
     private static let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: "com.eneskaradeniz.cellbridge",
+        kSecAttrService as String: Bundle.main.bundleIdentifier ?? "cellbridge",
         kSecAttrAccount as String: "pairing-token",
     ]
 

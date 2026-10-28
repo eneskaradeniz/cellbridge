@@ -1,7 +1,7 @@
-# CellBridge protocol (draft v0)
+# CellBridge protocol (v1)
 
-Android (host, Mi 8 Lite) <-> iOS (client, iPhone). Same Wi-Fi hotspot, no internet needed.
-Host address: hotspot gateway (usually `192.168.43.1`); mDNS discovery is optional.
+Android (host) <-> iOS (client, iPhone). Same Wi-Fi hotspot, no internet needed.
+Host address: the hotspot gateway (its subnet is not fixed; the iOS app asks the system for the Wi-Fi gateway).
 
 ## Control channel — WebSocket (TCP), JSON text frames
 Host listens on `ws://<host>:8765`. Every message has `"type"`.

@@ -1,0 +1,11 @@
+CellBridge
+Copyright 2026 Enes Karadeniz
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party software
+--------------------
+- tinyalsa (android/daemon/third_party/tinyalsa, git submodule, v2.0.0): BSD 3-Clause License,
+  see android/daemon/third_party/tinyalsa/LICENSE.
+- The Android app depends on Ktor, kotlinx.coroutines, kotlinx.serialization, AndroidX, Jetpack Compose and Dagger/Hilt
+  (Apache License 2.0), and on slf4j-android (Apache License 2.0). They are fetched by Gradle and not redistributed here.
