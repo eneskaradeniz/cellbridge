@@ -1,3 +1,4 @@
+#include "log.h"
 #include "profile.h"
 
 #include <stdio.h>
@@ -56,13 +57,13 @@ bool profile_load(const char *path, struct profile *out)
             continue;
         char *eq = strchr(line, '=');
         if (!eq) {
-            fprintf(stderr, "%s:%d: expected key=value\n", path, lineno);
+            daemon_log("%s:%d: expected key=value\n", path, lineno);
             ok = false;
             break;
         }
         *eq = '\0';
         if (!apply(out, line, eq + 1)) {
-            fprintf(stderr, "%s:%d: bad key or value '%s'\n", path, lineno, line);
+            daemon_log("%s:%d: bad key or value '%s'\n", path, lineno, line);
             ok = false;
         }
     }
@@ -70,7 +71,7 @@ bool profile_load(const char *path, struct profile *out)
 
     if (ok && (!out->rate || !out->channels || !out->period_frames || !out->dl_period_count || !out->ul_period_count ||
                !out->dl_mixer[0] || !out->ul_mixer[0])) {
-        fprintf(stderr, "%s: missing required keys\n", path);
+        daemon_log("%s: missing required keys\n", path);
         ok = false;
     }
     return ok;

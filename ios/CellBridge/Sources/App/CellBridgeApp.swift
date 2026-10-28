@@ -44,6 +44,12 @@ struct ContentView: View {
                     Button("Disconnect", role: .destructive) { model.disconnect() }
                 }
             }
+            Section("Audio") {
+                Button(model.audioTestRunning ? "Testing… (about 10 s)" : "Audio test") { model.runAudioSelfTest() }
+                    .disabled(model.audioTestRunning)
+                Text("Plays a tone through the call's audio path in four ways and logs what the mixer renders. Turn the volume up; no call needed.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             Section("Events") {
                 Button("Copy all") { UIPasteboard.general.string = model.events.joined(separator: "\n") }
                     .disabled(model.events.isEmpty)

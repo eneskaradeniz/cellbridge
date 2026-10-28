@@ -47,6 +47,14 @@ final class AudioBridge {
             let input = session.currentRoute.inputs.map(\.portName).joined(separator: ",")
             let output = session.currentRoute.outputs.map(\.portName).joined(separator: ",")
             log("audio started, mic \(pipeline.inputDescription), permission \(Self.permission), input [\(input)], output [\(output)]")
+            // The route can change once the call settles (speaker button, Bluetooth), and the call volume is separate
+            // from the media volume: both are worth seeing a moment into the call.
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                guard let self, self.pipeline != nil else { return }
+                let s = AVAudioSession.sharedInstance()
+                self.log("audio 3 s in: output [\(s.currentRoute.outputs.map(\.portName).joined(separator: ","))], volume \(String(format: "%.2f", s.outputVolume)), speaker \(self.speaker)")
+            }
         } catch {
             log("audio start failed: \(error)")
         }

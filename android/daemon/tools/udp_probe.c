@@ -1,7 +1,8 @@
 /* Stand-in for the iPhone, run on the device against a local `cellbridge_audiod serve`.
  * Starts DL+UL over UDP, sends a 440 Hz tone with optional loss / jitter, counts what the daemon sends back.
  *
- * usage: udp_probe <token> <seconds> [loss_percent [jitter_ms]]
+ * usage: udp_probe <token | @token-file> <seconds> [loss_percent [jitter_ms]]
+ * With the daemon in echo mode (CELLBRIDGE_ECHO=1) the downlink carries the tone back: dl rms is then about 5657.
  */
 #include <arpa/inet.h>
 #include <errno.h>
@@ -58,7 +59,18 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s <token> <seconds> [loss_percent [jitter_ms]]\n", argv[0]);
         return 64;
     }
+    char token_buf[128];
     const char *token = argv[1];
+    if (token[0] == '@') { /* read from a file so the secret never appears on a command line */
+        FILE *f = fopen(token + 1, "r");
+        size_t n = f ? fread(token_buf, 1, sizeof(token_buf) - 1, f) : 0;
+        if (f)
+            fclose(f);
+        while (n && (token_buf[n - 1] == '\n' || token_buf[n - 1] == ' '))
+            n--;
+        token_buf[n] = '\0';
+        token = token_buf;
+    }
     int seconds = atoi(argv[2]), loss = argc > 3 ? atoi(argv[3]) : 0, jitter = argc > 4 ? atoi(argv[4]) : 0;
     srand(1);
 
@@ -96,6 +108,8 @@ int main(int argc, char **argv)
 
     struct pending queue[QUEUE] = { 0 };
     unsigned sent = 0, dropped = 0, dl_packets = 0, dl_gaps = 0;
+    double dl_sum_sq = 0;
+    unsigned long long dl_samples = 0;
     int have_last = 0;
     uint16_t seq = 0, last_dl = 0;
     long long t0 = now_ms(), next_frame = t0;
@@ -139,14 +153,19 @@ int main(int argc, char **argv)
             last_dl = s;
             have_last = 1;
             dl_packets++;
+            const int16_t *pcm = (const int16_t *)(in + 4);
+            for (int i = 0; i < FRAME_BYTES / 2; i++)
+                dl_sum_sq += (double)pcm[i] * pcm[i];
+            dl_samples += FRAME_BYTES / 2;
         }
         usleep(1000);
     }
 
     send_msg(tcp, 0x02, NULL, 0);
     int stop = read_reply(tcp);
-    printf("probe: ul sent=%u dropped_by_probe=%u | dl received=%u (expected ~%d) gaps=%u | stop=%s\n", sent, dropped,
-           dl_packets, seconds * 50, dl_gaps, stop == 0x80 ? "ok" : "FAILED");
+    printf("probe: ul sent=%u dropped_by_probe=%u | dl received=%u (expected ~%d) gaps=%u rms=%.0f | stop=%s\n", sent,
+           dropped, dl_packets, seconds * 50, dl_gaps, dl_samples ? sqrt(dl_sum_sq / dl_samples) : 0.0,
+           stop == 0x80 ? "ok" : "FAILED");
     close(tcp);
     return stop == 0x80 ? 0 : 1;
 }

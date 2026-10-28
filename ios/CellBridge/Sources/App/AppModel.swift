@@ -9,6 +9,7 @@ final class AppModel: ObservableObject {
     @Published var token: String { didSet { TokenStore.save(token) } }
     @Published private(set) var events: [String] = []
     @Published private(set) var recents: [CallRecord] = []
+    @Published private(set) var audioTestRunning = false
 
     let client = ControlClient()
     private(set) var messages: MessageCoordinator!
@@ -107,6 +108,18 @@ final class AppModel: ObservableObject {
         notifier.requestPermission()
         keepAlive.start()
         client.connect(host: { [weak self] in self?.effectiveHost ?? "" }, token: token.uppercased())
+    }
+
+    /// Settings → Audio test: tries the call's audio graph in a few shapes and logs what the mixer renders.
+    func runAudioSelfTest() {
+        guard !audioTestRunning else { return }
+        audioTestRunning = true
+        keepAlive.stop() // its playback-only session would get in the way
+        Task {
+            await AudioSelfTest.run(log: { [weak self] in self?.log($0) })
+            keepAlive.start()
+            audioTestRunning = false
+        }
     }
 
     func disconnect() {

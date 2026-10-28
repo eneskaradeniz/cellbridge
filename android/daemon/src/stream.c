@@ -1,3 +1,4 @@
+#include "log.h"
 #include "stream.h"
 
 #include <arpa/inet.h>
@@ -15,7 +16,7 @@
 
 #include "jitter.h"
 
-enum { MAX_PERIOD_BYTES = 2048, RECV_TIMEOUT_MS = 100 };
+enum { MAX_PERIOD_BYTES = 2048, RECV_TIMEOUT_MS = 100, ECHO_SLOTS = 16 };
 
 struct stream {
     struct audio *audio;
@@ -33,8 +34,43 @@ struct stream {
     unsigned long long dl_samples, ul_samples;
     unsigned int play_ticks, play_resyncs, play_max_write_ms;
     unsigned int dl_long_gaps, dl_back_to_back, dl_max_gap_ms; /* spacing between downlink sends */
+    unsigned int rx_long_gaps, rx_back_to_back, rx_max_gap_ms; /* spacing between arriving uplink packets */
     double play_write_ms_total;
+    /* Test mode (CELLBRIDGE_ECHO): the downlink is the uplink played back, so the whole audio chain can be tried
+     * without a call. The PCMs stay unused. */
+    bool echo;
+    pthread_mutex_t echo_lock;
+    unsigned char echo_frames[ECHO_SLOTS][MAX_PERIOD_BYTES];
+    unsigned int echo_head, echo_count;
 };
+
+static void echo_push(struct stream *s, const unsigned char *frame)
+{
+    pthread_mutex_lock(&s->echo_lock);
+    if (s->echo_count == ECHO_SLOTS) { /* a stalled sender: drop the oldest, keep the delay bounded */
+        s->echo_head = (s->echo_head + 1) % ECHO_SLOTS;
+        s->echo_count--;
+    }
+    memcpy(s->echo_frames[(s->echo_head + s->echo_count) % ECHO_SLOTS], frame, s->period_bytes);
+    s->echo_count++;
+    pthread_mutex_unlock(&s->echo_lock);
+}
+
+/* Silence when nothing is queued, so the stream stays continuous. */
+static void echo_pop(struct stream *s, unsigned char *out)
+{
+    pthread_mutex_lock(&s->echo_lock);
+    if (s->echo_count) {
+        memcpy(out, s->echo_frames[s->echo_head], s->period_bytes);
+        s->echo_head = (s->echo_head + 1) % ECHO_SLOTS;
+        s->echo_count--;
+    } else {
+        memset(out, 0, s->period_bytes);
+    }
+    pthread_mutex_unlock(&s->echo_lock);
+}
+
+static void add_ns(struct timespec *t, unsigned int ns);
 
 static double sum_squares(const short *s, unsigned int n)
 {
@@ -64,9 +100,16 @@ static void *dl_loop(void *arg)
     unsigned char packet[STREAM_HEADER_BYTES + MAX_PERIOD_BYTES];
     uint16_t seq = 0;
     double last_send = 0;
+    struct timespec next;
+    clock_gettime(CLOCK_MONOTONIC, &next);
     while (!atomic_load(&s->stop)) {
-        if (audio_read_dl(s->audio, packet + STREAM_HEADER_BYTES) != 0)
+        if (s->echo) {
+            add_ns(&next, s->period_ns);
+            clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+            echo_pop(s, packet + STREAM_HEADER_BYTES);
+        } else if (audio_read_dl(s->audio, packet + STREAM_HEADER_BYTES) != 0) {
             continue;
+        }
         s->dl_sum_sq += sum_squares((const short *)(packet + STREAM_HEADER_BYTES), s->period_bytes / 2);
         s->dl_samples += s->period_bytes / 2;
         double sent_at = now_ms();
@@ -93,6 +136,7 @@ static void *rx_loop(void *arg)
 {
     struct stream *s = arg;
     unsigned char packet[STREAM_HEADER_BYTES + MAX_PERIOD_BYTES + 1];
+    double last_rx = 0;
     while (!atomic_load(&s->stop)) {
         struct sockaddr_in from;
         socklen_t from_len = sizeof(from);
@@ -104,6 +148,17 @@ static void *rx_loop(void *arg)
             continue;
         if ((size_t)n != STREAM_HEADER_BYTES + s->period_bytes)
             continue;
+        double arrived = now_ms();
+        if (last_rx > 0) {
+            double gap = arrived - last_rx;
+            if (gap > 60)
+                s->rx_long_gaps++;
+            if (gap < 5)
+                s->rx_back_to_back++;
+            if (gap > s->rx_max_gap_ms)
+                s->rx_max_gap_ms = (unsigned int)gap;
+        }
+        last_rx = arrived;
         jitter_push(s->jitter, (uint16_t)(packet[0] | (packet[1] << 8)), packet + STREAM_HEADER_BYTES);
     }
     return NULL;
@@ -135,7 +190,10 @@ static void *play_loop(void *arg)
             s->ul_samples += s->period_bytes / 2;
         }
         double write_start = now_ms();
-        audio_write_ul(s->audio, frame);
+        if (s->echo)
+            echo_push(s, frame);
+        else
+            audio_write_ul(s->audio, frame);
         double write_ms = now_ms() - write_start;
         s->play_ticks++;
         s->play_write_ms_total += write_ms;
@@ -158,7 +216,7 @@ struct stream *stream_start(struct audio *a, const struct profile *p, bool dl, b
 {
     unsigned int bytes = audio_period_bytes(a);
     if (bytes > MAX_PERIOD_BYTES) {
-        fprintf(stderr, "stream: period too large\n");
+        daemon_log("stream: period too large\n");
         return NULL;
     }
     struct stream *s = calloc(1, sizeof(*s));
@@ -169,13 +227,17 @@ struct stream *stream_start(struct audio *a, const struct profile *p, bool dl, b
     s->period_bytes = bytes;
     s->period_ns = (unsigned int)(1000000000ULL * p->period_frames / p->rate);
     atomic_init(&s->stop, false);
+    pthread_mutex_init(&s->echo_lock, NULL);
+    s->echo = getenv("CELLBRIDGE_ECHO") != NULL;
+    if (s->echo)
+        daemon_log("stream: ECHO TEST MODE, the downlink is the uplink played back, no call audio\n");
 
     s->fd = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in local = { .sin_family = AF_INET, .sin_port = htons(local_port) };
     struct timeval timeout = { .tv_usec = RECV_TIMEOUT_MS * 1000 };
     if (s->fd < 0 || setsockopt(s->fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0 ||
         bind(s->fd, (struct sockaddr *)&local, sizeof(local)) != 0) {
-        fprintf(stderr, "stream: udp port %u: %s\n", local_port, strerror(errno));
+        daemon_log("stream: udp port %u: %s\n", local_port, strerror(errno));
         goto fail;
     }
     int tos = 0xb8; /* DSCP EF: lets the hotspot send these frames in its voice queue */
@@ -215,17 +277,17 @@ void stream_stop(struct stream *s)
     if (s->jitter) {
         struct jitter_stats j;
         jitter_get_stats(s->jitter, &j);
-        fprintf(stderr, "stream: dl_sent=%u ul played=%u concealed=%u late=%u duplicate=%u overflow=%u target=%u\n",
+        daemon_log("stream: dl_sent=%u ul played=%u concealed=%u late=%u duplicate=%u overflow=%u target=%u\n",
                 s->dl_sent, j.played, j.concealed, j.late, j.duplicate, j.overflow, j.target);
-        fprintf(stderr,
+        daemon_log(
                 "stream: dl_rms=%.0f ul_rms=%.0f | playout ticks=%u resyncs=%u avg_write_ms=%.1f max_write_ms=%u\n",
                 s->dl_samples ? sqrt(s->dl_sum_sq / s->dl_samples) : 0.0,
                 s->ul_samples ? sqrt(s->ul_sum_sq / s->ul_samples) : 0.0, s->play_ticks, s->play_resyncs,
                 s->play_ticks ? s->play_write_ms_total / s->play_ticks : 0.0, s->play_max_write_ms);
-        fprintf(stderr, "stream: dl send gaps: max=%u ms, over 60 ms=%u, under 5 ms=%u\n", s->dl_max_gap_ms,
-                s->dl_long_gaps, s->dl_back_to_back);
+        daemon_log("stream: dl send gaps: max=%u ms, over 60 ms=%u, under 5 ms=%u | ul arrival gaps: max=%u ms, over 60 ms=%u, under 5 ms=%u\n",
+                s->dl_max_gap_ms, s->dl_long_gaps, s->dl_back_to_back, s->rx_max_gap_ms, s->rx_long_gaps, s->rx_back_to_back);
     } else {
-        fprintf(stderr, "stream: dl_sent=%u\n", s->dl_sent);
+        daemon_log("stream: dl_sent=%u\n", s->dl_sent);
     }
     jitter_destroy(s->jitter);
     if (s->fd >= 0)

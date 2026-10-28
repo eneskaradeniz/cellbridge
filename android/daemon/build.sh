@@ -10,6 +10,6 @@ TS=third_party/tinyalsa
 mkdir -p build
 "$CC" -O2 -Wall -Wextra -o build/cellbridge_audiod \
   -I"$TS/include" -I"$TS/src" -Isrc \
-  src/*.c "$TS"/src/*.c -ldl
+  src/*.c "$TS"/src/*.c -ldl -llog
 "$CC" -O2 -Wall -Wextra -o build/udp_probe tools/udp_probe.c -lm
 echo "built build/cellbridge_audiod build/udp_probe"

@@ -1,3 +1,4 @@
+#include "log.h"
 #include "server.h"
 
 #include <arpa/inet.h>
@@ -268,7 +269,7 @@ int server_run(const struct profile *p, const char *token, unsigned short port, 
         close(listener);
         return 1;
     }
-    fprintf(stderr, "listening on 127.0.0.1:%u\n", port);
+    daemon_log("listening on 127.0.0.1:%u\n", port);
 
     while (!stop_requested) {
         int fd = accept(listener, NULL, NULL);

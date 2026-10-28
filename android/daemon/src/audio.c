@@ -1,3 +1,4 @@
+#include "log.h"
 #include "audio.h"
 
 #include <stdio.h>
@@ -18,11 +19,11 @@ static struct mixer_ctl *route_on(struct mixer *m, const char *name)
 {
     struct mixer_ctl *ctl = mixer_get_ctl_by_name(m, name);
     if (!ctl) {
-        fprintf(stderr, "mixer control not found: %s\n", name);
+        daemon_log("mixer control not found: %s\n", name);
         return NULL;
     }
     if (mixer_ctl_set_value(ctl, 0, 1) != 0) {
-        fprintf(stderr, "cannot enable mixer control: %s\n", name);
+        daemon_log("cannot enable mixer control: %s\n", name);
         return NULL;
     }
     return ctl;
@@ -40,7 +41,7 @@ static struct pcm *open_pcm(const struct profile *p, unsigned int device, unsign
     };
     struct pcm *pcm = pcm_open(p->card, device, flags, &cfg);
     if (!pcm || !pcm_is_ready(pcm)) {
-        fprintf(stderr, "pcm %u/%u open failed: %s\n", p->card, device, pcm ? pcm_get_error(pcm) : "alloc");
+        daemon_log("pcm %u/%u open failed: %s\n", p->card, device, pcm ? pcm_get_error(pcm) : "alloc");
         if (pcm)
             pcm_close(pcm);
         return NULL;
@@ -57,7 +58,7 @@ struct audio *audio_open(const struct profile *p, bool capture_dl, bool inject_u
 
     a->mixer = mixer_open(p->card);
     if (!a->mixer) {
-        fprintf(stderr, "mixer_open(%u) failed\n", p->card);
+        daemon_log("mixer_open(%u) failed\n", p->card);
         goto fail;
     }
     if (capture_dl) {
@@ -108,7 +109,7 @@ int audio_read_dl(struct audio *a, void *buf)
         return 0;
     static bool reported;
     if (!reported) {
-        fprintf(stderr, "dl read failed: %s\n", pcm_get_error(a->dl));
+        daemon_log("dl read failed: %s\n", pcm_get_error(a->dl));
         reported = true;
     }
     /* Overrun: re-arm the stream so the next call can succeed. */

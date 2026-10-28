@@ -32,6 +32,11 @@ final class AudioPipeline: @unchecked Sendable {
     private var txSumSq = 0.0, txSamples = 0 // capture thread only
     private var rxSumSq = 0.0, rxSamples = 0, scheduledFrames = 0 // playout queue only
     private var lastArrival: UInt64 = 0, longGaps = 0, backToBack = 0, maxGapMs = 0 // receive thread only
+    // Playback evidence: frames the player reports as really played, and the level the mixer actually renders.
+    private let meterLock = NSLock()
+    private var playedBack = 0
+    private var mixSumSq = 0.0, mixSamples = 0
+    private var lastSend: UInt64 = 0, maxSendGapMs = 0, longSendGaps = 0 // send timer only
     private var tapCalls = 0
     private var conversionFailures = 0
     private var lastFailure = ""
@@ -62,11 +67,23 @@ final class AudioPipeline: @unchecked Sendable {
         input.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [self] buffer, _ in
             capture(buffer)
         }
+        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [self] buffer, _ in
+            guard let samples = buffer.floatChannelData?[0] else { return }
+            var sum = 0.0
+            for i in 0..<Int(buffer.frameLength) { sum += Double(samples[i]) * Double(samples[i]) }
+            meterLock.lock()
+            mixSumSq += sum
+            mixSamples += Int(buffer.frameLength)
+            meterLock.unlock()
+        }
         // A route or format change stops the engine; without a restart both directions would go silent.
         observer = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [self] _ in
             configChanges += 1
             if !engine.isRunning { try? engine.start() }
-            if !player.isPlaying { player.play() }
+            // After the restart the player's isPlaying cannot be trusted: it stays true while the node renders only
+            // silence (measured: mixer level 0.0000 with voice processing on). stop() + play() is what revives it.
+            player.stop()
+            player.play()
         }
         engine.prepare()
         try engine.start()
@@ -99,6 +116,7 @@ final class AudioPipeline: @unchecked Sendable {
         observer = nil
         let engineWasRunning = engine.isRunning
         engine.inputNode.removeTap(onBus: 0)
+        engine.mainMixerNode.removeTap(onBus: 0)
         player.stop()
         engine.stop()
         socket.close()
@@ -107,8 +125,16 @@ final class AudioPipeline: @unchecked Sendable {
             + " | mic taps=\(tapCalls) conversion failures=\(conversionFailures) \(lastFailure) engine running=\(engineWasRunning) config changes=\(configChanges)"
             + " dropped at send=\(droppedFrames)"
             + " | arrival gaps: max=\(maxGapMs) ms, over 60 ms=\(longGaps), under 5 ms=\(backToBack)"
+            + " | send gaps: max=\(maxSendGapMs) ms, over 40 ms=\(longSendGaps)"
+            + String(format: " | played back=%d mixer rms=%.4f", meterSnapshot().playedBack, meterSnapshot().rms)
             + String(format: " | tx rms=%.0f rx rms=%.0f scheduled=%d", txSamples > 0 ? (txSumSq / Double(txSamples)).squareRoot() : 0,
                      rxSamples > 0 ? (rxSumSq / Double(rxSamples)).squareRoot() : 0, scheduledFrames)
+    }
+
+    private func meterSnapshot() -> (playedBack: Int, rms: Double) {
+        meterLock.lock()
+        defer { meterLock.unlock() }
+        return (playedBack, mixSamples > 0 ? (mixSumSq / Double(mixSamples)).squareRoot() : 0)
     }
 
     // MARK: capture
@@ -165,6 +191,13 @@ final class AudioPipeline: @unchecked Sendable {
         let frame = outbox.isEmpty ? nil : outbox.removeFirst()
         outboxLock.unlock()
         guard let frame else { return }
+        let now = DispatchTime.now().uptimeNanoseconds
+        if lastSend != 0 {
+            let gapMs = Int((now - lastSend) / 1_000_000)
+            maxSendGapMs = max(maxSendGapMs, gapMs)
+            if gapMs > 40 { longSendGaps += 1 }
+        }
+        lastSend = now
         socket.send(AudioPacket.encode(seq: sequence, pcm: frame))
         sequence &+= 1
         framesSent += 1
@@ -214,6 +247,10 @@ final class AudioPipeline: @unchecked Sendable {
         buffer.frameLength = AVAudioFrameCount(frame.count)
         let out = buffer.floatChannelData![0]
         for i in 0..<frame.count { out[i] = Float(frame[i]) / 32768 }
-        player.scheduleBuffer(buffer, completionHandler: nil)
+        player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [self] _ in
+            meterLock.lock()
+            playedBack += 1
+            meterLock.unlock()
+        }
     }
 }
