@@ -17,14 +17,19 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
 
     /// Loudspeaker on/off for the current call.
     @Published var speaker = false { didSet { audio.speaker = speaker } }
+
+    /// Microphone muted for the current call (set through the system so CallKit's own UI stays in step).
+    @Published private(set) var muted = false
     private let audio: AudioBridge
     private let host: () -> String
     private let hostOffersAudio: () -> Bool
     private let send: (ClientMessage) -> Void
     private let log: (String) -> Void
+    private let onFinished: (CallRecord) -> Void
 
     init(audio: AudioBridge, host: @escaping () -> String, hostOffersAudio: @escaping () -> Bool,
-         send: @escaping (ClientMessage) -> Void, log: @escaping (String) -> Void) {
+         send: @escaping (ClientMessage) -> Void, onFinished: @escaping (CallRecord) -> Void, log: @escaping (String) -> Void) {
+        self.onFinished = onFinished
         self.audio = audio
         self.host = host
         self.hostOffersAudio = hostOffersAudio
@@ -50,6 +55,20 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         }
     }
 
+    func setMuted(_ muted: Bool) {
+        guard let uuid = book.active.first(where: \.isAnswered)?.id else { return }
+        controller.request(CXTransaction(action: CXSetMutedCallAction(call: uuid, muted: muted))) { [weak self] error in
+            if let error { Task { @MainActor in self?.log("mute failed: \(error.localizedDescription)") } }
+        }
+    }
+
+    /// Answers a ringing call from our own screen.
+    func answer(_ uuid: UUID) {
+        controller.request(CXTransaction(action: CXAnswerCallAction(call: uuid))) { [weak self] error in
+            if let error { Task { @MainActor in self?.log("answer failed: \(error.localizedDescription)") } }
+        }
+    }
+
     /// Ends a call from our own screen through the system, so CallKit and the host stay in step.
     func end(_ uuid: UUID) {
         controller.request(CXTransaction(action: CXEndCallAction(call: uuid))) { [weak self] error in
@@ -63,9 +82,10 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
             ring(callId: callId, number: number, name: name)
         case .ended(let callId, let reason):
             // reportCall(endedAt:) does not call back into CXEndCallAction, so nothing is sent to the host.
-            guard let uuid = book.end(callId: callId) else { return }
+            guard let uuid = book.uuid(forCallId: callId) else { return }
+            finish(uuid, by: .host(reason))
             audio.sessionEnded()
-            speaker = false
+            resetCallSettings()
             provider.reportCall(with: uuid, endedAt: Date(), reason: CallBook.callKitReason(for: reason))
         case .dialResult(let clientId, let ok, let callId, let error):
             dialResult(clientId: clientId, ok: ok, callId: callId, error: error)
@@ -92,11 +112,28 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
             }
             return
         }
-        book.end(uuid: uuid)
+        if !book.isEndRequested(uuid) { finish(uuid, by: .dialRefused) } else { book.end(uuid: uuid) } // already logged when the user hung up
         audio.sessionEnded()
-        speaker = false
+        resetCallSettings()
         dialError = Self.message(forDialError: error)
         provider.reportCall(with: uuid, endedAt: Date(), reason: .failed)
+    }
+
+    /// Writes the call to the history (once) and forgets it.
+    private func finish(_ uuid: UUID, by ender: CallRecord.Ender) {
+        logFinished(uuid, by: ender)
+        book.end(uuid: uuid)
+    }
+
+    private func logFinished(_ uuid: UUID, by ender: CallRecord.Ender) {
+        guard let detail = book.detail(for: uuid) else { return }
+        onFinished(CallRecord.make(detail, endedBy: ender))
+    }
+
+    private func resetCallSettings() {
+        speaker = false
+        muted = false
+        audio.muted = false
     }
 
     nonisolated static func message(forDialError code: String?) -> String {
@@ -110,7 +147,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
 
     private func ring(callId: String, number: String?, name: String?) {
         let title = name ?? number ?? "Unknown caller"
-        guard let uuid = book.ring(callId: callId, title: title) else { return }
+        guard let uuid = book.ring(callId: callId, title: title, number: number ?? "") else { return }
         let update = CXCallUpdate()
         update.remoteHandle = number.map { CXHandle(type: .phoneNumber, value: $0) } ?? CXHandle(type: .generic, value: "unknown")
         update.localizedCallerName = title
@@ -160,9 +197,11 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
                 // Only an incoming call that is still ringing is declined; anything we placed or answered is hung up.
                 let hangUp = self.book.isOutgoing(uuid) || self.book.isAnswered(uuid)
                 self.send(hangUp ? .hangup(callId: callId) : .reject(callId: callId))
-                self.book.end(uuid: uuid)
+                self.finish(uuid, by: .local)
                 self.audio.sessionEnded()
+                self.resetCallSettings()
             } else if self.book.isOutgoing(uuid) {
+                self.logFinished(uuid, by: .local)
                 self.book.requestEnd(uuid) // the host has not told us the call id yet; dial_result completes the hang-up
             }
             action.fulfill()
@@ -172,6 +211,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     nonisolated func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
         Task { @MainActor in
             self.audio.muted = action.isMuted
+            self.muted = action.isMuted
             action.fulfill()
         }
     }

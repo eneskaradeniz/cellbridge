@@ -6,14 +6,25 @@ struct ActiveCall: Identifiable, Equatable {
     let id: UUID
     let title: String
     let answeredAt: Date?
+    var isOutgoing = false
     var isAnswered: Bool { answeredAt != nil }
 }
 
 /// Which CallKit call belongs to which host call, and what we have done with it. Pure state, no CallKit objects.
 /// An outgoing call exists here from the moment the user taps Call, before the host has told us its call id.
 struct CallBook {
+    /// What the call log needs to know about a call when it ends.
+    struct Detail: Equatable {
+        let number: String
+        let title: String
+        let outgoing: Bool
+        let since: Date
+        let answeredAt: Date?
+    }
+
     private struct Entry {
         var callId: String?
+        let number: String
         let title: String
         let since: Date
         let outgoing: Bool
@@ -27,20 +38,24 @@ struct CallBook {
     /// Calls that are ringing or in progress, oldest first.
     var active: [ActiveCall] {
         entries.sorted { $0.value.since < $1.value.since }
-            .map { ActiveCall(id: $0.key, title: $0.value.title, answeredAt: $0.value.answeredAt) }
+            .map { ActiveCall(id: $0.key, title: $0.value.title, answeredAt: $0.value.answeredAt, isOutgoing: $0.value.outgoing) }
     }
 
     /// Registers a ringing call; nil if the host already told us about it (it re-sends rings after a reconnect).
-    mutating func ring(callId: String, title: String = "", now: Date = Date()) -> UUID? {
+    mutating func ring(callId: String, title: String = "", now: Date = Date(), number: String = "") -> UUID? {
         guard !entries.values.contains(where: { $0.callId == callId }) else { return nil }
         let uuid = UUID()
-        entries[uuid] = Entry(callId: callId, title: title, since: now, outgoing: false)
+        entries[uuid] = Entry(callId: callId, number: number, title: title, since: now, outgoing: false)
         return uuid
     }
 
     /// The user tapped Call; the host's call id arrives later with `dial_result`.
-    mutating func startOutgoing(_ uuid: UUID, title: String, now: Date = Date()) {
-        entries[uuid] = Entry(callId: nil, title: title, since: now, outgoing: true)
+    mutating func startOutgoing(_ uuid: UUID, title: String, now: Date = Date(), number: String? = nil) {
+        entries[uuid] = Entry(callId: nil, number: number ?? title, title: title, since: now, outgoing: true)
+    }
+
+    func detail(for uuid: UUID) -> Detail? {
+        entries[uuid].map { Detail(number: $0.number, title: $0.title, outgoing: $0.outgoing, since: $0.since, answeredAt: $0.answeredAt) }
     }
 
     /// `dial_result` succeeded. True if the user already hung up and the host must be told now.
@@ -54,6 +69,8 @@ struct CallBook {
     mutating func requestEnd(_ uuid: UUID) { entries[uuid]?.endRequested = true }
 
     func callId(for uuid: UUID) -> String? { entries[uuid]?.callId }
+
+    func isEndRequested(_ uuid: UUID) -> Bool { entries[uuid]?.endRequested ?? false }
 
     func isOutgoing(_ uuid: UUID) -> Bool { entries[uuid]?.outgoing ?? false }
 

@@ -92,6 +92,19 @@ final class CallBookTests: XCTestCase {
         XCTAssertNil(book.uuid(forCallId: "late"))
     }
 
+    func testDetailCarriesWhatTheCallLogNeeds() throws {
+        var book = CallBook()
+        let incoming = try XCTUnwrap(book.ring(callId: "c1", title: "Ali", now: Date(timeIntervalSince1970: 10), number: "+905551112233"))
+        XCTAssertEqual(book.detail(for: incoming), CallBook.Detail(number: "+905551112233", title: "Ali", outgoing: false,
+                                                                     since: Date(timeIntervalSince1970: 10), answeredAt: nil))
+        let outgoing = UUID()
+        book.startOutgoing(outgoing, title: "+905559998877", now: Date(timeIntervalSince1970: 20))
+        XCTAssertEqual(book.detail(for: outgoing)?.number, "+905559998877") // the title is the number until names exist
+        XCTAssertEqual(book.detail(for: outgoing)?.outgoing, true)
+        book.end(uuid: outgoing)
+        XCTAssertNil(book.detail(for: outgoing))
+    }
+
     func testIncomingCallsAreNotOutgoingAndRingsStillDedupe() throws {
         var book = CallBook()
         let uuid = try XCTUnwrap(book.ring(callId: "c1"))

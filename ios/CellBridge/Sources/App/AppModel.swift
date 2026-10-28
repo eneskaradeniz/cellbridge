@@ -8,12 +8,14 @@ final class AppModel: ObservableObject {
     @Published var host: String { didSet { UserDefaults.standard.set(host, forKey: "host") } }
     @Published var token: String { didSet { TokenStore.save(token) } }
     @Published private(set) var events: [String] = []
+    @Published private(set) var recents: [CallRecord] = []
 
     let client = ControlClient()
     private(set) var messages: MessageCoordinator!
     private let notifier = Notifier()
     let gateway = GatewayDiscovery()
     private var calls: CallCoordinator!
+    private let callLog: CallLog
     private var keepAlive: KeepAlive!
     private var bag = Set<AnyCancellable>()
     private let stamp: DateFormatter = {
@@ -25,6 +27,9 @@ final class AppModel: ObservableObject {
     init() {
         host = UserDefaults.standard.string(forKey: "host") ?? ""
         token = TokenStore.load()
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        callLog = CallLog(url: support.appendingPathComponent("CellBridge/calls.json"))
+        recents = callLog.entries
         keepAlive = KeepAlive(log: { [weak self] in self?.log($0) })
         let audio = AudioBridge(keepAlive: keepAlive, log: { [weak self] in self?.log($0) })
         calls = CallCoordinator(
@@ -35,9 +40,9 @@ final class AppModel: ObservableObject {
                 return false
             },
             send: { [weak self] in self?.client.send($0) },
+            onFinished: { [weak self] in self?.record($0) },
             log: { [weak self] in self?.log($0) }
         )
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         messages = MessageCoordinator(
             store: MessageStore(url: support.appendingPathComponent("CellBridge/messages.json")),
             transmit: { [weak self] in self?.client.send($0) },
@@ -87,6 +92,30 @@ final class AppModel: ObservableObject {
     func endCall(_ id: UUID) { calls.end(id) }
 
     var speakerOn: Bool { calls.speaker }
+
+    var muted: Bool { calls.muted }
+
+    func toggleMute() { calls.setMuted(!calls.muted) }
+
+    func answerCall(_ id: UUID) { calls.answer(id) }
+
+    private func record(_ record: CallRecord) {
+        do {
+            try callLog.record(record)
+            recents = callLog.entries
+        } catch {
+            log("could not save the call to the history: \(error.localizedDescription)")
+        }
+    }
+
+    func clearRecents() {
+        do {
+            try callLog.clear()
+            recents = []
+        } catch {
+            log("could not clear the history: \(error.localizedDescription)")
+        }
+    }
 
     var dialError: String? { calls.dialError }
 
