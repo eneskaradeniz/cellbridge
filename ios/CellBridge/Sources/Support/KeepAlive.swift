@@ -6,6 +6,13 @@ import AVFoundation
 final class KeepAlive {
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
+    private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+    private lazy var silence: AVAudioPCMBuffer = {
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100)!
+        buffer.frameLength = 44_100
+        for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = i % 2 == 0 ? 0.00003 : -0.00003 }
+        return buffer
+    }()
     private let log: (String) -> Void
 
     init(log: @escaping (String) -> Void) {
@@ -18,21 +25,23 @@ final class KeepAlive {
         }
     }
 
+    func stop() {
+        player.stop()
+        engine.stop()
+    }
+
     func start() {
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, options: [.mixWithOthers])
             try session.setActive(true)
             if !engine.attachedNodes.contains(player) {
-                let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
                 engine.attach(player)
                 engine.connect(player, to: engine.mainMixerNode, format: format)
-                let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100)!
-                buffer.frameLength = 44_100
-                for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = i % 2 == 0 ? 0.00003 : -0.00003 }
-                player.scheduleBuffer(buffer, at: nil, options: .loops)
             }
             if !engine.isRunning { try engine.start() }
+            player.stop() // a restart must not queue a second loop
+            player.scheduleBuffer(silence, at: nil, options: .loops)
             player.play()
         } catch {
             log("keep-alive audio failed: \(error.localizedDescription)")

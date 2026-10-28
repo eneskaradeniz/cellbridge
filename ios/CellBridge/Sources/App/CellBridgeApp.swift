@@ -51,7 +51,11 @@ struct ContentView: View {
                 }
             }
             Section("Events") {
-                ForEach(model.events, id: \.self) { Text($0).font(.system(size: 12, design: .monospaced)) }
+                Button("Copy all") { UIPasteboard.general.string = model.events.joined(separator: "\n") }
+                    .disabled(model.events.isEmpty)
+                Text(model.events.joined(separator: "\n"))
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
             }
         }
     }

@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import Foundation
 
@@ -22,8 +23,18 @@ final class AppModel: ObservableObject {
     init() {
         host = UserDefaults.standard.string(forKey: "host") ?? ""
         token = TokenStore.load()
-        calls = CallCoordinator(send: { [weak self] in self?.client.send($0) }, log: { [weak self] in self?.log($0) })
         keepAlive = KeepAlive(log: { [weak self] in self?.log($0) })
+        let audio = AudioBridge(keepAlive: keepAlive, log: { [weak self] in self?.log($0) })
+        calls = CallCoordinator(
+            audio: audio,
+            host: { [weak self] in self?.effectiveHost ?? "" },
+            hostOffersAudio: { [weak self] in
+                if case .connected(let capabilities) = self?.client.state { return capabilities.contains("audio") }
+                return false
+            },
+            send: { [weak self] in self?.client.send($0) },
+            log: { [weak self] in self?.log($0) }
+        )
         client.onLog = { [weak self] in self?.log($0) }
         client.onMessage = { [weak self] message in
             self?.log(Self.describe(message))
@@ -41,6 +52,7 @@ final class AppModel: ObservableObject {
     var canConnect: Bool { !effectiveHost.isEmpty && !token.isEmpty }
 
     func connect() {
+        Task { _ = await AVAudioApplication.requestRecordPermission() } // ask now, not in the middle of a call
         keepAlive.start()
         client.connect(host: effectiveHost, token: token.uppercased())
     }

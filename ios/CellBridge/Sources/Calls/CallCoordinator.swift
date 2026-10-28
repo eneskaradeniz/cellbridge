@@ -11,10 +11,17 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
 
     /// Calls to show on screen; the system call UI is only taken over on the lock screen.
     @Published private(set) var active: [ActiveCall] = []
+    private let audio: AudioBridge
+    private let host: () -> String
+    private let hostOffersAudio: () -> Bool
     private let send: (ClientMessage) -> Void
     private let log: (String) -> Void
 
-    init(send: @escaping (ClientMessage) -> Void, log: @escaping (String) -> Void) {
+    init(audio: AudioBridge, host: @escaping () -> String, hostOffersAudio: @escaping () -> Bool,
+         send: @escaping (ClientMessage) -> Void, log: @escaping (String) -> Void) {
+        self.audio = audio
+        self.host = host
+        self.hostOffersAudio = hostOffersAudio
         self.send = send
         self.log = log
         let configuration = CXProviderConfiguration()
@@ -41,6 +48,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         case .ended(let callId, let reason):
             // reportCall(endedAt:) does not call back into CXEndCallAction, so nothing is sent to the host.
             guard let uuid = book.end(callId: callId) else { return }
+            audio.sessionEnded()
             provider.reportCall(with: uuid, endedAt: Date(), reason: CallBook.callKitReason(for: reason))
         default:
             break
@@ -72,7 +80,9 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         Task { @MainActor in
             if let callId = self.book.callId(for: action.callUUID) {
                 self.book.markAnswered(action.callUUID)
-                self.send(.answer(callId: callId, udpPort: nil)) // audio arrives in M3b
+                // The UDP port goes into the answer so the host can stream to us the moment the call is active.
+                let port = self.hostOffersAudio() ? self.audio.prepare(host: self.host()) : nil
+                self.send(.answer(callId: callId, udpPort: port.map(Int.init)))
             }
             action.fulfill()
         }
@@ -83,8 +93,24 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
             if let callId = self.book.callId(for: action.callUUID) {
                 self.send(self.book.isAnswered(action.callUUID) ? .hangup(callId: callId) : .reject(callId: callId))
                 self.book.end(uuid: action.callUUID)
+                self.audio.sessionEnded()
             }
             action.fulfill()
         }
+    }
+
+    nonisolated func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
+        Task { @MainActor in
+            self.audio.muted = action.isMuted
+            action.fulfill()
+        }
+    }
+
+    nonisolated func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
+        Task { @MainActor in self.audio.start() }
+    }
+
+    nonisolated func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
+        Task { @MainActor in self.audio.sessionEnded() }
     }
 }
