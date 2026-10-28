@@ -11,6 +11,9 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
 
     /// Calls to show on screen; the system call UI is only taken over on the lock screen.
     @Published private(set) var active: [ActiveCall] = []
+
+    /// Loudspeaker on/off for the current call.
+    @Published var speaker = false { didSet { audio.speaker = speaker } }
     private let audio: AudioBridge
     private let host: () -> String
     private let hostOffersAudio: () -> Bool
@@ -49,6 +52,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
             // reportCall(endedAt:) does not call back into CXEndCallAction, so nothing is sent to the host.
             guard let uuid = book.end(callId: callId) else { return }
             audio.sessionEnded()
+            speaker = false
             provider.reportCall(with: uuid, endedAt: Date(), reason: CallBook.callKitReason(for: reason))
         default:
             break

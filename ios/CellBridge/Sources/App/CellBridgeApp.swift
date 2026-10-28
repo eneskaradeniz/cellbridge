@@ -33,6 +33,12 @@ struct ContentView: View {
                                 }
                             }
                             Spacer()
+                            if call.isAnswered {
+                                Button { model.toggleSpeaker() } label: {
+                                    Image(systemName: model.speakerOn ? "speaker.wave.3.fill" : "speaker.fill")
+                                }
+                                .buttonStyle(.bordered)
+                            }
                             Button(call.isAnswered ? "End" : "Decline", role: .destructive) { model.endCall(call.id) }
                                 .buttonStyle(.borderedProminent)
                         }

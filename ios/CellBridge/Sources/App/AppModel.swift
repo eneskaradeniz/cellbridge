@@ -86,6 +86,10 @@ final class AppModel: ObservableObject {
 
     func endCall(_ id: UUID) { calls.end(id) }
 
+    var speakerOn: Bool { calls.speaker }
+
+    func toggleSpeaker() { calls.speaker.toggle() }
+
     private func log(_ text: String) {
         events = Array(([stamp.string(from: Date()) + " " + text] + events).prefix(40))
     }

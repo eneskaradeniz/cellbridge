@@ -11,6 +11,9 @@ final class AudioBridge {
 
     var muted = false { didSet { pipeline?.muted = muted } }
 
+    /// Voice-chat audio comes out of the earpiece by default; this switches to the loudspeaker.
+    var speaker = false { didSet { applyOutputRoute() } }
+
     init(keepAlive: KeepAlive, log: @escaping (String) -> Void) {
         self.keepAlive = keepAlive
         self.log = log
@@ -39,9 +42,11 @@ final class AudioBridge {
         guard let pipeline else { return }
         do {
             try pipeline.start()
+            applyOutputRoute()
             let session = AVAudioSession.sharedInstance()
-            let route = session.currentRoute.inputs.map(\.portName).joined(separator: ",")
-            log("audio started, mic \(pipeline.inputDescription), permission \(Self.permission), input available \(session.isInputAvailable), route [\(route)]")
+            let input = session.currentRoute.inputs.map(\.portName).joined(separator: ",")
+            let output = session.currentRoute.outputs.map(\.portName).joined(separator: ",")
+            log("audio started, mic \(pipeline.inputDescription), permission \(Self.permission), input [\(input)], output [\(output)]")
         } catch {
             log("audio start failed: \(error)")
         }
@@ -49,8 +54,16 @@ final class AudioBridge {
 
     /// The call (or its audio session) is over.
     func sessionEnded() {
+        speaker = false // the next call starts on the earpiece again
         endPipeline()
         keepAlive.start()
+    }
+
+    private func applyOutputRoute() {
+        guard pipeline != nil else { return }
+        do { try AVAudioSession.sharedInstance().overrideOutputAudioPort(speaker ? .speaker : .none) } catch {
+            log("could not switch the output: \(error.localizedDescription)")
+        }
     }
 
     private func endPipeline() {

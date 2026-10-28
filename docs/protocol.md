@@ -55,8 +55,9 @@ The audio daemon on the host talks UDP directly to the client; the Android app o
 Host port: **8767** (fixed, `cellbridge_audiod serve ... [udp_port]`). The client announces its own UDP port in `answer`
 (`{"type":"answer","callId":...,"udpPort":N}`) and sends from that port; the host sends downlink frames to it and drops uplink
 packets from any other address. Downlink and uplink run for as long as the call is active.
-Both ends run a small adaptive jitter buffer (target 40-80 ms, starts at 60 ms, grows by 20 ms after a starvation, shrinks after
-5 s without one). A missing frame is replaced by silence; packets that arrive too late are dropped. Opus may replace PCM later.
+Both ends run a small adaptive jitter buffer (target 40-140 ms, starts at 60 ms, grows by 20 ms after a starvation, shrinks after
+5 s without one; the upper bound exists because a phone hotspot's Wi-Fi power saving can deliver audio in 100 ms bursts).
+Senders must pace frames at one per 20 ms rather than sending a block of them at once. A missing frame is replaced by silence; packets that arrive too late are dropped. Opus may replace PCM later.
 
 ## Audio daemon (on the Android host only, not seen by iOS)
 Root daemon `cellbridge_audiod serve <profile> <token>` <-> Android app, TCP `127.0.0.1:8766`, one client at a time.

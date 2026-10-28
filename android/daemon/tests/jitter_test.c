@@ -107,7 +107,7 @@ static void test_starvation_deepens_buffer_up_to_max(void)
     struct jitter *j = jitter_create(FRAME);
     unsigned char b;
     struct jitter_stats s;
-    for (int round = 0; round < 4; round++) {
+    for (int round = 0; round < 7; round++) {
         jitter_get_stats(j, &s);
         int depth = (int)s.target; /* priming needs `target` frames */
         fill(j, (uint16_t)(1000 + round * 10), depth);
@@ -116,7 +116,7 @@ static void test_starvation_deepens_buffer_up_to_max(void)
         assert(pop(j, &b) == JITTER_CONCEALED); /* nothing left: starved */
     }
     jitter_get_stats(j, &s);
-    assert(s.target == 4); /* 3 -> 4, capped */
+    assert(s.target == 7); /* 3 -> 4 -> ... -> 7, capped */
     jitter_destroy(j);
 }
 
@@ -164,7 +164,7 @@ static void test_burst_keeps_latency_bounded(void)
     jitter_get_stats(j, &s);
     assert(s.overflow > 0);
     assert(pop(j, &b) == JITTER_FRAME);
-    assert(b == (unsigned char)(16 | 1)); /* only target + 4 = 7 frames stay: 16..22, the oldest were dropped */
+    assert(b == (unsigned char)(14 | 1)); /* only target + 6 = 9 frames stay: 14..22, the oldest were dropped */
     jitter_destroy(j);
 }
 

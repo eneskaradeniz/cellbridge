@@ -1,7 +1,7 @@
 import Foundation
 
 /// Adaptive playout buffer for fixed-size audio frames numbered by a wrapping u16 sequence. A port of the
-/// daemon's jitter.c with the same constants (docs/protocol.md): target 40-80 ms, starting at 60 ms.
+/// daemon's jitter.c with the same constants (docs/protocol.md): target 40-140 ms, starting at 60 ms.
 /// push() may run on the network thread while pop() runs on the playout timer.
 final class JitterBuffer {
     enum Result { case frame, concealed, priming }
@@ -14,8 +14,8 @@ final class JitterBuffer {
     private static let slots = 32 // also the largest sequence gap bridged before resyncing
     private static let minTarget = 2
     private static let startTarget = 3
-    private static let maxTarget = 4
-    private static let extraBeforeDrop = 4
+    private static let maxTarget = 7 // 140 ms: the hotspot's Wi-Fi power saving delivers 100 ms bursts
+    private static let extraBeforeDrop = 6
     private static let calmFramesToShrink = 250 // 5 s
 
     private struct Slot {

@@ -36,6 +36,8 @@ final class UdpSocket: @unchecked Sendable {
             Darwin.close(descriptor)
             throw Failure.socket(code)
         }
+        var voiceService = Int32(NET_SERVICE_TYPE_VO) // interactive voice: the Wi-Fi radio does not batch it with bulk traffic
+        setsockopt(descriptor, SOL_SOCKET, SO_NET_SERVICE_TYPE, &voiceService, socklen_t(MemoryLayout<Int32>.size))
         var timeout = timeval(tv_sec: 0, tv_usec: 100_000) // lets the receive loop notice close()
         setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
 

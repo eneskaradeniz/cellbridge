@@ -9,8 +9,8 @@ enum {
     SLOTS = 32,          /* power of two; also the largest sequence gap we bridge before resyncing */
     MIN_TARGET = 2,      /* 40 ms at 20 ms frames */
     START_TARGET = 3,
-    MAX_TARGET = 4,      /* 80 ms */
-    EXTRA_BEFORE_DROP = 4, /* frames allowed above target before the oldest are discarded */
+    MAX_TARGET = 7,      /* 140 ms: the hotspot's Wi-Fi power saving delivers 100 ms bursts */
+    EXTRA_BEFORE_DROP = 6, /* frames allowed above target before the oldest are discarded */
     CALM_FRAMES_TO_SHRINK = 250, /* 5 s */
 };
 
