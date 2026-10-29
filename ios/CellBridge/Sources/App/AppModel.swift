@@ -16,6 +16,9 @@ final class AppModel: ObservableObject {
     /// A conversation is open and owns the bottom edge, so the link banner stays out of its way.
     @Published var threadOpen = false
     @Published var tab: AppTab = .recents
+    /// Still connecting after a while: the phone is probably not on this network.
+    @Published private(set) var unreachable = false
+    private var unreachableTimer: Task<Void, Never>?
     /// Set by `openThread`; Messages consumes it and pushes the conversation.
     @Published var threadRequest: ThreadRoute?
     /// Missed calls newer than this make the Recents badge; opening Recents moves it to now.
@@ -89,6 +92,16 @@ final class AppModel: ObservableObject {
             if case .connected = state { return }
             self?.messages.connectionLost()
         }.store(in: &bag)
+        client.$state.removeDuplicates().sink { [weak self] state in
+            guard let self else { return }
+            unreachableTimer?.cancel()
+            unreachable = false
+            guard state == .connecting else { return }
+            unreachableTimer = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(12))
+                if !Task.isCancelled { self?.unreachable = true }
+            }
+        }.store(in: &bag)
         // A new gateway means the host is somewhere else now (hotspot toggled, Wi-Fi changed): do not wait for a timeout.
         gateway.$address.removeDuplicates().dropFirst().sink { [weak self] _ in
             guard let self, wantsConnection else { return }
@@ -117,7 +130,12 @@ final class AppModel: ObservableObject {
     }
 
     /// What will actually be dialed: the typed host, else the detected gateway.
-    var effectiveHost: String { host.isEmpty ? (gateway.address ?? "") : host }
+    var effectiveHost: String {
+        let typed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        return typed.isEmpty ? (gateway.address ?? "") : typed
+    }
+
+    var hostLooksValid: Bool { HostAddress.isValid(host) }
 
     /// Texts can be sent while connected to a host that is the default SMS app.
     var canSendSms: Bool {
@@ -149,13 +167,14 @@ final class AppModel: ObservableObject {
         Task { contactBook = ContactBook(contacts: await contactProvider.load()) }
     }
 
-    var canConnect: Bool { !effectiveHost.isEmpty && !cleanToken.isEmpty }
+    var canConnect: Bool { !effectiveHost.isEmpty && hostLooksValid && !cleanToken.isEmpty }
 
     /// What was typed or pasted, without stray spaces or line breaks.
     private var cleanToken: String { token.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
 
     /// Why Connect is not available yet, in words; nil when it is.
     var connectHint: String? {
+        if !hostLooksValid { return String(localized: "That does not look like an address. Use numbers like 192.168.43.1.") }
         if effectiveHost.isEmpty { return String(localized: "Enter the phone's address.") }
         if cleanToken.isEmpty { return String(localized: "Enter the pairing code shown on the phone.") }
         return nil
@@ -223,6 +242,11 @@ final class AppModel: ObservableObject {
     var activeCalls: [ActiveCall] { calls.active }
 
     /// What the call screen shows: the running call, else the one that just ended.
+    /// A second incoming call while one is running.
+    var waitingCall: ActiveCall? {
+        calls.active.dropFirst().first { !$0.isOutgoing && !$0.isAnswered }
+    }
+
     var callScreen: ActiveCall? { calls.active.first ?? calls.ended }
 
     func endCall(_ id: UUID) { calls.end(id) }

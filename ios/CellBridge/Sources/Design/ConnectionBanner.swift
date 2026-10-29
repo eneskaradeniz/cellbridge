@@ -6,11 +6,13 @@ enum LinkStatus: Equatable {
     case connecting
     case connected(capabilities: [String])
     case refused
+    /// Connecting for a while without an answer: wrong address, or not on the phone's network.
+    case unreachable
 
-    init(_ state: ControlClient.State) {
+    init(_ state: ControlClient.State, unreachable: Bool = false) {
         switch state {
         case .idle: self = .disconnected
-        case .connecting: self = .connecting
+        case .connecting: self = unreachable ? .unreachable : .connecting
         case .connected(let capabilities): self = .connected(capabilities: capabilities)
         case .rejected: self = .refused
         }
@@ -22,6 +24,7 @@ enum LinkStatus: Equatable {
         case .connecting: return String(localized: "Connecting…")
         case .connected: return String(localized: "Connected")
         case .refused: return String(localized: "Pairing code refused")
+        case .unreachable: return String(localized: "Phone not reachable")
         }
     }
 
@@ -33,13 +36,14 @@ enum LinkStatus: Equatable {
             let names = ["calls": String(localized: "Calls"), "sms": String(localized: "Texts"), "audio": String(localized: "Voice")]
             return capabilities.compactMap { names[$0] }.joined(separator: " · ")
         case .refused: return String(localized: "Check the code on the phone")
+        case .unreachable: return String(localized: "Join the phone's hotspot or check the address")
         }
     }
 
     var color: Color {
         switch self {
         case .connected: return .green
-        case .connecting: return .orange
+        case .connecting, .unreachable: return .orange
         case .disconnected, .refused: return .red
         }
     }

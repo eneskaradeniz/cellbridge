@@ -4,13 +4,17 @@ import SwiftUI
 /// Full-screen call UI while the app is open: the system only takes the screen over on the lock screen.
 struct InCallView: View {
     @EnvironmentObject var model: AppModel
+    /// The cover animates out after the call is gone; showing the last call keeps that frame from going black.
+    @State private var last: ActiveCall?
 
     var body: some View {
-        if let call = model.callScreen {
+        if let call = model.callScreen ?? last.map({ var ended = $0; ended.isEnded = true; return ended }) {
             InCallScreen(
-                call: call, linkLost: !model.canDial, muted: model.muted, speakerOn: model.speakerOn,
+                call: call, waiting: model.waitingCall, linkLost: !model.canDial, muted: model.muted, speakerOn: model.speakerOn,
                 toggleMute: model.toggleMute, toggleSpeaker: model.toggleSpeaker,
                 end: { model.endCall(call.id) }, answer: { model.answerCall(call.id) })
+                .onAppear { last = call }
+                .onChange(of: call) { _, new in last = new }
         } else {
             Color.black.ignoresSafeArea()
         }
@@ -20,6 +24,8 @@ struct InCallView: View {
 /// The call screen itself, free of the model so a sample call can be shown without a connection.
 struct InCallScreen: View {
     let call: ActiveCall
+    /// Another call ringing while this one is on; the system offers to take it, here it is only announced.
+    var waiting: ActiveCall?
     /// The link to the phone dropped during the call: the timer would keep running over silence.
     var linkLost = false
     let muted: Bool
@@ -35,6 +41,14 @@ struct InCallScreen: View {
         ZStack {
             background
             VStack(spacing: 0) {
+                if let waiting {
+                    Text("\(waiting.title) is calling")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .glassEffect(.regular, in: .capsule)
+                        .padding(.top, 8)
+                }
                 VStack(spacing: 14) {
                     Avatar(name: call.title, size: 112)
                         .shadow(color: .black.opacity(0.3), radius: 20, y: 8)
@@ -96,7 +110,7 @@ struct InCallScreen: View {
         } else if call.isOutgoing {
             Text("Calling…")
         } else {
-            Text("CellBridge")
+            Text("Incoming call")
         }
     }
 

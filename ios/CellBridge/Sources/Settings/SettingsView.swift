@@ -4,7 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
 
-    private var status: LinkStatus { LinkStatus(model.client.state) }
+    private var status: LinkStatus { LinkStatus(model.client.state, unreachable: model.unreachable) }
 
     private static var version: String {
         let info = Bundle.main.infoDictionary

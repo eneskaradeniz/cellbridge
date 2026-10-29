@@ -19,7 +19,8 @@ struct KeypadView: View {
         [Key(digit: "*", letters: ""), Key(digit: "0", letters: "+"), Key(digit: "#", letters: "")],
     ]
 
-    private let keySize: CGFloat = 84
+    /// Shrinks on short screens (iPhone SE) so the five rows always fit.
+    @State private var keySize: CGFloat = 84
 
     var body: some View {
         VStack(spacing: 16) {
@@ -85,6 +86,7 @@ struct KeypadView: View {
             Spacer(minLength: 0)
         }
         .padding(.bottom, 8)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { keySize = min(84, max(58, ($0 - 190) / 5.6)) }
         .sensoryFeedback(.selection, trigger: number)
         .onChange(of: model.activeCalls.isEmpty) { _, idle in if !idle { number = "" } } // kept until the call really starts, so a refused dial loses nothing
         .sheet(isPresented: $choosing) { ContactsView(onPick: { number = $0 }) }

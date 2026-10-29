@@ -1331,6 +1331,76 @@
           }
         }
       }
+    },
+    "Phone not reachable": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefona ulaşılamıyor"
+          }
+        }
+      }
+    },
+    "Join the phone's hotspot or check the address": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonun hotspot'una bağlan ya da adresi kontrol et"
+          }
+        }
+      }
+    },
+    "That does not look like an address. Use numbers like 192.168.43.1.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu bir adrese benzemiyor. 192.168.43.1 gibi sayılarla yaz."
+          }
+        }
+      }
+    },
+    "Incoming call": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gelen arama"
+          }
+        }
+      }
+    },
+    "%@ is calling": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ arıyor"
+          }
+        }
+      }
+    },
+    "%lld · %lld texts": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld · %2$lld mesaj"
+          }
+        }
+      }
+    },
+    "%lld / %lld": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld"
+          }
+        }
+      }
     }
   }
 }

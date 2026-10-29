@@ -185,6 +185,13 @@ struct ThreadView: View {
     }
 
     private var composer: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            counter(for: draft)
+            composerRow
+        }
+    }
+
+    private var composerRow: some View {
         HStack(alignment: .bottom, spacing: 8) {
             TextField(model.canSendSms ? "Message" : "Connect to the phone to send", text: $draft, axis: .vertical)
                 .focused($composing)
@@ -252,6 +259,19 @@ private struct Bubble: View {
     }
 }
 
+/// "58 / 70 · 2 texts" once a draft gets long enough that its cost in SMS matters.
+@ViewBuilder
+private func counter(for text: String) -> some View {
+    let measure = SmsLength.measure(text)
+    if measure.units * 2 >= measure.perMessage {
+        let parts = measure.parts
+        Text(parts > 1 ? "\(measure.units) · \(parts) texts" : "\(measure.units) / \(measure.perMessage)")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 20)
+    }
+}
+
 struct NewMessageView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -280,7 +300,10 @@ struct NewMessageView: View {
                 Section {
                     TextField("Message", text: $body_, axis: .vertical).lineLimit(4...10)
                 } footer: {
-                    if !model.canSendSms { Text("Connect to the phone to send.") }
+                    VStack(alignment: .leading, spacing: 4) {
+                        counter(for: body_)
+                        if !model.canSendSms { Text("Connect to the phone to send.") }
+                    }
                 }
             }
             .navigationTitle("New Message")

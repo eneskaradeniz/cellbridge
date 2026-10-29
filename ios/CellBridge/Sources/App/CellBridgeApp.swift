@@ -58,7 +58,7 @@ struct CellBridgeApp: App {
         }
     }
 
-    private var status: LinkStatus { LinkStatus(model.client.state) }
+    private var status: LinkStatus { LinkStatus(model.client.state, unreachable: model.unreachable) }
 
     private var isConnected: Bool {
         if case .connected = model.client.state { return true }
