@@ -31,8 +31,13 @@ struct SettingsView: View {
                     switch model.client.state {
                     case .idle, .rejected:
                         Button(status == .refused ? "Try Again" : "Connect") { model.connect() }.disabled(!model.canConnect)
-                    default:
+                    case .connected:
                         Button("Disconnect", role: .destructive) { model.disconnect() }
+                    case .connecting:
+                        EmptyView() // it keeps trying on its own: nothing to press until it is connected
+                    }
+                    if let synced = model.lastSync {
+                        LabeledContent("Last sync", value: MessageDisplay.timestamp(synced))
                     }
                 } footer: {
                     if let hint = model.connectHint, model.client.state == .idle { Text(hint) }

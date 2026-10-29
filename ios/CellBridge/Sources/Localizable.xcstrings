@@ -1401,6 +1401,26 @@
           }
         }
       }
+    },
+    "Updated %@": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Güncellendi: %@"
+          }
+        }
+      }
+    },
+    "Last sync": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Son eşitleme"
+          }
+        }
+      }
     }
   }
 }

@@ -16,6 +16,8 @@ final class AppModel: ObservableObject {
     /// A conversation is open and owns the bottom edge, so the link banner stays out of its way.
     @Published var threadOpen = false
     @Published var tab: AppTab = .recents
+    /// The last time the phone and this app were brought in step (a connection, a call log or text history answer, a text).
+    @Published private(set) var lastSync: Date? = UserDefaults.standard.object(forKey: "lastSync") as? Date
     /// Still connecting after a while: the phone is probably not on this network.
     @Published private(set) var unreachable = false
     private var unreachableTimer: Task<Void, Never>?
@@ -275,9 +277,17 @@ final class AppModel: ObservableObject {
         set { UserDefaults.standard.set(newValue, forKey: "callLogCursor") }
     }
 
+    private func markSynced() {
+        lastSync = Date()
+        UserDefaults.standard.set(lastSync, forKey: "lastSync")
+    }
+
     private func handleHistory(_ message: ServerMessage) {
         switch message {
+        case .sms:
+            markSynced()
         case .helloAck(_, let capabilities):
+            markSynced()
             if capabilities.contains("calllog") { requestCallLog() }
             if capabilities.contains("smshistory"), !UserDefaults.standard.bool(forKey: "smsHistoryDone") {
                 let since = Int64((Date().timeIntervalSince1970 - Self.historyDays * 86_400) * 1000)
@@ -287,10 +297,12 @@ final class AppModel: ObservableObject {
             let added = (try? callLog.merge(host: entries)) ?? 0
             if let newest = entries.compactMap({ Int($0.id) }).max() { callLogCursor = max(callLogCursor ?? 0, newest) } else if callLogCursor == nil { callLogCursor = 0 }
             recents = callLog.entries
+            markSynced()
             log("call log: \(entries.count) from the phone, \(added) new")
         case .smsHistory(let items):
             let added = messages.mergeHistory(items)
             UserDefaults.standard.set(true, forKey: "smsHistoryDone")
+            markSynced()
             log("text history: \(items.count) from the phone, \(added) new")
         default:
             break

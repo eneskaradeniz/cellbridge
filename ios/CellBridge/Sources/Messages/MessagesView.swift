@@ -8,7 +8,8 @@ struct MessagesView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            List(model.messages.conversations) { conversation in
+            List {
+                ForEach(model.messages.conversations) { conversation in
                 NavigationLink(value: ThreadRoute(key: conversation.key, peer: conversation.peer)) {
                     Row(conversation: conversation, name: model.displayName(for: conversation.peer))
                 }
@@ -32,6 +33,8 @@ struct MessagesView: View {
                     }
                     Button(role: .destructive) { deleting = conversation } label: { Label("Delete", systemImage: "trash") }
                 }
+                }
+                if !model.messages.conversations.isEmpty { SyncFooter(date: model.lastSync) }
             }
             .listStyle(.plain)
             .overlay {
