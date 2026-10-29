@@ -27,6 +27,9 @@ struct stream {
     int fd;
     atomic_bool stop;
     struct jitter *jitter;
+    unsigned rx_packets, rx_span; /* packets that arrived, and how many the sender numbered meanwhile (the difference is lost before repair) */
+    bool rx_have_seq;
+    uint16_t rx_last_seq;
     pthread_t dl_thread, rx_thread, play_thread;
     bool dl_running, rx_running, play_running;
     unsigned int dl_sent;
@@ -186,6 +189,18 @@ static void *rx_loop(void *arg)
         }
         last_rx = arrived;
         uint16_t seq = (uint16_t)(packet[0] | (packet[1] << 8));
+        s->rx_packets++;
+        if (!s->rx_have_seq) {
+            s->rx_have_seq = true;
+            s->rx_span = 1;
+            s->rx_last_seq = seq;
+        } else {
+            uint16_t ahead = (uint16_t)(seq - s->rx_last_seq);
+            if (ahead > 0 && ahead < 0x8000) { /* forward: a reordered or repeated packet adds nothing */
+                s->rx_span += ahead;
+                s->rx_last_seq = seq;
+            }
+        }
         jitter_push(s->jitter, seq, packet + STREAM_HEADER_BYTES);
         if (with_previous)
             jitter_push_redundant(s->jitter, (uint16_t)(seq - 1), packet + STREAM_HEADER_BYTES + s->period_bytes);
@@ -317,8 +332,8 @@ void stream_stop(struct stream *s)
     if (s->jitter) {
         struct jitter_stats j;
         jitter_get_stats(s->jitter, &j);
-        daemon_log("stream: dl_sent=%u ul played=%u concealed=%u recovered=%u late=%u duplicate=%u overflow=%u target=%u\n",
-                s->dl_sent, j.played, j.concealed, j.recovered, j.late, j.duplicate, j.overflow, j.target);
+        daemon_log("stream: dl_sent=%u ul played=%u concealed=%u recovered=%u late=%u duplicate=%u overflow=%u target=%u | ul packets=%u of %u numbered\n",
+                s->dl_sent, j.played, j.concealed, j.recovered, j.late, j.duplicate, j.overflow, j.target, s->rx_packets, s->rx_span);
         daemon_log(
                 "stream: dl_rms=%.0f ul_rms=%.0f | playout ticks=%u resyncs=%u avg_write_ms=%.1f max_write_ms=%u\n",
                 s->dl_samples ? sqrt(s->dl_sum_sq / s->dl_samples) : 0.0,
