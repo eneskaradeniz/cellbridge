@@ -16,6 +16,7 @@ targets:
       properties:
         CFBundleDisplayName: CellBridge
         CFBundleLocalizations: [en, tr]
+        NSBonjourServices: [_cellbridge._tcp]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         CFBundleURLTypes:
           - CFBundleURLName: cellbridge

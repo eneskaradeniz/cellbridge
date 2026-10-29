@@ -34,6 +34,7 @@ final class AppModel: ObservableObject {
     private(set) var messages: MessageCoordinator!
     private let notifier = Notifier()
     let gateway = GatewayDiscovery()
+    let bonjour = BonjourDiscovery()
     private var calls: CallCoordinator!
     private let callLog: CallLog
     private let eventLog: EventLog
@@ -109,6 +110,12 @@ final class AppModel: ObservableObject {
             }
         }.store(in: &bag)
         // A new gateway means the host is somewhere else now (hotspot toggled, Wi-Fi changed): do not wait for a timeout.
+        bonjour.$address.removeDuplicates().sink { [weak self] address in
+            guard let self else { return }
+            log(address.map { "found the phone at \($0)" } ?? "the phone is no longer announcing itself")
+            guard wantsConnection else { return }
+            client.restart()
+        }.store(in: &bag)
         gateway.$address.removeDuplicates().dropFirst().sink { [weak self] _ in
             guard let self, wantsConnection else { return }
             log("network changed, reconnecting")
@@ -135,13 +142,19 @@ final class AppModel: ObservableObject {
         client.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         calls.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         gateway.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
+        bonjour.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
     }
 
     /// What will actually be dialed: the typed host, else the detected gateway.
     var effectiveHost: String {
+        // The phone announcing itself wins (a typed address may be a stale one after the router handed out another); a typed
+        // address is for networks where that does not work, the Wi-Fi gateway for the hotspot.
         let typed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        return typed.isEmpty ? (gateway.address ?? "") : typed
+        return bonjour.address ?? (typed.isEmpty ? (gateway.address ?? "") : typed)
     }
+
+    /// Found without typing: the phone announcing itself on the network, else the Wi-Fi gateway (its hotspot).
+    var detectedAddress: String? { bonjour.address ?? gateway.address }
 
     var hostLooksValid: Bool { HostAddress.isValid(host) }
 

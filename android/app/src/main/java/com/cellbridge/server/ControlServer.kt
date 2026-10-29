@@ -7,6 +7,7 @@ import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallStatus
 import com.cellbridge.domain.model.IncomingSms
 import com.cellbridge.domain.model.SendResult
+import com.cellbridge.discovery.ServiceAdvertiser
 import com.cellbridge.history.HistorySource
 import com.cellbridge.history.NoHistory
 import com.cellbridge.push.NoPush
@@ -81,6 +82,7 @@ class ControlServer @Inject constructor(
     private val push: PushNotifier,
     private val presence: ClientPresence,
     private val transfers: TransferController,
+    private val advertiser: ServiceAdvertiser,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
     private val _running = MutableStateFlow(false)
@@ -113,12 +115,14 @@ class ControlServer @Inject constructor(
         }.onSuccess {
             engine = it
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { audio.start(it); push.start(it) }
+            advertiser.start(CONTROL_PORT)
             _running.value = true
         }.onFailure { Log.e(TAG, "control server failed to start", it) }
     }
 
     @Synchronized
     fun stop() {
+        advertiser.stop()
         audio.stop()
         scope?.cancel()
         scope = null

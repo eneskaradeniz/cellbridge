@@ -63,7 +63,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Phone")
                 } footer: {
-                    if let detected = model.gateway.address, model.host.isEmpty {
+                    if let detected = model.detectedAddress, model.host.isEmpty {
                         Text("Detected \(detected). Leave the address empty to use it, or type the phone's own address. The code is shown in the CellBridge app on the phone.")
                     } else {
                         Text("The phone's address on this Wi-Fi network, and the code its CellBridge app shows.")
