@@ -41,6 +41,8 @@ enum Sample {
         }
         record("+90 535 333 44 55", "Çağrı Kaya", .incoming, .answered, 60 * 30, 1254)
         record("+90 536 444 55 66", "Deniz Arslan", .incoming, .missed, 60 * 8, 0)
+        record("+90 536 444 55 66", "Deniz Arslan", .incoming, .missed, 60 * 9, 0)
+        record("+90 536 444 55 66", "Deniz Arslan", .incoming, .missed, 60 * 10, 0)
         record("+90 537 555 66 77", "Kardeşim", .outgoing, .answered, 60 * 3, 312)
         record("+90 532 111 22 33", "Ayşe Yılmaz", .outgoing, .noAnswer, 40, 0)
         record("+90 555 010 20 30", "+90 555 010 20 30", .incoming, .declined, 12, 0)

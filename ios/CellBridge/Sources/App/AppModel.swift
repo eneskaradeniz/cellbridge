@@ -18,6 +18,8 @@ final class AppModel: ObservableObject {
     @Published var tab: AppTab = .recents
     /// Set by `openThread`; Messages consumes it and pushes the conversation.
     @Published var threadRequest: ThreadRoute?
+    /// Missed calls newer than this make the Recents badge; opening Recents moves it to now.
+    @Published private(set) var missedSeen = UserDefaults.standard.object(forKey: "missedSeen") as? Date ?? Date()
     @Published private(set) var lastDialed = UserDefaults.standard.string(forKey: "lastDialed") ?? ""
     /// The running model, for App Intents (Shortcuts, Siri), which are created outside the view tree.
     static private(set) weak var current: AppModel?
@@ -98,6 +100,9 @@ final class AppModel: ObservableObject {
         }.store(in: &bag)
         refreshContacts()
         Self.current = self
+        messages.$conversations.sink { [weak self] conversations in
+            self?.notifier.setBadge(conversations.reduce(0) { $0 + $1.unreadCount })
+        }.store(in: &bag)
         #if DEBUG
         if sampling {
             contactsAuthorized = true
@@ -208,7 +213,17 @@ final class AppModel: ObservableObject {
         client.disconnect()
     }
 
+    var missedUnseen: Int { recents.filter { $0.isMissed && $0.date > missedSeen }.count }
+
+    func markRecentsSeen() {
+        missedSeen = Date()
+        UserDefaults.standard.set(missedSeen, forKey: "missedSeen")
+    }
+
     var activeCalls: [ActiveCall] { calls.active }
+
+    /// What the call screen shows: the running call, else the one that just ended.
+    var callScreen: ActiveCall? { calls.active.first ?? calls.ended }
 
     func endCall(_ id: UUID) { calls.end(id) }
 

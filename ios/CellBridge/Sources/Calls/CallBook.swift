@@ -7,6 +7,8 @@ struct ActiveCall: Identifiable, Equatable {
     let title: String
     let answeredAt: Date?
     var isOutgoing = false
+    /// The call is over; the screen shows it for a moment before it goes away.
+    var isEnded = false
     var isAnswered: Bool { answeredAt != nil }
 }
 

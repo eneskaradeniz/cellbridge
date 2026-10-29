@@ -1,3 +1,4 @@
+import AVKit
 import SwiftUI
 
 /// Full-screen call UI while the app is open: the system only takes the screen over on the lock screen.
@@ -5,9 +6,9 @@ struct InCallView: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        if let call = model.activeCalls.first {
+        if let call = model.callScreen {
             InCallScreen(
-                call: call, muted: model.muted, speakerOn: model.speakerOn,
+                call: call, linkLost: !model.canDial, muted: model.muted, speakerOn: model.speakerOn,
                 toggleMute: model.toggleMute, toggleSpeaker: model.toggleSpeaker,
                 end: { model.endCall(call.id) }, answer: { model.answerCall(call.id) })
         } else {
@@ -19,6 +20,8 @@ struct InCallView: View {
 /// The call screen itself, free of the model so a sample call can be shown without a connection.
 struct InCallScreen: View {
     let call: ActiveCall
+    /// The link to the phone dropped during the call: the timer would keep running over silence.
+    var linkLost = false
     let muted: Bool
     let speakerOn: Bool
     let toggleMute: () -> Void
@@ -47,8 +50,8 @@ struct InCallScreen: View {
                 Spacer()
                 GlassEffectContainer(spacing: 40) {
                     VStack(spacing: 48) {
-                        if call.isAnswered { controls }
-                        buttons
+                        if call.isAnswered && !call.isEnded { controls }
+                        if !call.isEnded { buttons }
                     }
                 }
                 .padding(.bottom, 48)
@@ -83,8 +86,13 @@ struct InCallScreen: View {
 
     @ViewBuilder
     private var status: some View {
-        if let answeredAt = call.answeredAt {
+        if call.isEnded {
+            Text("Call ended")
+        } else if linkLost && call.isAnswered {
+            Text("Connection lost").foregroundStyle(.orange)
+        } else if let answeredAt = call.answeredAt {
             Text(answeredAt, style: .timer).monospacedDigit()
+                .accessibilityLabel("Call duration")
         } else if call.isOutgoing {
             Text("Calling…")
         } else {
@@ -96,6 +104,13 @@ struct InCallScreen: View {
         HStack(spacing: 36) {
             toggle(muted ? "mic.slash.fill" : "mic.fill", "Mute", on: muted, action: toggleMute)
             toggle(speakerOn ? "speaker.wave.3.fill" : "speaker.fill", "Speaker", on: speakerOn, action: toggleSpeaker)
+            VStack(spacing: 8) {
+                RoutePicker()
+                    .frame(width: 76, height: 76)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                Text("Audio").font(.footnote)
+            }
+            .accessibilityElement(children: .combine)
         }
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
     }
@@ -137,4 +152,16 @@ struct InCallScreen: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(on ? .isSelected : [])
     }
+}
+
+/// The system's audio route button (AirPods, Bluetooth, the iPhone's own earpiece and speaker).
+private struct RoutePicker: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView()
+        picker.tintColor = .white
+        picker.activeTintColor = .white
+        return picker
+    }
+
+    func updateUIView(_ picker: AVRoutePickerView, context: Context) {}
 }

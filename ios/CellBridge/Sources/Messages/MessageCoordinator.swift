@@ -11,6 +11,8 @@ final class MessageCoordinator: ObservableObject {
     private let log: (String) -> Void
     /// An ack covers every earlier text, so after a failed save no later ack may go out until the host replays.
     private var ackBlocked = false
+    /// The conversation on screen while the app is in front; a text for it is read on arrival and makes no notification.
+    var viewingKey: String?
 
     init(store: MessageStore, transmit: @escaping (ClientMessage) -> Void,
          notify: @escaping (String, String, String) -> Void, log: @escaping (String) -> Void) {
@@ -58,12 +60,36 @@ final class MessageCoordinator: ObservableObject {
         refresh()
     }
 
+    var unreadCount: Int { conversations.reduce(0) { $0 + $1.unreadCount } }
+
+    func markRead(key: String) {
+        do { try store.markRead(key: key) } catch { log("could not mark as read: \(error.localizedDescription)") }
+        refresh()
+    }
+
+    func markUnread(key: String) {
+        do { try store.markUnread(key: key) } catch { log("could not mark as unread: \(error.localizedDescription)") }
+        refresh()
+    }
+
+    func delete(conversation key: String) {
+        do { try store.removeConversation(key: key) } catch { log("could not delete the conversation: \(error.localizedDescription)") }
+        refresh()
+    }
+
+    func delete(message id: String) {
+        do { try store.remove(ids: [id]) } catch { log("could not delete the text: \(error.localizedDescription)") }
+        refresh()
+    }
+
     private func receive(id: String, from: String, body: String, date: Date) {
         do {
             let isNew = try store.receive(hostId: id, from: from, body: body, date: date)
+            let watching = viewingKey == MessageStore.key(for: from)
+            if isNew && watching { try? store.markRead(key: MessageStore.key(for: from)) }
             refresh()
             if !ackBlocked { transmit(.smsAck(id: id)) } // only once it is on disk
-            if isNew { notify(id, from, body) }
+            if isNew && !watching { notify(id, from, body) }
         } catch {
             ackBlocked = true // not acknowledged, so the host re-sends it (and everything after it) next time
             log("could not save text \(id): \(error.localizedDescription)")

@@ -13,6 +13,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         Task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) }
     }
 
+    /// The number on the app icon.
+    func setBadge(_ count: Int) {
+        UNUserNotificationCenter.current().setBadgeCount(count) { _ in }
+    }
+
     /// `id` is the host's text id, so a replayed text replaces its notification instead of stacking another.
     func notify(id: String, title: String, body: String) {
         let content = UNMutableNotificationContent()

@@ -16,6 +16,23 @@ struct TextMessage: Codable, Identifiable, Equatable {
     let date: Date
     let direction: Direction
     var status: Status
+    /// Incoming texts start unread; everything we send, and every text stored before this field existed, is read.
+    var isRead = true
+
+    enum CodingKeys: String, CodingKey { case id, peer, body, date, direction, status, isRead }
+}
+
+extension TextMessage {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        peer = try c.decode(String.self, forKey: .peer)
+        body = try c.decode(String.self, forKey: .body)
+        date = try c.decode(Date.self, forKey: .date)
+        direction = try c.decode(Direction.self, forKey: .direction)
+        status = try c.decode(Status.self, forKey: .status)
+        isRead = try c.decodeIfPresent(Bool.self, forKey: .isRead) ?? true
+    }
 }
 
 struct Conversation: Identifiable, Equatable {
@@ -23,6 +40,8 @@ struct Conversation: Identifiable, Equatable {
     let messages: [TextMessage]
     var id: String { key }
     var last: TextMessage { messages[messages.count - 1] }
+    var unreadCount: Int { messages.filter { !$0.isRead }.count }
+    var hasFailed: Bool { if case .failed = last.status { return true } else { return false } }
     var peer: String { last.peer }
 }
 
@@ -49,7 +68,7 @@ final class MessageStore {
     func receive(hostId: String, from: String, body: String, date: Date) throws -> Bool {
         let id = "in-" + hostId
         guard !messages.contains(where: { $0.id == id }) else { return false }
-        try append(TextMessage(id: id, peer: from, body: body, date: date, direction: .incoming, status: .received))
+        try append(TextMessage(id: id, peer: from, body: body, date: date, direction: .incoming, status: .received, isRead: false))
         return true
     }
 
@@ -67,6 +86,31 @@ final class MessageStore {
     /// send a text twice, so they are reported as unconfirmed and left to the user.
     func failPending(reason: String) throws {
         try update { $0.status == .sending } to: { $0.status = .failed(reason) }
+    }
+
+    /// Everything in the conversation counts as read; `unread` brings the newest incoming text back to unread.
+    func markRead(key: String) throws {
+        try update { Self.key(for: $0.peer) == key && !$0.isRead } to: { $0.isRead = true }
+    }
+
+    func markUnread(key: String) throws {
+        guard let last = messages.last(where: { Self.key(for: $0.peer) == key && $0.direction == .incoming }) else { return }
+        try update { $0.id == last.id } to: { $0.isRead = false }
+    }
+
+    /// Forgets texts (delete from a menu or swipe).
+    func remove(ids: Set<String>) throws {
+        let before = messages
+        messages.removeAll { ids.contains($0.id) }
+        guard messages != before else { return }
+        do { try persist() } catch {
+            messages = before
+            throw error
+        }
+    }
+
+    func removeConversation(key: String) throws {
+        try remove(ids: Set(messages.filter { Self.key(for: $0.peer) == key }.map(\.id)))
     }
 
     /// Forgets one text (a failed one that is being sent again).

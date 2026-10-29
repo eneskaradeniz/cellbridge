@@ -1201,6 +1201,136 @@
           }
         }
       }
+    },
+    "Delete this conversation?": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu sohbet silinsin mi?"
+          }
+        }
+      }
+    },
+    "The texts are removed from this iPhone only.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mesajlar yalnızca bu iPhone'dan silinir."
+          }
+        }
+      }
+    },
+    "Read": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Okundu"
+          }
+        }
+      }
+    },
+    "Unread": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Okunmadı"
+          }
+        }
+      }
+    },
+    "Mark as Read": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Okundu Olarak İşaretle"
+          }
+        }
+      }
+    },
+    "Mark as Unread": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Okunmadı Olarak İşaretle"
+          }
+        }
+      }
+    },
+    "Call details": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arama ayrıntıları"
+          }
+        }
+      }
+    },
+    "Info": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bilgi"
+          }
+        }
+      }
+    },
+    "Outgoing": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giden"
+          }
+        }
+      }
+    },
+    "Incoming": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gelen"
+          }
+        }
+      }
+    },
+    "Call ended": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arama bitti"
+          }
+        }
+      }
+    },
+    "Connection lost": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlantı koptu"
+          }
+        }
+      }
+    },
+    "Call duration": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arama süresi"
+          }
+        }
+      }
     }
   }
 }

@@ -5,8 +5,9 @@ struct RecentsView: View {
     @EnvironmentObject var model: AppModel
     @State private var missedOnly = false
     @State private var confirmingClear = false
+    @State private var detail: RecentGroup?
 
-    private var shown: [CallRecord] { missedOnly ? model.recents.filter(\.isMissed) : model.recents }
+    private var shown: [RecentGroup] { RecentGroup.group(missedOnly ? model.recents.filter(\.isMissed) : model.recents) }
 
     var body: some View {
         NavigationStack {
@@ -18,14 +19,20 @@ struct RecentsView: View {
                 .pickerStyle(.segmented)
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
-                ForEach(shown) { record in
+                ForEach(shown) { group in
+                    let record = group.latest
                     let name = model.displayName(for: record.number, fallback: record.title)
                     let callable = !record.number.isEmpty
-                    Button { model.dial(record.number) } label: { Row(record: record, name: name) }
-                        .buttonStyle(.plain)
-                        .disabled(!callable)
+                    HStack(spacing: 8) {
+                        Button { model.dial(record.number) } label: { Row(record: record, name: name, count: group.records.count) }
+                            .buttonStyle(.plain)
+                            .disabled(!callable)
+                        Button { detail = group } label: { Image(systemName: "info.circle").imageScale(.large).frame(minWidth: 44, minHeight: 44) }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Call details")
+                    }
                         .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) { model.deleteRecents([record.id]) } label: { Label("Delete", systemImage: "trash") }
+                            Button(role: .destructive) { model.deleteRecents(group.ids) } label: { Label("Delete", systemImage: "trash") }
                         }
                         .swipeActions(edge: .leading) {
                             if callable {
@@ -39,10 +46,13 @@ struct RecentsView: View {
                                 Button { model.openThread(record.number) } label: { Label("Message", systemImage: "message") }
                                 Button { UIPasteboard.general.string = record.number } label: { Label("Copy Number", systemImage: "doc.on.doc") }
                             }
-                            Button(role: .destructive) { model.deleteRecents([record.id]) } label: { Label("Delete", systemImage: "trash") }
+                            Button(role: .destructive) { model.deleteRecents(group.ids) } label: { Label("Delete", systemImage: "trash") }
                         }
                 }
             }
+            .navigationDestination(item: $detail) { CallDetailView(group: $0) }
+            .onAppear { model.markRecentsSeen() }
+            .onChange(of: model.recents) { _, _ in model.markRecentsSeen() }
             .listStyle(.plain)
             .overlay {
                 if shown.isEmpty {
@@ -65,14 +75,17 @@ struct RecentsView: View {
         }
     }
 
+    static func durationText(_ seconds: TimeInterval) -> String { Row.duration(seconds) }
+
     private struct Row: View {
         let record: CallRecord
         let name: String
+        var count = 1
 
         var body: some View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(name.isEmpty ? String(localized: "Unknown") : name)
+                    Text((name.isEmpty ? String(localized: "Unknown") : name) + (count > 1 ? " (\(count))" : ""))
                         .font(.body.weight(.semibold))
                         .foregroundStyle(record.isMissed ? Color.red : Color.primary)
                         .lineLimit(1)
@@ -116,6 +129,82 @@ struct RecentsView: View {
             let total = Int(seconds.rounded())
             return total >= 3600 ? String(format: "%d:%02d:%02d", total / 3600, total % 3600 / 60, total % 60)
                                  : String(format: "%d:%02d", total / 60, total % 60)
+        }
+    }
+}
+
+/// The (i) screen of a Recents row: who, the number, and every call in the group.
+struct CallDetailView: View {
+    @EnvironmentObject var model: AppModel
+    let group: RecentGroup
+
+    private var number: String { group.latest.number }
+    private var name: String { model.displayName(for: number, fallback: group.latest.title) }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(spacing: 12) {
+                    Avatar(name: name, size: 96)
+                    Text(name.isEmpty ? String(localized: "Unknown") : name).font(.title2.weight(.semibold)).multilineTextAlignment(.center)
+                    if !number.isEmpty {
+                        GlassEffectContainer(spacing: 16) {
+                            HStack(spacing: 16) {
+                                action("Message", "message.fill") { model.openThread(number) }
+                                action("Call", "phone.fill") { model.dial(number) }
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .listRowBackground(Color.clear)
+            }
+            if !number.isEmpty {
+                Section("Number") { Text(number).textSelection(.enabled) }
+            }
+            Section("Calls") {
+                ForEach(group.records) { record in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(record.date.formatted(date: .abbreviated, time: .shortened))
+                            Text(Self.summary(record)).font(.subheadline).foregroundStyle(record.isMissed ? Color.red : Color.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: record.direction == .outgoing ? "phone.arrow.up.right" : "phone.arrow.down.left")
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            Section {
+                Button("Delete", role: .destructive) { model.deleteRecents(group.ids) }
+            }
+        }
+        .navigationTitle("Info")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func action(_ title: LocalizedStringKey, _ symbol: String, perform: @escaping () -> Void) -> some View {
+        Button(action: perform) {
+            VStack(spacing: 4) {
+                Image(systemName: symbol).font(.title3)
+                Text(title).font(.caption)
+            }
+            .frame(minWidth: 84, minHeight: 60)
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private static func summary(_ record: CallRecord) -> String {
+        let kind = record.direction == .outgoing ? String(localized: "Outgoing") : String(localized: "Incoming")
+        switch record.outcome {
+        case .answered: return kind + " · " + RecentsView.durationText(record.duration)
+        case .missed: return String(localized: "Missed")
+        case .declined: return String(localized: "Declined")
+        case .noAnswer: return String(localized: "No answer")
+        case .failed: return String(localized: "Failed")
         }
     }
 }

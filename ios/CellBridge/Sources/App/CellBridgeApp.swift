@@ -12,10 +12,10 @@ struct CellBridgeApp: App {
     var body: some Scene {
         WindowGroup {
             TabView(selection: $model.tab) {
-                Tab("Recents", systemImage: "clock", value: AppTab.recents) { RecentsView() }
+                Tab("Recents", systemImage: "clock", value: AppTab.recents) { RecentsView() }.badge(model.missedUnseen)
                 Tab("Contacts", systemImage: "person.crop.circle", value: AppTab.contacts) { ContactsView() }
                 Tab("Keypad", systemImage: "circle.grid.3x3.fill", value: AppTab.keypad) { KeypadView() }
-                Tab("Messages", systemImage: "message", value: AppTab.messages) { MessagesView() }
+                Tab("Messages", systemImage: "message", value: AppTab.messages) { MessagesView() }.badge(model.messages.unreadCount)
                 Tab("Settings", systemImage: "gearshape", value: AppTab.settings) { SettingsView() }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
@@ -24,7 +24,7 @@ struct CellBridgeApp: App {
             }
             .animation(.smooth, value: status)
             .sensoryFeedback(.success, trigger: isConnected) { _, connected in connected }
-            .fullScreenCover(isPresented: Binding(get: { !model.activeCalls.isEmpty }, set: { _ in })) {
+            .fullScreenCover(isPresented: Binding(get: { model.callScreen != nil }, set: { _ in })) {
                 InCallView().environmentObject(model)
             }
             .alert("Call Failed", isPresented: Binding(

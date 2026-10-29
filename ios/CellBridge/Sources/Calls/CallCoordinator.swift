@@ -15,6 +15,9 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     /// Why the last attempt to place a call failed, in words for the user; cleared by the next attempt.
     @Published private(set) var dialError: String?
 
+    /// The call that just ended, kept for a moment so the screen can say so instead of vanishing.
+    @Published private(set) var ended: ActiveCall?
+
     /// Loudspeaker on/off for the current call.
     @Published var speaker = false { didSet { audio.speaker = speaker } }
 
@@ -46,6 +49,18 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         provider = CXProvider(configuration: configuration)
         super.init()
         provider.setDelegate(self, queue: nil)
+        NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
+            let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
+            Task { @MainActor in self?.routeChanged(reason: reason) }
+        }
+    }
+
+    /// The route picker (AirPods, the earpiece, the speaker) changes the route behind our speaker button's back.
+    private func routeChanged(reason: AVAudioSession.RouteChangeReason?) {
+        guard !active.isEmpty else { return }
+        let onSpeaker = AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .builtInSpeaker }
+        // Only an explicit choice (override) may switch the speaker on: before a call settles the route can pass through it.
+        if (reason == .override && onSpeaker != speaker) || (speaker && !onSpeaker) { speaker = onSpeaker }
     }
 
     /// Starts an outgoing call through the system, so CallKit and the audio session are set up as for any other call.
@@ -146,7 +161,15 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     /// Writes the call to the history (once) and forgets it.
     private func finish(_ uuid: UUID, by ender: CallRecord.Ender) {
         logFinished(uuid, by: ender)
+        let shown = book.active.first { $0.id == uuid }
         book.end(uuid: uuid)
+        guard var shown else { return }
+        shown.isEnded = true
+        ended = shown
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1200))
+            if self.ended?.id == shown.id { self.ended = nil }
+        }
     }
 
     private func logFinished(_ uuid: UUID, by ender: CallRecord.Ender) {
