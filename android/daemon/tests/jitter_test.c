@@ -49,7 +49,7 @@ static void test_lost_packet_is_concealed_and_skipped(void)
     push(j, 10); push(j, 11); push(j, 13); push(j, 14); /* 12 is lost */
     assert(pop(j, &b) == JITTER_FRAME);                  /* 10 */
     assert(pop(j, &b) == JITTER_FRAME);                  /* 11 */
-    assert(pop(j, &b) == JITTER_CONCEALED && b == 0);    /* 12 */
+    assert(pop(j, &b) == JITTER_CONCEALED && b != 0);    /* 12: a faded repeat of 11, not a hole */
     assert(pop(j, &b) == JITTER_FRAME);                  /* 13 */
     struct jitter_stats s;
     jitter_get_stats(j, &s);
@@ -116,7 +116,7 @@ static void test_starvation_deepens_buffer_up_to_max(void)
         assert(pop(j, &b) == JITTER_CONCEALED); /* nothing left: starved */
     }
     jitter_get_stats(j, &s);
-    assert(s.target == 8); /* 3 -> 4 -> ... -> 8, capped */
+    assert(s.target == 14); /* 3 -> 5 -> ... grows by 2 per starvation, capped at 14 (280 ms) */
     jitter_destroy(j);
 }
 
@@ -168,8 +168,80 @@ static void test_burst_keeps_latency_bounded(void)
     jitter_destroy(j);
 }
 
+static int first_sample(const unsigned char *f)
+{
+    int16_t v;
+    memcpy(&v, f, sizeof(v));
+    return v;
+}
+
+static void push_sample(struct jitter *j, uint16_t seq, int16_t value, int redundant)
+{
+    int16_t f[FRAME / 2];
+    for (int i = 0; i < FRAME / 2; i++)
+        f[i] = value;
+    if (redundant)
+        jitter_push_redundant(j, seq, f);
+    else
+        jitter_push(j, seq, f);
+}
+
+static void test_concealment_fades_out_over_three_frames(void)
+{
+    struct jitter *j = jitter_create(FRAME);
+    unsigned char f[FRAME];
+    push_sample(j, 0, 1000, 0); push_sample(j, 1, 1000, 0); push_sample(j, 2, 1000, 0);
+    push_sample(j, 8, 1000, 0); /* 3..7 are missing but something is buffered behind them */
+    for (int i = 0; i < 3; i++)
+        assert(jitter_pop(j, f) == JITTER_FRAME);
+    int expect[] = { 750, 500, 250, 0, 0 };
+    for (int i = 0; i < 5; i++) {
+        assert(jitter_pop(j, f) == JITTER_CONCEALED);
+        assert(first_sample(f) == expect[i]);
+    }
+    jitter_destroy(j);
+}
+
+static void test_redundant_copy_repairs_a_lost_frame(void)
+{
+    struct jitter *j = jitter_create(FRAME);
+    unsigned char f[FRAME];
+    push_sample(j, 0, 100, 0); push_sample(j, 1, 100, 0); push_sample(j, 2, 100, 0);
+    assert(jitter_pop(j, f) == JITTER_FRAME);
+    /* 3 is lost; the packet for 4 carries it again */
+    push_sample(j, 4, 400, 0);
+    push_sample(j, 3, 300, 1);
+    assert(jitter_pop(j, f) == JITTER_FRAME);
+    assert(jitter_pop(j, f) == JITTER_FRAME);
+    assert(jitter_pop(j, f) == JITTER_FRAME && first_sample(f) == 300);
+    assert(jitter_pop(j, f) == JITTER_FRAME && first_sample(f) == 400);
+    struct jitter_stats s;
+    jitter_get_stats(j, &s);
+    assert(s.recovered == 1 && s.concealed == 0 && s.late == 0 && s.duplicate == 0);
+    jitter_destroy(j);
+}
+
+static void test_redundant_copy_is_ignored_when_not_needed(void)
+{
+    struct jitter *j = jitter_create(FRAME);
+    unsigned char f[FRAME];
+    push_sample(j, 0, 100, 0); push_sample(j, 1, 100, 0); push_sample(j, 2, 100, 0);
+    push_sample(j, 2, 100, 1); /* already held */
+    assert(jitter_pop(j, f) == JITTER_FRAME);
+    assert(jitter_pop(j, f) == JITTER_FRAME);
+    assert(jitter_pop(j, f) == JITTER_FRAME);
+    push_sample(j, 1, 100, 1); /* already played: never late, never counted */
+    struct jitter_stats s;
+    jitter_get_stats(j, &s);
+    assert(s.recovered == 0 && s.late == 0 && s.duplicate == 0);
+    jitter_destroy(j);
+}
+
 int main(void)
 {
+    test_concealment_fades_out_over_three_frames();
+    test_redundant_copy_repairs_a_lost_frame();
+    test_redundant_copy_is_ignored_when_not_needed();
     test_primes_then_plays_in_order();
     test_lost_packet_is_concealed_and_skipped();
     test_reordering_within_window_is_repaired();

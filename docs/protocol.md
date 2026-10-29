@@ -50,15 +50,20 @@ MMS is not supported.
 Keep-alive: WebSocket ping every 10 s; client reconnects after 2 s.
 
 ## Audio channel — UDP
-16 kHz, 16-bit, mono PCM, 20 ms frames (320 samples = 640 bytes) + 4-byte header: `u16 seq`, `u16 reserved` (little endian).
+16 kHz, 16-bit, mono PCM, 20 ms frames (320 samples = 640 bytes) + 4-byte header: `u16 seq`, `u8 flags`, `u8 reserved` (little endian).
+`flags` bit 0 = the packet carries the previous frame too: payload is frame `seq` followed by frame `seq - 1` (1280 bytes), so a
+single lost packet is repaired by the next one. Receivers accept both sizes (one frame or two) and treat the second frame as a
+redundant copy: it is used only if frame `seq - 1` has not arrived. Both ends send redundancy.
 The audio daemon on the host talks UDP directly to the client; the Android app only tells it who the peer is.
 Host port: **8767** (fixed, `cellbridge_audiod serve ... [udp_port]`). The client announces its own UDP port in `answer`
 (`{"type":"answer","callId":...,"udpPort":N}`) and sends from that port; the host sends downlink frames to it and drops uplink
 packets from any other address. Downlink and uplink run for as long as the call is active.
-Both ends run a small adaptive jitter buffer (target 60-160 ms, starts at 60 ms, grows by 20 ms after a starvation, shrinks after
-5 s without one; a burst of up to target + 10 frames is absorbed without dropping audio, because a phone's Wi-Fi power
-saving delivers audio in bursts of 100-150 ms).
-Senders must pace frames at one per 20 ms rather than sending a block of them at once. A missing frame is replaced by silence; packets that arrive too late are dropped. Opus may replace PCM later.
+Both ends run a small adaptive jitter buffer (target 60-280 ms, starts at 60 ms, grows by 40 ms after a starvation, shrinks by 20 ms
+after 5 s without one; a burst of up to target + 10 frames is absorbed without dropping audio, because a phone's Wi-Fi power
+saving delivers audio in bursts of 100-250 ms).
+Senders must pace frames at one per 20 ms rather than sending a block of them at once. A frame that is still missing at playout is
+concealed by repeating the last played frame, fading out over three frames and then silence; packets that arrive too late are
+dropped. The Android host holds a low-latency Wi-Fi lock while a call's audio runs. Opus may replace PCM later.
 
 ## Audio daemon (on the Android host only, not seen by iOS)
 Root daemon `cellbridge_audiod serve <profile> <token>` <-> Android app, TCP `127.0.0.1:8766`, one client at a time.

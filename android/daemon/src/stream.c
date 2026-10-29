@@ -3,6 +3,7 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <math.h>
@@ -90,17 +91,22 @@ static double now_ms(void)
     return t.tv_sec * 1000.0 + t.tv_nsec / 1e6;
 }
 
-static void put_header(unsigned char *p, uint16_t seq)
+enum { FLAG_PREVIOUS_FRAME = 1 }; /* the packet carries frame seq-1 after frame seq (docs/protocol.md) */
+
+static void put_header(unsigned char *p, uint16_t seq, unsigned char flags)
 {
     p[0] = seq & 0xff;
     p[1] = seq >> 8;
-    p[2] = p[3] = 0;
+    p[2] = flags;
+    p[3] = 0;
 }
 
 static void *dl_loop(void *arg)
 {
     struct stream *s = arg;
-    unsigned char packet[STREAM_HEADER_BYTES + MAX_PERIOD_BYTES];
+    unsigned char packet[STREAM_HEADER_BYTES + 2 * MAX_PERIOD_BYTES];
+    unsigned char previous[MAX_PERIOD_BYTES];
+    bool have_previous = false;
     uint16_t seq = 0;
     double last_send = 0;
     struct timespec next;
@@ -135,10 +141,17 @@ static void *dl_loop(void *arg)
                 s->dl_max_gap_ms = (unsigned int)gap;
         }
         last_send = sent_at;
-        put_header(packet, seq++);
+        /* Each packet repeats the frame before it, so one lost packet costs nothing. */
+        size_t length = STREAM_HEADER_BYTES + s->period_bytes;
+        if (have_previous) {
+            memcpy(packet + length, previous, s->period_bytes);
+            length += s->period_bytes;
+        }
+        memcpy(previous, packet + STREAM_HEADER_BYTES, s->period_bytes);
+        put_header(packet, seq++, have_previous ? FLAG_PREVIOUS_FRAME : 0);
+        have_previous = true;
         /* UDP: a full socket buffer or an unreachable peer just loses this frame. */
-        if (sendto(s->fd, packet, STREAM_HEADER_BYTES + s->period_bytes, 0, (struct sockaddr *)&s->peer,
-                   sizeof(s->peer)) > 0)
+        if (sendto(s->fd, packet, length, 0, (struct sockaddr *)&s->peer, sizeof(s->peer)) > 0)
             s->dl_sent++;
     }
     return NULL;
@@ -147,7 +160,7 @@ static void *dl_loop(void *arg)
 static void *rx_loop(void *arg)
 {
     struct stream *s = arg;
-    unsigned char packet[STREAM_HEADER_BYTES + MAX_PERIOD_BYTES + 1];
+    unsigned char packet[STREAM_HEADER_BYTES + 2 * MAX_PERIOD_BYTES + 1];
     double last_rx = 0;
     while (!atomic_load(&s->stop)) {
         struct sockaddr_in from;
@@ -158,7 +171,8 @@ static void *rx_loop(void *arg)
         /* Only the announced peer may feed the call, and only whole frames. */
         if (from.sin_addr.s_addr != s->peer.sin_addr.s_addr || from.sin_port != s->peer.sin_port)
             continue;
-        if ((size_t)n != STREAM_HEADER_BYTES + s->period_bytes)
+        bool with_previous = (size_t)n == STREAM_HEADER_BYTES + 2 * (size_t)s->period_bytes && (packet[2] & FLAG_PREVIOUS_FRAME);
+        if ((size_t)n != STREAM_HEADER_BYTES + s->period_bytes && !with_previous)
             continue;
         double arrived = now_ms();
         if (last_rx > 0) {
@@ -171,7 +185,10 @@ static void *rx_loop(void *arg)
                 s->rx_max_gap_ms = (unsigned int)gap;
         }
         last_rx = arrived;
-        jitter_push(s->jitter, (uint16_t)(packet[0] | (packet[1] << 8)), packet + STREAM_HEADER_BYTES);
+        uint16_t seq = (uint16_t)(packet[0] | (packet[1] << 8));
+        jitter_push(s->jitter, seq, packet + STREAM_HEADER_BYTES);
+        if (with_previous)
+            jitter_push_redundant(s->jitter, (uint16_t)(seq - 1), packet + STREAM_HEADER_BYTES + s->period_bytes);
     }
     return NULL;
 }
@@ -300,8 +317,8 @@ void stream_stop(struct stream *s)
     if (s->jitter) {
         struct jitter_stats j;
         jitter_get_stats(s->jitter, &j);
-        daemon_log("stream: dl_sent=%u ul played=%u concealed=%u late=%u duplicate=%u overflow=%u target=%u\n",
-                s->dl_sent, j.played, j.concealed, j.late, j.duplicate, j.overflow, j.target);
+        daemon_log("stream: dl_sent=%u ul played=%u concealed=%u recovered=%u late=%u duplicate=%u overflow=%u target=%u\n",
+                s->dl_sent, j.played, j.concealed, j.recovered, j.late, j.duplicate, j.overflow, j.target);
         daemon_log(
                 "stream: dl_rms=%.0f ul_rms=%.0f | playout ticks=%u resyncs=%u avg_write_ms=%.1f max_write_ms=%u\n",
                 s->dl_samples ? sqrt(s->dl_sum_sq / s->dl_samples) : 0.0,

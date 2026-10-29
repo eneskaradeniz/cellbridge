@@ -17,9 +17,22 @@ final class AudioPacketTests: XCTestCase {
         XCTAssertEqual(decoded.pcm, pcm)
     }
 
-    func testRejectsAnythingButAWholeFrame() {
+    func testRejectsAnythingButAWholeFrameOrTwo() {
         XCTAssertNil(AudioPacket.decode(Data()))
         XCTAssertNil(AudioPacket.decode(Data(count: 643)))
         XCTAssertNil(AudioPacket.decode(Data(count: 645)))
+        XCTAssertNil(AudioPacket.decode(Data(count: 1283)))
+        XCTAssertNil(AudioPacket.decode(Data(count: 1284))) // two frames without the flag
+    }
+
+    func testCarriesThePreviousFrameWhenAsked() throws {
+        let earlier = pcm.map { $0 &+ 7 }
+        let data = AudioPacket.encode(seq: 9, pcm: pcm, previous: earlier)
+        XCTAssertEqual(data.count, 1284)
+        XCTAssertEqual(data[2], 1)
+        let decoded = try XCTUnwrap(AudioPacket.decode(data))
+        XCTAssertEqual(decoded.pcm, pcm)
+        XCTAssertEqual(decoded.previous, earlier)
+        XCTAssertNil(try XCTUnwrap(AudioPacket.decode(AudioPacket.encode(seq: 9, pcm: pcm))).previous)
     }
 }

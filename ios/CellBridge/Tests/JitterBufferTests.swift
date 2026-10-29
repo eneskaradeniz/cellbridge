@@ -35,7 +35,7 @@ final class JitterBufferTests: XCTestCase {
         XCTAssertEqual(j.pop().result, .frame)
         let hole = j.pop()
         XCTAssertEqual(hole.result, .concealed)
-        XCTAssertEqual(hole.frame, [0, 0, 0, 0])
+        XCTAssertEqual(hole.frame, [Int16](repeating: marker(11) * 3 / 4, count: samples)) // a faded repeat of 11, not a hole
         XCTAssertEqual(j.pop().result, .frame)
         let stats = j.currentStats()
         XCTAssertEqual(stats.concealed, 1)
@@ -85,7 +85,7 @@ final class JitterBufferTests: XCTestCase {
             for _ in 0..<depth { XCTAssertEqual(j.pop().result, .frame) }
             XCTAssertEqual(j.pop().result, .concealed) // nothing left: starved
         }
-        XCTAssertEqual(j.currentStats().target, 8) // 3 -> 4 -> ... -> 8, capped
+        XCTAssertEqual(j.currentStats().target, 14) // grows by 2 per starvation, capped at 14 (280 ms)
     }
 
     func testCalmPeriodShrinksBuffer() {
@@ -121,5 +121,44 @@ final class JitterBufferTests: XCTestCase {
         let popped = j.pop()
         XCTAssertEqual(popped.result, .frame)
         XCTAssertEqual(popped.frame[0], marker(10)) // only target + 10 = 13 frames stay: 10..22
+    }
+
+    func testConcealmentFadesOutOverThreeFrames() {
+        let j = make()
+        [0, 1, 2].forEach { j.push(seq: UInt16($0), frame: [Int16](repeating: 1000, count: samples)) }
+        j.push(seq: 8, frame: [Int16](repeating: 1000, count: samples)) // 3...7 missing, something buffered behind them
+        (0..<3).forEach { _ in XCTAssertEqual(j.pop().result, .frame) }
+        for expected: Int16 in [750, 500, 250, 0, 0] {
+            let popped = j.pop()
+            XCTAssertEqual(popped.result, .concealed)
+            XCTAssertEqual(popped.frame[0], expected)
+        }
+    }
+
+    func testRedundantCopyRepairsALostFrame() {
+        let j = make()
+        [0, 1, 2].forEach { push(j, $0) }
+        XCTAssertEqual(j.pop().result, .frame) // 0
+        push(j, 4) // 3 is lost; the packet for 4 carries it again
+        j.pushRedundant(seq: 3, frame: [Int16](repeating: marker(3), count: samples))
+        XCTAssertEqual(j.pop().result, .frame) // 1
+        XCTAssertEqual(j.pop().result, .frame) // 2
+        let repaired = j.pop()
+        XCTAssertEqual(repaired.result, .frame)
+        XCTAssertEqual(repaired.frame[0], marker(3))
+        XCTAssertEqual(j.pop().frame[0], marker(4))
+        let stats = j.currentStats()
+        XCTAssertEqual(stats.recovered, 1)
+        XCTAssertEqual(stats.concealed + stats.late + stats.duplicate, 0)
+    }
+
+    func testRedundantCopyIsIgnoredWhenNotNeeded() {
+        let j = make()
+        [0, 1, 2].forEach { push(j, $0) }
+        j.pushRedundant(seq: 2, frame: [Int16](repeating: marker(2), count: samples)) // already held
+        (0..<3).forEach { _ in _ = j.pop() }
+        j.pushRedundant(seq: 1, frame: [Int16](repeating: marker(1), count: samples)) // already played
+        let stats = j.currentStats()
+        XCTAssertEqual(stats.recovered + stats.late + stats.duplicate, 0)
     }
 }

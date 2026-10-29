@@ -1,7 +1,8 @@
 /* Stand-in for the iPhone, run on the device against a local `cellbridge_audiod serve`.
  * Starts DL+UL over UDP, sends a 440 Hz tone with optional loss / jitter, counts what the daemon sends back.
  *
- * usage: udp_probe <token | @token-file> <seconds> [loss_percent [jitter_ms]]
+ * usage: udp_probe <token | @token-file> <seconds> [loss_percent [jitter_ms [redundant 0|1]]]
+ * redundant (default 1) repeats the previous frame in every packet, like the phone does (docs/protocol.md).
  * With the daemon in echo mode (CELLBRIDGE_ECHO=1) the downlink carries the tone back: dl rms is then about 5657.
  */
 #include <arpa/inet.h>
@@ -16,7 +17,7 @@
 #include <time.h>
 #include <unistd.h>
 
-enum { TCP_PORT = 8766, DAEMON_UDP = 8767, FRAME_BYTES = 640, PACKET = 4 + FRAME_BYTES, QUEUE = 64 };
+enum { TCP_PORT = 8766, DAEMON_UDP = 8767, FRAME_BYTES = 640, PACKET = 4 + FRAME_BYTES, PACKET2 = PACKET + FRAME_BYTES, QUEUE = 64 };
 
 static long long now_ms(void)
 {
@@ -49,14 +50,15 @@ static int read_reply(int fd)
 
 struct pending {
     long long due_ms;
-    unsigned char packet[PACKET];
+    unsigned char packet[PACKET2];
+    unsigned length;
     int used;
 };
 
 int main(int argc, char **argv)
 {
     if (argc < 3) {
-        fprintf(stderr, "usage: %s <token> <seconds> [loss_percent [jitter_ms]]\n", argv[0]);
+        fprintf(stderr, "usage: %s <token> <seconds> [loss_percent [jitter_ms [redundant]]]\n", argv[0]);
         return 64;
     }
     char token_buf[128];
@@ -72,6 +74,8 @@ int main(int argc, char **argv)
         token = token_buf;
     }
     int seconds = atoi(argv[2]), loss = argc > 3 ? atoi(argv[3]) : 0, jitter = argc > 4 ? atoi(argv[4]) : 0;
+    int redundant = argc > 5 ? atoi(argv[5]) : 1;
+    unsigned char previous[FRAME_BYTES];
     srand(1);
 
     int tcp = socket(AF_INET, SOCK_STREAM, 0);
@@ -117,10 +121,17 @@ int main(int argc, char **argv)
         long long now = now_ms();
         if (now >= next_frame) {
             next_frame += 20;
-            unsigned char packet[PACKET] = { seq & 0xff, seq >> 8, 0, 0 };
+            unsigned char packet[PACKET2] = { seq & 0xff, seq >> 8, 0, 0 };
             int16_t *pcm = (int16_t *)(packet + 4);
             for (int i = 0; i < FRAME_BYTES / 2; i++)
                 pcm[i] = (int16_t)(8000 * sin(2 * M_PI * 440 * ((unsigned long)seq * 320 + i) / 16000.0));
+            unsigned length = PACKET;
+            if (redundant && seq > 0) {
+                packet[2] = 1;
+                memcpy(packet + PACKET, previous, FRAME_BYTES);
+                length = PACKET2;
+            }
+            memcpy(previous, pcm, FRAME_BYTES);
             seq++;
             if (rand() % 100 < loss) {
                 dropped++;
@@ -129,7 +140,8 @@ int main(int argc, char **argv)
                     if (!queue[i].used) {
                         queue[i].used = 1;
                         queue[i].due_ms = now + (jitter ? rand() % (jitter + 1) : 0);
-                        memcpy(queue[i].packet, packet, PACKET);
+                        memcpy(queue[i].packet, packet, PACKET2);
+                        queue[i].length = length;
                         break;
                     }
                 }
@@ -137,15 +149,15 @@ int main(int argc, char **argv)
         }
         for (int i = 0; i < QUEUE; i++) {
             if (queue[i].used && queue[i].due_ms <= now) {
-                sendto(udp, queue[i].packet, PACKET, 0, (struct sockaddr *)&daemon_udp, sizeof(daemon_udp));
+                sendto(udp, queue[i].packet, queue[i].length, 0, (struct sockaddr *)&daemon_udp, sizeof(daemon_udp));
                 queue[i].used = 0;
                 sent++;
             }
         }
-        unsigned char in[PACKET + 8];
+        unsigned char in[PACKET2 + 8];
         ssize_t n;
         while ((n = recv(udp, in, sizeof(in), MSG_DONTWAIT)) > 0) {
-            if (n != PACKET)
+            if (n != PACKET && n != PACKET2)
                 continue;
             uint16_t s = (uint16_t)(in[0] | (in[1] << 8));
             if (have_last && (uint16_t)(s - last_dl) != 1)

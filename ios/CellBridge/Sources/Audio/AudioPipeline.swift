@@ -37,6 +37,7 @@ final class AudioPipeline: @unchecked Sendable {
     private var droppedFrames = 0
     private var sendTimer: DispatchSourceTimer?
     private var sequence: UInt16 = 0   // send timer only
+    private var previousFrame: [Int16]? // send timer only
     private var framesSent = 0         // send timer only
     private let micSink = AVAudioMixerNode() // keeps the input unit connected; muted so the mic never loops back
     private var configChanges = 0
@@ -190,7 +191,10 @@ final class AudioPipeline: @unchecked Sendable {
 
         socket.startReceiving { [self] data in
             noteArrival()
-            if let packet = AudioPacket.decode(data) { jitter.push(seq: packet.seq, frame: packet.pcm) }
+            if let packet = AudioPacket.decode(data) {
+                jitter.push(seq: packet.seq, frame: packet.pcm)
+                if let previous = packet.previous { jitter.pushRedundant(seq: packet.seq &- 1, frame: previous) }
+            }
         }
         let sender = DispatchSource.makeTimerSource(flags: .strict, queue: DispatchQueue(label: "cellbridge.send", qos: .userInteractive))
         sender.schedule(deadline: .now() + .milliseconds(20), repeating: .milliseconds(20), leeway: .milliseconds(1))
@@ -231,7 +235,7 @@ final class AudioPipeline: @unchecked Sendable {
         dumpLock.unlock()
         socket.close()
         let s = jitter.currentStats()
-        return "audio stopped: sent=\(framesSent) played=\(s.played) concealed=\(s.concealed) late=\(s.late) overflow=\(s.overflow) target=\(s.target)"
+        return "audio stopped: sent=\(framesSent) played=\(s.played) concealed=\(s.concealed) recovered=\(s.recovered) late=\(s.late) overflow=\(s.overflow) target=\(s.target)"
             + " | mic taps=\(tapCalls) conversion failures=\(conversionFailures) \(lastFailure) engine running=\(engineWasRunning) config changes=\(configChanges)"
             + " dropped at send=\(droppedFrames)"
             + " | play queue: min depth=\(minQueueDepth == Int.max ? 0 : minQueueDepth), ran dry=\(queueUnderruns)"
@@ -320,7 +324,9 @@ final class AudioPipeline: @unchecked Sendable {
         }
         lastSend = now
         frame.withUnsafeBytes { write(Data($0), to: \.sentDump) }
-        socket.send(AudioPacket.encode(seq: sequence, pcm: frame))
+        // Each packet repeats the frame before it, so one lost packet costs nothing.
+        socket.send(AudioPacket.encode(seq: sequence, pcm: frame, previous: previousFrame))
+        previousFrame = frame
         sequence &+= 1
         framesSent += 1
     }
