@@ -27,6 +27,10 @@ final class MessageCoordinator: ObservableObject {
         switch message {
         case .sms(let id, let from, let body, let ts):
             receive(id: id, from: from, body: body, date: Date(timeIntervalSince1970: Double(ts) / 1000))
+        case .smsStatus(let clientId, let delivered):
+            do { delivered ? try store.markDelivered(clientId: clientId) : try store.markNotDelivered(clientId: clientId) }
+            catch { log("could not save a delivery report: \(error.localizedDescription)") }
+            refresh()
         case .smsResult(let clientId, let ok, let error):
             do { try store.apply(clientId: clientId, ok: ok, error: error) } catch { log("could not save a send result: \(error.localizedDescription)") }
             refresh()
@@ -53,10 +57,16 @@ final class MessageCoordinator: ObservableObject {
         send(to: message.peer, body: message.body)
     }
 
-    /// The connection dropped: sends the host never answered cannot be confirmed, and the host will replay unacked texts.
+    /// The connection dropped: the host will replay unacknowledged texts. Sends it never answered stay pending: the host
+    /// remembers client ids, so sending them again after reconnecting cannot produce a second text.
     func connectionLost() {
         ackBlocked = false
-        do { try store.failPending(reason: "not confirmed") } catch { log("could not update pending sends: \(error.localizedDescription)") }
+    }
+
+    /// After a reconnect: send again what was never answered, with the same client id. What waited a day is given up on.
+    func resendPending() {
+        do { try store.failPending(olderThan: 24 * 3600, reason: "not confirmed") } catch { log("could not update pending sends: \(error.localizedDescription)") }
+        for message in store.pending { transmit(.smsSend(clientId: message.id, to: message.peer, body: message.body)) }
         refresh()
     }
 

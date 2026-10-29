@@ -375,6 +375,7 @@ final class AppModel: ObservableObject {
             markSynced()
         case .helloAck(_, let capabilities):
             markSynced()
+            messages.resendPending()
             if capabilities.contains("calllog") { requestCallLog() }
             if capabilities.contains("smshistory"), !UserDefaults.standard.bool(forKey: "smsHistoryDone") {
                 let since = Int64((Date().timeIntervalSince1970 - Self.historyDays * 86_400) * 1000)
@@ -490,6 +491,7 @@ final class AppModel: ObservableObject {
         case .sms(let id, _, _, _): return "sms \(id)" // never log the sender or the text
         case .smsResult(let clientId, let ok, _): return "sms result \(clientId.prefix(8)) \(ok ? "sent" : "failed")"
         case .hostStatus: return "phone status"
+        case .smsStatus(let clientId, let delivered): return "sms status \(clientId.prefix(8)) \(delivered ? "delivered" : "not delivered")"
         case .transferResult(let callId, let ok): return "transfer to the phone \(callId.prefix(8)) \(ok ? "ok" : "refused")"
         case .transferOffer(let callId, _, _): return "transfer offer \(callId.prefix(8))"
         case .callLog(let entries): return "call log \(entries.count)"

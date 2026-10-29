@@ -22,6 +22,11 @@ final class HistoryProtocolTests: XCTestCase {
         XCTAssertEqual(ClientMessage.ringAck(callId: "c1").encoded(), #"{"callId":"c1","type":"ring_ack"}"#)
     }
 
+    func testSmsStatusDecodes() {
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"sms_status","clientId":"c1","status":"delivered"}"#), .smsStatus(clientId: "c1", delivered: true))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"sms_status","clientId":"c1","status":"failed"}"#), .smsStatus(clientId: "c1", delivered: false))
+    }
+
     func testDtmfEncodes() {
         XCTAssertEqual(ClientMessage.dtmf(callId: "c1", digit: "5").encoded(), #"{"callId":"c1","digit":"5","type":"dtmf"}"#)
     }

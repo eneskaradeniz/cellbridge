@@ -6,6 +6,8 @@ struct TextMessage: Codable, Identifiable, Equatable {
         case received
         case sending
         case sent
+        /// The operator confirmed the text reached the recipient's phone.
+        case delivered
         case failed(String)
     }
 
@@ -82,10 +84,22 @@ final class MessageStore {
         try update { $0.id == clientId && $0.status == .sending } to: { $0.status = ok ? .sent : .failed(error ?? "failed") }
     }
 
-    /// The connection dropped before the host answered: we cannot know whether these went out, and resending could
-    /// send a text twice, so they are reported as unconfirmed and left to the user.
-    func failPending(reason: String) throws {
-        try update { $0.status == .sending } to: { $0.status = .failed(reason) }
+    /// The operator's delivery report for a text we sent.
+    func markDelivered(clientId: String) throws {
+        try update { $0.id == clientId && ($0.status == .sent || $0.status == .sending) } to: { $0.status = .delivered }
+    }
+
+    /// A delivery report that says the text never will arrive.
+    func markNotDelivered(clientId: String) throws {
+        try update { $0.id == clientId && ($0.status == .sent || $0.status == .sending) } to: { $0.status = .failed("not delivered") }
+    }
+
+    /// Texts still waiting for the host's answer (the connection dropped, the app was closed), oldest first.
+    var pending: [TextMessage] { messages.filter { $0.direction == .outgoing && $0.status == .sending } }
+
+    /// Gives up on texts that waited longer than `age`: after that it is no longer safe to guess.
+    func failPending(olderThan age: TimeInterval, now: Date = Date(), reason: String) throws {
+        try update { $0.status == .sending && now.timeIntervalSince($0.date) > age } to: { $0.status = .failed(reason) }
     }
 
     /// Adds the phone's older texts (docs/protocol.md `sms_history`) as read messages, once each: an incoming text has the

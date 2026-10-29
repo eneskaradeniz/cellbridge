@@ -244,6 +244,12 @@ private class Session(
                     delay(STATUS_INTERVAL_MS)
                 }
             }
+            val statusSmsForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
+                sms.statuses.collect {
+                    acked.await()
+                    send(ServerMessage.SmsStatus(it.clientId, if (it.delivered) "delivered" else "failed"))
+                }
+            }
             val smsForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
                 sms.incoming.collect {
                     acked.await()
@@ -256,6 +262,7 @@ private class Session(
                 .forEach { send(ServerMessage.Ring(it.id, it.number)) }
             // Texts the client has not acknowledged yet (it may have been offline); it dedupes by id.
             if (sms.isAvailable()) runCatching { sms.unacknowledged() }.getOrDefault(emptyList()).forEach { send(it.toMessage()) }
+            if (sms.isAvailable()) runCatching { sms.delivered() }.getOrDefault(emptyList()).forEach { send(ServerMessage.SmsStatus(it, "delivered")) }
             acked.complete(Unit)
 
             presence.joined()
@@ -269,6 +276,7 @@ private class Session(
                 offerForwarder.cancel()
                 takeBackForwarder.cancel()
                 statusForwarder.cancel()
+                statusSmsForwarder.cancel()
                 smsForwarder.cancel()
             }
         }
@@ -325,7 +333,7 @@ private class Session(
             is ClientMessage.SmsSend -> {
                 // Sending can take a while; keep reading frames (pings, acks) meanwhile.
                 scope.launch {
-                    val result = sms.send(message.to, message.body)
+                    val result = sms.send(message.to, message.body, message.clientId)
                     send(ServerMessage.SmsResult(message.clientId, result is SendResult.Sent, (result as? SendResult.Failed)?.error))
                 }
                 return

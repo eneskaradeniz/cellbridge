@@ -35,13 +35,21 @@ class SmsRepositoryTest {
 
     private class FakeSender(var ok: Boolean = true) : SmsSender {
         val calls = mutableListOf<Pair<String, String>>()
-        override suspend fun send(to: String, body: String): Boolean = ok.also { calls += to to body }
+        val tags = mutableListOf<String?>()
+        override suspend fun send(to: String, body: String, tag: String?): Boolean = ok.also { calls += to to body; tags += tag }
     }
 
     private val store = FakeStore()
     private val sender = FakeSender()
     private var role = true
-    private val repository = SmsRepository(store, sender) { role }
+    private class MemoryStore : LedgerStore {
+        var text: String? = null
+        override fun load() = text
+        override fun save(text: String) { this.text = text }
+    }
+
+    private val ledgerStore = MemoryStore()
+    private val repository = SmsRepository(store, sender, { role }, SmsLedger(ledgerStore))
 
     @Test
     fun `a received text is stored first and then announced with its stored id`() = runBlocking {
@@ -97,5 +105,59 @@ class SmsRepositoryTest {
         assertTrue(repository.isAvailable())
         role = false
         assertTrue(!repository.isAvailable())
+    }
+
+    @Test
+    fun `the same client id is sent once and answered again from memory`() = runBlocking {
+        assertEquals(SendResult.Sent, repository.send("+90555", "selam", "c1"))
+        assertEquals(SendResult.Sent, repository.send("+90555", "selam", "c1"))
+        assertEquals(1, sender.calls.size)
+        assertEquals(listOf<String?>("c1"), sender.tags)
+    }
+
+    @Test
+    fun `a failed send is remembered too, so a retry does not become a second try`() = runBlocking {
+        sender.ok = false
+        assertEquals(SendResult.Failed("failed"), repository.send("+90555", "selam", "c1"))
+        sender.ok = true
+        assertEquals(SendResult.Failed("failed"), repository.send("+90555", "selam", "c1"))
+        assertEquals(1, sender.calls.size)
+    }
+
+    @Test
+    fun `without a client id every send goes out`() = runBlocking {
+        repository.send("+90555", "a")
+        repository.send("+90555", "a")
+        assertEquals(2, sender.calls.size)
+    }
+
+    @Test
+    fun `the ledger survives a restart`() = runBlocking {
+        repository.send("+90555", "selam", "c1")
+        val reborn = SmsRepository(store, sender, { role }, SmsLedger(ledgerStore))
+        assertEquals(SendResult.Sent, reborn.send("+90555", "selam", "c1"))
+        assertEquals(1, sender.calls.size)
+    }
+
+    @Test
+    fun `a delivery report is announced once and remembered`() = runBlocking {
+        repository.send("+90555", "selam", "c1")
+        val first = async(start = CoroutineStart.UNDISPATCHED) { repository.statuses.first() }
+        repository.onDelivery("c1", true)
+        assertEquals(SmsStatus("c1", true), withTimeout(5_000) { first.await() })
+        assertEquals(listOf("c1"), repository.delivered())
+        // the same report again changes nothing
+        var again: SmsStatus? = null
+        val watcher = async(start = CoroutineStart.UNDISPATCHED) { again = repository.statuses.first() }
+        repository.onDelivery("c1", true)
+        assertEquals(null, again)
+        watcher.cancel()
+    }
+
+    @Test
+    fun `status reports map to delivered, pending or failed`() {
+        assertEquals(true, deliveryOutcome(0))
+        assertEquals(null, deliveryOutcome(32))
+        assertEquals(false, deliveryOutcome(66))
     }
 }

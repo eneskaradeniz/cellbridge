@@ -19,8 +19,9 @@ import javax.inject.Inject
 /** Sends through the radio and waits until the platform reports every part as sent (or refused). */
 class PlatformSmsSender @Inject constructor(@ApplicationContext private val context: Context) : SmsSender {
     private val sequence = AtomicInteger()
+    private val deliverySequence = AtomicInteger()
 
-    override suspend fun send(to: String, body: String): Boolean {
+    override suspend fun send(to: String, body: String, tag: String?): Boolean {
         val manager = smsManager()
         val parts = manager.divideMessage(body)
         val action = "com.cellbridge.SMS_SENT.${sequence.incrementAndGet()}"
@@ -38,7 +39,16 @@ class PlatformSmsSender @Inject constructor(@ApplicationContext private val cont
             val sentIntent = PendingIntent.getBroadcast(
                 context, 0, Intent(action).setPackage(context.packageName), PendingIntent.FLAG_IMMUTABLE,
             )
-            manager.sendMultipartTextMessage(to, null, parts, ArrayList(parts.map { sentIntent }), null)
+            // Only the last part asks for a delivery report: the operator confirms the whole text with it.
+            val deliveredIntent = tag?.let {
+                PendingIntent.getBroadcast(
+                    context, deliverySequence.incrementAndGet(),
+                    Intent(SmsDeliveryReceiver.ACTION).setPackage(context.packageName).putExtra(SmsDeliveryReceiver.TAG, it),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                )
+            }
+            val deliveryIntents = if (deliveredIntent == null) null else ArrayList<PendingIntent?>(parts.indices.map { i -> if (i == parts.lastIndex) deliveredIntent else null })
+            manager.sendMultipartTextMessage(to, null, parts, ArrayList(parts.map { sentIntent }), deliveryIntents)
             withTimeoutOrNull(SEND_TIMEOUT_MS) { done.await() } ?: false
         } catch (e: RuntimeException) {
             false

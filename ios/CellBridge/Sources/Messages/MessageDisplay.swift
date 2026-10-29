@@ -8,6 +8,7 @@ enum MessageDisplay {
         case "invalid": return String(localized: "invalid number or empty message")
         case "failed": return String(localized: "the phone could not send it")
         case "not confirmed": return String(localized: "no answer from the phone: it may or may not have gone out")
+        case "not delivered": return String(localized: "the operator could not deliver it")
         default: return String(localized: "the phone could not send it")
         }
     }
@@ -52,6 +53,7 @@ enum MessageDisplay {
         case (.incoming, _), (_, .received): return (time, false)
         case (.outgoing, .sending): return (String(localized: "Sending…"), false)
         case (.outgoing, .sent): return (String(localized: "Sent · \(time)"), false)
+        case (.outgoing, .delivered): return (String(localized: "Delivered · \(time)"), false)
         case (.outgoing, .failed(let reason)): return (String(localized: "Not sent: \(failure(reason)) · \(time)"), true)
         }
     }

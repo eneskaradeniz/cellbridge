@@ -1621,6 +1621,26 @@
           }
         }
       }
+    },
+    "Delivered · %@": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "İletildi · %@"
+          }
+        }
+      }
+    },
+    "the operator could not deliver it": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "operatör iletemedi"
+          }
+        }
+      }
     }
   }
 }

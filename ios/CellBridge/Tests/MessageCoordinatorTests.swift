@@ -72,8 +72,14 @@ final class MessageCoordinatorTests: XCTestCase {
         guard case .smsSend(let firstId, _, _)? = sent.first else { return XCTFail("nothing sent") }
 
         c.handle(.smsResult(clientId: firstId, ok: false, error: "invalid"))
-        c.connectionLost() // the second never got an answer
-        XCTAssertEqual(c.conversations[0].messages.map(\.status), [.failed("invalid"), .failed("not confirmed")])
+        c.connectionLost() // the second never got an answer: it stays pending and is sent again, with its own client id
+        XCTAssertEqual(c.conversations[0].messages.map(\.status), [.failed("invalid"), .sending])
+
+        sent.removeAll()
+        c.resendPending()
+        guard case .smsSend(let again, _, let body)? = sent.first else { return XCTFail("the pending text was not sent again") }
+        XCTAssertEqual(body, "iki")
+        XCTAssertEqual(c.conversations[0].messages.last?.id, again) // the same text, the same id
     }
 
     func testRetryReplacesTheFailedTextWithANewSend() {

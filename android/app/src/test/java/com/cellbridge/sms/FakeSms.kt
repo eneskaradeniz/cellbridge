@@ -17,5 +17,9 @@ class FakeSmsGateway : SmsGateway {
     override fun isAvailable() = available
     override suspend fun unacknowledged() = pending
     override suspend fun acknowledge(id: Long) { acknowledged += id }
-    override suspend fun send(to: String, body: String): SendResult = sendResult.also { sent += to to body }
+    val statusFlow = MutableSharedFlow<SmsStatus>(extraBufferCapacity = 8)
+    var deliveredIds: List<String> = emptyList()
+    override val statuses: SharedFlow<SmsStatus> = statusFlow
+    override suspend fun delivered() = deliveredIds
+    override suspend fun send(to: String, body: String, clientId: String?): SendResult = sendResult.also { sent += to to body }
 }

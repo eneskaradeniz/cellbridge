@@ -28,6 +28,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `sms_ack` | iOS -> host | `id` |
 | `sms_send` | iOS -> host | `clientId`, `to`, `body` |
 | `sms_result` | host -> iOS | `clientId`, `ok`, `error?` |
+| `sms_status` | host -> iOS | `clientId`, `status` (`delivered` / `failed`) |
 | `call_log_request` | iOS -> host | `after?` (host call id, string), `since?` (ms since epoch) |
 | `call_log` | host -> iOS | `entries`: `id`, `number`, `name?`, `kind`, `ts`, `duration` |
 | `sms_history_request` | iOS -> host | `since?` (ms since epoch) |
@@ -72,6 +73,10 @@ SMS delivery is lossless: the host stores every incoming message in the system S
 acknowledges that message **and every earlier one** (ids only ever increase and are never reused, even after a text is deleted on the host); after `hello_ack` the host re-sends everything newer than the last
 acknowledged id, so a client that was offline (or crashed before saving) catches up. Clients persist a message before acking it and
 dedupe by `id`. `sms` is advertised in `capabilities` only while the host app is the default SMS app.
+`sms_send` is idempotent: the host remembers the `clientId` of every text it sent (the last few hundred, across restarts) and answers a repeated
+`clientId` with the earlier result without sending again, so a client that never saw the answer (the connection dropped) simply sends it again
+after reconnecting. `sms_status` reports the operator's delivery report for a sent text (`delivered`, or `failed` when the report says it
+never will be); after `hello_ack` the host repeats the `delivered` ones it remembers, clients ignore what they know. Not every operator sends reports.
 `sms_send` is answered by exactly one `sms_result` with the same `clientId`; `ok:false` carries a short `error`
 (`invalid` for a bad number or empty/oversized body, `failed` when the radio refused). Long texts are sent as multipart messages.
 MMS is not supported.

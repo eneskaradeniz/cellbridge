@@ -17,8 +17,17 @@ interface SmsGateway {
     /** Acknowledges [id] and every earlier text. */
     suspend fun acknowledge(id: Long)
 
-    suspend fun send(to: String, body: String): SendResult
+    /** [clientId], when given, makes the send idempotent and ties the operator's delivery report to it. */
+    suspend fun send(to: String, body: String, clientId: String? = null): SendResult
+
+    /** Delivery reports as they arrive: the client id and whether the text was delivered. */
+    val statuses: SharedFlow<SmsStatus>
+
+    /** Client ids whose delivery report said delivered. */
+    suspend fun delivered(): List<String>
 }
+
+data class SmsStatus(val clientId: String, val delivered: Boolean)
 
 /** The system SMS database plus the acknowledgement cursor. */
 interface SmsStore {
@@ -32,9 +41,9 @@ interface SmsStore {
     fun acknowledge(id: Long)
 }
 
-/** Hands a text to the radio; true only if every part was sent. */
+/** Hands a text to the radio; true only if every part was sent. [tag] comes back with the delivery report. */
 interface SmsSender {
-    suspend fun send(to: String, body: String): Boolean
+    suspend fun send(to: String, body: String, tag: String? = null): Boolean
 }
 
 fun interface SmsRole {

@@ -91,6 +91,7 @@ enum ServerMessage: Equatable {
     case sms(id: String, from: String, body: String, ts: Int64)
     case smsResult(clientId: String, ok: Bool, error: String?)
     case hostStatus(HostInfo)
+    case smsStatus(clientId: String, delivered: Bool)
     case transferResult(callId: String, ok: Bool)
     case transferOffer(callId: String, number: String?, connectedAt: Int64?)
     case callLog(entries: [HostCall])
@@ -125,6 +126,9 @@ enum ServerMessage: Equatable {
         case "sms_result":
             guard let clientId = object["clientId"] as? String, let ok = object["ok"] as? Bool else { return nil }
             return .smsResult(clientId: clientId, ok: ok, error: object["error"] as? String)
+        case "sms_status":
+            guard let clientId = object["clientId"] as? String, let status = object["status"] as? String else { return nil }
+            return .smsStatus(clientId: clientId, delivered: status == "delivered")
         case "host_status":
             return .hostStatus(HostInfo(battery: (object["battery"] as? NSNumber)?.intValue, charging: object["charging"] as? Bool ?? false,
                                         signal: (object["signal"] as? NSNumber)?.intValue, operatorName: object["operator"] as? String))

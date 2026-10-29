@@ -35,12 +35,33 @@ final class MessageStoreTests: XCTestCase {
     func testLosingTheConnectionMarksOnlyPendingSendsAsUnconfirmed() throws {
         let store = MessageStore(url: nil)
         let done = try store.queueOutgoing(to: "+905551112233", body: "bir")
-        _ = try store.queueOutgoing(to: "+905551112233", body: "iki")
+        _ = try store.queueOutgoing(to: "+905551112233", body: "iki", date: t0)
         try store.apply(clientId: done.id, ok: true, error: nil)
         try store.receive(hostId: "1", from: "+905551112233", body: "gelen", date: t0)
 
-        try store.failPending(reason: "not confirmed")
+        XCTAssertEqual(store.pending.map(\.body), ["iki"])
+        try store.failPending(olderThan: 3600, now: t0.addingTimeInterval(60), reason: "not confirmed") // too young to give up on
+        XCTAssertEqual(store.messages.map(\.status), [.sent, .sending, .received])
+        try store.failPending(olderThan: 3600, now: t0.addingTimeInterval(7200), reason: "not confirmed")
         XCTAssertEqual(store.messages.map(\.status), [.sent, .failed("not confirmed"), .received])
+    }
+
+    func testADeliveryReportMarksASentTextDelivered() throws {
+        let store = MessageStore(url: nil)
+        let sent = try store.queueOutgoing(to: "+905551112233", body: "bir")
+        try store.apply(clientId: sent.id, ok: true, error: nil)
+        try store.markDelivered(clientId: sent.id)
+        XCTAssertEqual(store.messages.first?.status, .delivered)
+        try store.markNotDelivered(clientId: sent.id) // a late contradicting report changes nothing
+        XCTAssertEqual(store.messages.first?.status, .delivered)
+    }
+
+    func testAReportThatItNeverArrivesFailsTheText() throws {
+        let store = MessageStore(url: nil)
+        let sent = try store.queueOutgoing(to: "+905551112233", body: "bir")
+        try store.apply(clientId: sent.id, ok: true, error: nil)
+        try store.markNotDelivered(clientId: sent.id)
+        XCTAssertEqual(store.messages.first?.status, .failed("not delivered"))
     }
 
     func testConversationsGroupByNumberFormatAndSortByLatest() throws {

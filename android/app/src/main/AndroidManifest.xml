@@ -92,6 +92,8 @@
             </intent-filter>
         </service>
 
+        <receiver android:name=".sms.SmsDeliveryReceiver" android:exported="false" />
+
         <receiver
             android:name=".sms.SmsDeliverReceiver"
             android:exported="true"
