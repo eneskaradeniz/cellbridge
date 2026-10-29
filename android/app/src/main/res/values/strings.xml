@@ -28,4 +28,25 @@
     <string name="incall_on_iphone">On the iPhone</string>
     <string name="call_channel">Calls</string>
     <string name="call_notification_text">Tap to return to the call</string>
+    <string name="card_iphone">iPhone</string>
+    <string name="iphone_connected">Connected</string>
+    <string name="iphone_not_connected">Not connected</string>
+    <string name="last_connected">Last connected at %1$s</string>
+    <string name="never_connected">Has not connected since the app started</string>
+    <string name="card_network">Address to type on the iPhone</string>
+    <string name="no_network">No Wi-Fi or hotspot address: join a network or turn the hotspot on</string>
+    <string name="card_audio">Call audio</string>
+    <string name="audio_ready">Ready: the call-audio daemon answers</string>
+    <string name="audio_missing">Not available: calls work, but the audio stays on this phone</string>
+    <string name="card_push">Calls while the iPhone app is closed</string>
+    <string name="push_key_missing">No APNs key installed</string>
+    <string name="push_token_missing">Key installed, waiting for the iPhone to register</string>
+    <string name="push_ready">Ready</string>
+    <string name="card_battery">Battery</string>
+    <string name="charging">charging</string>
+    <string name="card_roles">Roles</string>
+    <string name="card_pairing">Pairing code</string>
+    <string name="show_code">Show</string>
+    <string name="hide_code">Hide</string>
+    <string name="pairing_hint">Enter it once on the iPhone. It hides again after ten seconds.</string>
 </resources>

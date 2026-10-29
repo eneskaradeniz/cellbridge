@@ -46,6 +46,9 @@ class PushNotifier @Inject constructor(
 
     override fun register(target: PushTarget) = store.save(target)
 
+    /** The iPhone has registered its push token. */
+    fun hasToken() = store.load() != null
+
     fun start(scope: CoroutineScope) {
         scope.launch {
             feed.events.filterIsInstance<CallEvent.Ringing>().collect { event ->

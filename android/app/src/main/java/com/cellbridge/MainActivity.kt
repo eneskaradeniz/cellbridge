@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,7 +17,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.produceState
+import com.cellbridge.status.HostStatus
+import com.cellbridge.status.HostStatusReader
+import com.cellbridge.ui.StatusScreen
+import kotlinx.coroutines.delay
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -39,6 +48,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
     @Inject lateinit var roles: DefaultRoles
     @Inject lateinit var feed: com.cellbridge.telecom.CallFeed
+    @Inject lateinit var statusReader: HostStatusReader
     @Inject lateinit var pairingToken: PairingToken
     @Inject lateinit var controlServer: ControlServer
 
@@ -54,19 +64,18 @@ class MainActivity : ComponentActivity() {
         val callLog = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
         if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) callLog.launch(Manifest.permission.READ_CALL_LOG)
         ControlService.start(this)
+        enableEdgeToEdge()
         setContent {
-            MaterialTheme {
-                Column(
-                    modifier = Modifier.safeDrawingPadding().padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium)
+            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+                val status by produceState<HostStatus?>(null) {
+                    while (true) {
+                        value = statusReader.read()
+                        delay(2_000)
+                    }
+                }
+                StatusScreen(status, pairingToken.value) {
                     RoleRow(AppRole.DIALER, R.string.role_dialer)
                     RoleRow(AppRole.SMS, R.string.role_sms)
-                    val running by controlServer.running.collectAsState()
-                    Text(stringResource(if (running) R.string.server_running else R.string.server_stopped))
-                    Text(stringResource(R.string.pairing_token), style = MaterialTheme.typography.bodySmall)
-                    SelectionContainer { Text(pairingToken.value, style = MaterialTheme.typography.headlineSmall) }
                 }
             }
         }

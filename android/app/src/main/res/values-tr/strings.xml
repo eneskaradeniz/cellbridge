@@ -28,4 +28,25 @@
     <string name="incall_on_iphone">iPhone\'da</string>
     <string name="call_channel">Aramalar</string>
     <string name="call_notification_text">Aramaya dönmek için dokunun</string>
+    <string name="card_iphone">iPhone</string>
+    <string name="iphone_connected">Bağlı</string>
+    <string name="iphone_not_connected">Bağlı değil</string>
+    <string name="last_connected">Son bağlanma: %1$s</string>
+    <string name="never_connected">Uygulama başladığından beri bağlanmadı</string>
+    <string name="card_network">iPhone\'a yazılacak adres</string>
+    <string name="no_network">Wi-Fi ya da hotspot adresi yok: bir ağa bağlanın veya hotspot\'u açın</string>
+    <string name="card_audio">Arama sesi</string>
+    <string name="audio_ready">Hazır: arama ses daemon\'u yanıt veriyor</string>
+    <string name="audio_missing">Yok: arama çalışır, ama ses bu telefonda kalır</string>
+    <string name="card_push">iPhone uygulaması kapalıyken arama</string>
+    <string name="push_key_missing">APNs anahtarı yüklü değil</string>
+    <string name="push_token_missing">Anahtar yüklü, iPhone\'un kaydolması bekleniyor</string>
+    <string name="push_ready">Hazır</string>
+    <string name="card_battery">Pil</string>
+    <string name="charging">şarj oluyor</string>
+    <string name="card_roles">Roller</string>
+    <string name="card_pairing">Eşleşme kodu</string>
+    <string name="show_code">Göster</string>
+    <string name="hide_code">Gizle</string>
+    <string name="pairing_hint">iPhone\'a bir kez girin. On saniye sonra yeniden gizlenir.</string>
 </resources>
