@@ -1,7 +1,11 @@
 package com.cellbridge.history
 
 import android.Manifest
+import android.content.ContentResolver
 import android.content.Context
+import android.database.Cursor
+import android.net.Uri
+import android.os.Bundle
 import android.content.pm.PackageManager
 import android.provider.CallLog
 import android.provider.Telephony
@@ -23,9 +27,9 @@ class TelephonyHistory @Inject constructor(@ApplicationContext private val conte
         if (!callsAvailable()) return@withContext emptyList()
         val columns = arrayOf(CallLog.Calls._ID, CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.TYPE, CallLog.Calls.DATE, CallLog.Calls.DURATION)
         val result = mutableListOf<CallLogEntry>()
-        resolver.query(
+        newest(
             CallLog.Calls.CONTENT_URI, columns, "${CallLog.Calls._ID} > ? AND ${CallLog.Calls.DATE} >= ?",
-            arrayOf(afterId.toString(), sinceMs.toString()), "${CallLog.Calls.DATE} DESC LIMIT $limit",
+            arrayOf(afterId.toString(), sinceMs.toString()), CallLog.Calls.DATE, limit,
         )?.use {
             while (it.moveToNext()) {
                 val kind = callKind(it.getInt(3)) ?: continue
@@ -35,13 +39,28 @@ class TelephonyHistory @Inject constructor(@ApplicationContext private val conte
         result.reversed()
     }
 
+    /**
+     * The newest [limit] rows by [dateColumn]. The limit goes in the query arguments: Android 15's providers refuse a LIMIT written
+     * into the sort order ("Invalid token LIMIT") for apps, whatever works from the shell.
+     */
+    private fun newest(uri: Uri, columns: Array<String>, selection: String, args: Array<String>, dateColumn: String, limit: Int): Cursor? {
+        val query = Bundle().apply {
+            putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+            putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, args)
+            putStringArray(ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(dateColumn))
+            putInt(ContentResolver.QUERY_ARG_SORT_DIRECTION, ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
+            putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
+        }
+        return resolver.query(uri, columns, query, null)
+    }
+
     override suspend fun texts(sinceMs: Long, limit: Int): List<TextHistoryItem> = withContext(Dispatchers.IO) {
         val columns = arrayOf(Telephony.Sms._ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.DATE_SENT, Telephony.Sms.TYPE)
         val result = mutableListOf<TextHistoryItem>()
         runCatching {
-            resolver.query(
+            newest(
                 Telephony.Sms.CONTENT_URI, columns, "${Telephony.Sms.DATE} >= ? AND ${Telephony.Sms.TYPE} IN (1, 2)",
-                arrayOf(sinceMs.toString()), "${Telephony.Sms.DATE} DESC LIMIT $limit",
+                arrayOf(sinceMs.toString()), Telephony.Sms.DATE, limit,
             )?.use {
                 while (it.moveToNext()) {
                     val outgoing = it.getInt(5) == Telephony.Sms.MESSAGE_TYPE_SENT

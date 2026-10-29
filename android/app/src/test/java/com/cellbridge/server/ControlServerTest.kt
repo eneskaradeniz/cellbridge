@@ -89,6 +89,12 @@ class ControlServerTest {
         )
     }
 
+    private class ExplodingHistory : HistorySource {
+        override fun callsAvailable() = true
+        override suspend fun calls(afterId: Long, sinceMs: Long, limit: Int): List<CallLogEntry> = throw IllegalArgumentException("Invalid token LIMIT")
+        override suspend fun texts(sinceMs: Long, limit: Int) = emptyList<TextHistoryItem>()
+    }
+
     private class FakePush(var available: Boolean = true) : PushRegistry {
         var registered: PushTarget? = null
         override fun available() = available
@@ -109,6 +115,7 @@ class ControlServerTest {
 
     private fun withServer(
         status: com.cellbridge.status.PhoneStatusSource = com.cellbridge.status.NoPhoneStatus,
+        historySource: HistorySource = history,
         block: suspend (connect: suspend (suspend DefaultClientWebSocketSession.() -> Unit) -> Unit) -> Unit,
     ) =
         testApplication {
@@ -117,7 +124,7 @@ class ControlServerTest {
                     feed, commands, bridge, sms, dialer, token = "SECRET",
                     capabilities = { listOf("calls") + if (audio.isAvailable()) listOf("audio") else emptyList() },
                     authFailureDelay = Duration.ZERO,
-                    history = history,
+                    history = historySource,
                     push = push,
                     presence = presence,
                     transfers = transfers,
@@ -604,6 +611,17 @@ class ControlServerTest {
             assertEquals("true", status.str("charging"))
             assertEquals("3", status.str("signal"))
             assertEquals("Turkcell", status.str("operator"))
+        }
+    }
+
+    @Test
+    fun `a request that fails is answered with an error and the connection stays up`() = withServer(historySource = ExplodingHistory()) { connect ->
+        connect {
+            login()
+            say("""{"type":"call_log_request"}""")
+            assertEquals("internal", hear().str("code"))
+            say("""{"type":"hello","version":1,"token":"x"}""") // anything that gets an answer proves the session lives
+            assertEquals("bad_message", hear().str("code"))
         }
     }
 }

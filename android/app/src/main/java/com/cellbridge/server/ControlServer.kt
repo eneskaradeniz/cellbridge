@@ -45,6 +45,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -268,7 +269,17 @@ private class Session(
             presence.joined()
             try {
                 for (frame in ws.incoming) {
-                    if (frame is Frame.Text) handle(decodeClientMessage(frame.readText()), scope = this@coroutineScope)
+                    if (frame !is Frame.Text) continue
+                    // A request that fails (a provider refusing a query, say) must not end the whole connection: the client
+                    // would reconnect, ask again, and loop.
+                    try {
+                        handle(decodeClientMessage(frame.readText()), scope = this@coroutineScope)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w("CellBridge", "request failed: ${e::class.simpleName}")
+                        send(ServerMessage.Error("internal"))
+                    }
                 }
             } finally {
                 presence.left()
