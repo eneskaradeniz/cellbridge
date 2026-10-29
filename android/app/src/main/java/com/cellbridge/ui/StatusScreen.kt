@@ -55,7 +55,7 @@ private val Bad = Color(0xFFD6453D)
 
 /** The phone's main screen: is the bridge up, where to point the iPhone, is everything it needs in place. */
 @Composable
-fun StatusScreen(status: HostStatus?, pairingCode: String, pairingLink: String, roles: @Composable () -> Unit) {
+fun StatusScreen(status: HostStatus?, pairingCode: String, pairingLink: String, onUnrestrict: () -> Unit, roles: @Composable () -> Unit) {
     run {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
@@ -114,6 +114,15 @@ fun StatusScreen(status: HostStatus?, pairingCode: String, pairingLink: String, 
                         else -> Good
                     },
                 )
+            }
+
+            Section(stringResource(R.string.card_unrestricted)) {
+                if (status.unrestricted) {
+                    Line(stringResource(R.string.unrestricted_ok), Good)
+                } else {
+                    Line(stringResource(R.string.unrestricted_missing), Warn)
+                    TextButton(onClick = onUnrestrict) { Text(stringResource(R.string.unrestricted_ask)) }
+                }
             }
 
             Section(stringResource(R.string.card_roles)) { roles() }

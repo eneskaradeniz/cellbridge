@@ -55,6 +55,7 @@ fun MainScreen(
     initialNumber: String?,
     recents: List<CallLogEntry>,
     onCall: (String) -> Unit,
+    onUnrestrict: () -> Unit,
     roles: @Composable () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(if (initialNumber != null) 1 else 0) }
@@ -66,7 +67,7 @@ fun MainScreen(
                 }
             }
             when (tab) {
-                0 -> StatusScreen(status, pairingCode, pairingLink, roles)
+                0 -> StatusScreen(status, pairingCode, pairingLink, onUnrestrict, roles)
                 1 -> KeypadScreen(initialNumber.orEmpty(), onCall)
                 else -> RecentsScreen(recents, onCall)
             }

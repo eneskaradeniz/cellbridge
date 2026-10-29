@@ -60,4 +60,8 @@
     <string name="kind_outgoing">Outgoing</string>
     <string name="kind_missed">Missed</string>
     <string name="kind_rejected">Declined</string>
+    <string name="card_unrestricted">Battery optimisation</string>
+    <string name="unrestricted_ok">Not restricted: the connection stays up with the screen off</string>
+    <string name="unrestricted_missing">Restricted: with the screen off in a pocket Android may cut the connection</string>
+    <string name="unrestricted_ask">Allow</string>
 </resources>

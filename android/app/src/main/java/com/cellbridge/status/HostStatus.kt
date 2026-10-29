@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.PowerManager
 import android.telephony.TelephonyManager
 import com.cellbridge.audio.CallAudioBridge
 import com.cellbridge.push.PushNotifier
@@ -28,6 +29,8 @@ data class HostStatus(
     val charging: Boolean,
     val pushKey: Boolean,
     val pushToken: Boolean,
+    /** Not subject to battery optimisation (Doze). */
+    val unrestricted: Boolean,
 )
 
 /** A name a person recognises for an interface; null for the ones the iPhone can never reach (mobile data, loopback). */
@@ -87,6 +90,7 @@ class HostStatusReader @Inject constructor(
             charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL,
             pushKey = push.available(),
             pushToken = push.hasToken(),
+            unrestricted = context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName) == true,
         )
     }
 

@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
                 val recents by produceState(emptyList<CallLogEntry>(), refresh) {
                     value = runCatching { history.calls(0, 0, 100).reversed() }.getOrDefault(emptyList())
                 }
-                MainScreen(status, pairingToken.value, link, dialNumber, recents, ::placeCall) {
+                MainScreen(status, pairingToken.value, link, dialNumber, recents, ::placeCall, ::askToStayAwake) {
                     RoleRow(AppRole.DIALER, R.string.role_dialer)
                     RoleRow(AppRole.SMS, R.string.role_sms)
                 }
@@ -94,6 +94,14 @@ class MainActivity : ComponentActivity() {
     /** A number handed over by another app (a tel: link, the DIAL action): the keypad opens with it filled in. */
     private val dialNumber: String? by lazy {
         intent?.takeIf { it.action == android.content.Intent.ACTION_DIAL }?.data?.schemeSpecificPart?.let(::sanitizeDial)?.takeIf { it.isNotEmpty() }
+    }
+
+    /** The system's own dialog for leaving the app out of battery optimisation. */
+    @android.annotation.SuppressLint("BatteryLife")
+    private fun askToStayAwake() {
+        runCatching {
+            startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:$packageName")))
+        }
     }
 
     /** Places a call from this phone itself, through Telecom: that includes emergency numbers, which the bridge refuses. */

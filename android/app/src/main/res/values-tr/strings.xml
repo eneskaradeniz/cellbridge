@@ -60,4 +60,8 @@
     <string name="kind_outgoing">Giden</string>
     <string name="kind_missed">Cevapsız</string>
     <string name="kind_rejected">Reddedilen</string>
+    <string name="card_unrestricted">Pil optimizasyonu</string>
+    <string name="unrestricted_ok">Kısıtlı değil: ekran kapalıyken bağlantı sürer</string>
+    <string name="unrestricted_missing">Kısıtlı: cepte ekran kapalıyken Android bağlantıyı kesebilir</string>
+    <string name="unrestricted_ask">İzin ver</string>
 </resources>
