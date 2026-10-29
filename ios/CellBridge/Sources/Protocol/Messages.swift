@@ -11,6 +11,8 @@ enum ClientMessage: Equatable {
     case dial(clientId: String, number: String, udpPort: Int?)
     case smsAck(id: String)
     case smsSend(clientId: String, to: String, body: String)
+    case callLogRequest(after: String?, since: Int64?)
+    case smsHistoryRequest(since: Int64?)
 
     func encoded() -> String {
         var object: [String: Any]
@@ -31,6 +33,13 @@ enum ClientMessage: Equatable {
             object = ["type": "sms_ack", "id": id]
         case .smsSend(let clientId, let to, let body):
             object = ["type": "sms_send", "clientId": clientId, "to": to, "body": body]
+        case .callLogRequest(let after, let since):
+            object = ["type": "call_log_request"]
+            if let after { object["after"] = after }
+            if let since { object["since"] = since }
+        case .smsHistoryRequest(let since):
+            object = ["type": "sms_history_request"]
+            if let since { object["since"] = since }
         }
         let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
         return String(decoding: data, as: UTF8.self)
@@ -41,6 +50,25 @@ enum EndReason: String, Equatable {
     case missed, rejected
 }
 
+/// A row of the phone's call log (docs/protocol.md `call_log`). `kind` is incoming, outgoing, missed or rejected.
+struct HostCall: Equatable {
+    let id: String
+    let number: String
+    let name: String?
+    let kind: String
+    let ts: Int64
+    let duration: Int
+}
+
+/// A text from the phone's database (docs/protocol.md `sms_history`).
+struct HostText: Equatable {
+    let id: String
+    let peer: String
+    let body: String
+    let ts: Int64
+    let outgoing: Bool
+}
+
 enum ServerMessage: Equatable {
     case helloAck(version: Int, capabilities: [String])
     case ring(callId: String, number: String?, name: String?)
@@ -49,6 +77,8 @@ enum ServerMessage: Equatable {
     case answered(callId: String)
     case sms(id: String, from: String, body: String, ts: Int64)
     case smsResult(clientId: String, ok: Bool, error: String?)
+    case callLog(entries: [HostCall])
+    case smsHistory(items: [HostText])
     case error(code: String, message: String?)
 
     /// Returns nil for anything that is not a message this client understands; unknown types are ignored on purpose
@@ -79,6 +109,21 @@ enum ServerMessage: Equatable {
         case "sms_result":
             guard let clientId = object["clientId"] as? String, let ok = object["ok"] as? Bool else { return nil }
             return .smsResult(clientId: clientId, ok: ok, error: object["error"] as? String)
+        case "call_log":
+            let rows = object["entries"] as? [[String: Any]] ?? []
+            return .callLog(entries: rows.compactMap { row in
+                guard let id = row["id"] as? String, let number = row["number"] as? String, let kind = row["kind"] as? String,
+                      let ts = (row["ts"] as? NSNumber)?.int64Value else { return nil }
+                return HostCall(id: id, number: number, name: row["name"] as? String, kind: kind, ts: ts,
+                                duration: (row["duration"] as? NSNumber)?.intValue ?? 0)
+            })
+        case "sms_history":
+            let rows = object["items"] as? [[String: Any]] ?? []
+            return .smsHistory(items: rows.compactMap { row in
+                guard let id = row["id"] as? String, let peer = row["peer"] as? String, let body = row["body"] as? String,
+                      let ts = (row["ts"] as? NSNumber)?.int64Value, let dir = row["dir"] as? String else { return nil }
+                return HostText(id: id, peer: peer, body: body, ts: ts, outgoing: dir == "out")
+            })
         case "error":
             guard let code = object["code"] as? String else { return nil }
             return .error(code: code, message: object["message"] as? String)

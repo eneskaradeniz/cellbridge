@@ -35,6 +35,12 @@ sealed interface ClientMessage {
 
     @Serializable @SerialName("sms_send")
     data class SmsSend(val clientId: String, val to: String, val body: String) : ClientMessage
+
+    @Serializable @SerialName("call_log_request")
+    data class CallLogRequest(val after: String? = null, val since: Long? = null) : ClientMessage
+
+    @Serializable @SerialName("sms_history_request")
+    data class SmsHistoryRequest(val since: Long? = null) : ClientMessage
 }
 
 @Serializable
@@ -60,9 +66,21 @@ sealed interface ServerMessage {
     @Serializable @SerialName("sms_result")
     data class SmsResult(val clientId: String, val ok: Boolean, val error: String? = null) : ServerMessage
 
+    @Serializable @SerialName("call_log")
+    data class CallLog(val entries: List<CallLogItem>) : ServerMessage
+
+    @Serializable @SerialName("sms_history")
+    data class SmsHistory(val items: List<SmsHistoryItem>) : ServerMessage
+
     @Serializable @SerialName("error")
     data class Error(val code: String, val message: String? = null) : ServerMessage
 }
+
+@Serializable
+data class CallLogItem(val id: String, val number: String, val name: String? = null, val kind: String, val ts: Long, val duration: Int)
+
+@Serializable
+data class SmsHistoryItem(val id: String, val peer: String, val body: String, val ts: Long, val dir: String)
 
 fun ServerMessage.encode(): String = ProtocolJson.encodeToString(ServerMessage.serializer(), this)
 

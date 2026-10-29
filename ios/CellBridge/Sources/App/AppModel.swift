@@ -89,6 +89,7 @@ final class AppModel: ObservableObject {
             self?.log(Self.describe(message))
             self?.calls.handle(message)
             self?.messages.handle(message)
+            self?.handleHistory(message)
         }
         // Sends that never got an answer cannot be confirmed once the connection is gone.
         client.$state.removeDuplicates().sink { [weak self] state in
@@ -193,7 +194,10 @@ final class AppModel: ObservableObject {
     /// Called when the app comes to the front: iOS may have suspended it and left the socket dead.
     func resumeIfNeeded() {
         guard wantsConnection, canConnect else { return }
-        if case .connected = client.state { return }
+        if case .connected(let capabilities) = client.state {
+            if capabilities.contains("calllog") { requestCallLog() } // calls the phone logged while the socket was quietly dead
+            return
+        }
         client.restart()
         if client.state == .idle { connect() } // the app was relaunched and nothing is running yet
     }
@@ -263,10 +267,53 @@ final class AppModel: ObservableObject {
 
     func answerCall(_ id: UUID) { calls.answer(id) }
 
+    // MARK: history from the phone (docs/protocol.md)
+
+    private static let historyDays = 90.0
+    private var callLogCursor: Int? {
+        get { UserDefaults.standard.object(forKey: "callLogCursor") as? Int }
+        set { UserDefaults.standard.set(newValue, forKey: "callLogCursor") }
+    }
+
+    private func handleHistory(_ message: ServerMessage) {
+        switch message {
+        case .helloAck(_, let capabilities):
+            if capabilities.contains("calllog") { requestCallLog() }
+            if capabilities.contains("smshistory"), !UserDefaults.standard.bool(forKey: "smsHistoryDone") {
+                let since = Int64((Date().timeIntervalSince1970 - Self.historyDays * 86_400) * 1000)
+                client.send(.smsHistoryRequest(since: since))
+            }
+        case .callLog(let entries):
+            let added = (try? callLog.merge(host: entries)) ?? 0
+            if let newest = entries.compactMap({ Int($0.id) }).max() { callLogCursor = max(callLogCursor ?? 0, newest) } else if callLogCursor == nil { callLogCursor = 0 }
+            recents = callLog.entries
+            log("call log: \(entries.count) from the phone, \(added) new")
+        case .smsHistory(let items):
+            let added = messages.mergeHistory(items)
+            UserDefaults.standard.set(true, forKey: "smsHistoryDone")
+            log("text history: \(items.count) from the phone, \(added) new")
+        default:
+            break
+        }
+    }
+
+    /// Asks for calls the phone logged that this app has not seen: all of the last 90 days the first time, then newer ones.
+    private func requestCallLog() {
+        let since = callLogCursor == nil ? Int64((Date().timeIntervalSince1970 - Self.historyDays * 86_400) * 1000) : nil
+        client.send(.callLogRequest(after: callLogCursor.map(String.init), since: since))
+    }
+
     private func record(_ record: CallRecord) {
         do {
             try callLog.record(record)
             recents = callLog.entries
+            // The phone logs the call a moment later: fetch it so this record gets the phone's id.
+            if case .connected(let capabilities) = client.state, capabilities.contains("calllog") {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(3))
+                    self?.requestCallLog()
+                }
+            }
         } catch {
             log("could not save the call to the history: \(error.localizedDescription)")
         }
@@ -343,6 +390,8 @@ final class AppModel: ObservableObject {
         case .answered(let callId): return "answered \(callId.prefix(8))"
         case .sms(let id, _, _, _): return "sms \(id)" // never log the sender or the text
         case .smsResult(let clientId, let ok, _): return "sms result \(clientId.prefix(8)) \(ok ? "sent" : "failed")"
+        case .callLog(let entries): return "call log \(entries.count)"
+        case .smsHistory(let items): return "text history \(items.count)"
         case .error(let code, _): return "error \(code)"
         }
     }

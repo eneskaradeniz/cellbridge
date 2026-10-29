@@ -1,5 +1,7 @@
 package com.cellbridge.di
 
+import com.cellbridge.history.HistorySource
+import com.cellbridge.history.TelephonyHistory
 import com.cellbridge.sms.PlatformSmsSender
 import com.cellbridge.sms.SmsGateway
 import com.cellbridge.sms.SmsRepository
@@ -23,6 +25,8 @@ abstract class SmsModule {
     @Binds abstract fun sender(impl: PlatformSmsSender): SmsSender
 
     @Binds abstract fun gateway(impl: SmsRepository): SmsGateway
+
+    @Binds abstract fun history(impl: TelephonyHistory): HistorySource
 
     companion object {
         @Provides fun role(roles: DefaultRoles): SmsRole = SmsRole { roles.isHeld(AppRole.SMS) }

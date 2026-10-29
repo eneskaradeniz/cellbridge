@@ -94,6 +94,7 @@ struct SettingsView: View {
 /// Audio diagnostics and the event log: for tracking down a problem, not for everyday use.
 struct DeveloperView: View {
     @EnvironmentObject var model: AppModel
+    @State private var code = ""
 
     var body: some View {
         Form {
@@ -117,6 +118,15 @@ struct DeveloperView: View {
                 Text("Audio")
             } footer: {
                 Text("The audio test plays a tone through the call's audio path in four ways and logs what the mixer renders. Turn the volume up; no call needed.")
+            }
+            Section {
+                TextField("123456", text: $code)
+                    .textContentType(.oneTimeCode)
+                    .keyboardType(.numberPad)
+            } header: {
+                Text("Code AutoFill")
+            } footer: {
+                Text("Send a text with a code to the phone, then tap this field: the keyboard should offer the code.")
             }
             Section("Events") {
                 Button("Copy all") { UIPasteboard.general.string = model.events.joined(separator: "\n") }

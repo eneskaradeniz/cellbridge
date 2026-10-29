@@ -62,6 +62,18 @@ final class MessageCoordinator: ObservableObject {
 
     var unreadCount: Int { conversations.reduce(0) { $0 + $1.unreadCount } }
 
+    /// The phone's older texts, merged in as read.
+    @discardableResult
+    func mergeHistory(_ items: [HostText]) -> Int {
+        let added: Int
+        do { added = try store.mergeHistory(items) } catch {
+            log("could not save the text history: \(error.localizedDescription)")
+            return 0
+        }
+        refresh()
+        return added
+    }
+
     func markRead(key: String) {
         do { try store.markRead(key: key) } catch { log("could not mark as read: \(error.localizedDescription)") }
         refresh()

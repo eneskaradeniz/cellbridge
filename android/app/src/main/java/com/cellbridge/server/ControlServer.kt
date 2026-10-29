@@ -7,10 +7,14 @@ import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallStatus
 import com.cellbridge.domain.model.IncomingSms
 import com.cellbridge.domain.model.SendResult
+import com.cellbridge.history.HistorySource
+import com.cellbridge.history.NoHistory
 import com.cellbridge.sms.SmsGateway
 import com.cellbridge.telecom.CallDialer
 import com.cellbridge.telecom.DialOutcome
+import com.cellbridge.protocol.CallLogItem
 import com.cellbridge.protocol.ClientMessage
+import com.cellbridge.protocol.SmsHistoryItem
 import com.cellbridge.protocol.PROTOCOL_VERSION
 import com.cellbridge.protocol.ServerMessage
 import com.cellbridge.protocol.decodeClientMessage
@@ -69,6 +73,7 @@ class ControlServer @Inject constructor(
     private val sms: SmsGateway,
     private val dialer: CallDialer,
     private val pairingToken: PairingToken,
+    private val history: HistorySource,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
     private val _running = MutableStateFlow(false)
@@ -91,7 +96,7 @@ class ControlServer @Inject constructor(
                 CIO,
                 rootConfig = serverConfig {
                     parentCoroutineContext = onFailure
-                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities) }
+                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history) }
                 },
                 configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
             ).also { server ->
@@ -120,6 +125,8 @@ class ControlServer @Inject constructor(
         add("calls")
         if (sms.isAvailable()) add("sms")
         if (audio.isAvailable()) add("audio")
+        if (history.callsAvailable()) add("calllog")
+        if (sms.isAvailable()) add("smshistory")
     }
 
     private companion object {
@@ -138,6 +145,7 @@ fun Application.controlModule(
     token: String,
     capabilities: suspend () -> List<String>,
     authFailureDelay: Duration = 1.seconds,
+    history: HistorySource = NoHistory,
 ) {
     install(WebSockets) {
         pingPeriod = 10.seconds
@@ -145,11 +153,15 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay).run() }
+        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, history).run() }
     }
 }
 
 private const val MAX_FRAME_BYTES = 64L * 1024
+private const val CALL_LOG_LIMIT = 300
+private const val SMS_HISTORY_LIMIT = 500
+private const val HISTORY_DAYS = 90L
+private const val DAY_MS = 24L * 60 * 60 * 1000
 
 private class Session(
     private val ws: DefaultWebSocketServerSession,
@@ -161,6 +173,7 @@ private class Session(
     private val token: String,
     private val capabilities: suspend () -> List<String>,
     private val authFailureDelay: Duration,
+    private val history: HistorySource,
 ) {
     suspend fun run() {
         val hello = ws.incoming.receive().let { (it as? Frame.Text)?.readText() }?.let(::decodeClientMessage)
@@ -240,6 +253,17 @@ private class Session(
                     val result = sms.send(message.to, message.body)
                     send(ServerMessage.SmsResult(message.clientId, result is SendResult.Sent, (result as? SendResult.Failed)?.error))
                 }
+                return
+            }
+            is ClientMessage.CallLogRequest -> {
+                val entries = history.calls(message.after?.toLongOrNull() ?: 0, message.since ?: 0, CALL_LOG_LIMIT)
+                send(ServerMessage.CallLog(entries.map { CallLogItem(it.id.toString(), it.number, it.name, it.kind, it.timestamp, it.durationSeconds) }))
+                return
+            }
+            is ClientMessage.SmsHistoryRequest -> {
+                val since = message.since ?: (System.currentTimeMillis() - HISTORY_DAYS * DAY_MS)
+                val items = if (sms.isAvailable()) history.texts(since, SMS_HISTORY_LIMIT) else emptyList()
+                send(ServerMessage.SmsHistory(items.map { SmsHistoryItem(it.id, it.peer, it.body, it.timestamp, if (it.outgoing) "out" else "in") }))
                 return
             }
             is ClientMessage.Hello, null -> return send(ServerMessage.Error("bad_message"))

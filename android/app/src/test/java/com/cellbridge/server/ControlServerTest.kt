@@ -10,6 +10,9 @@ import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallSnapshot
 import com.cellbridge.domain.model.CallStatus
 import com.cellbridge.domain.model.EndReason
+import com.cellbridge.history.CallLogEntry
+import com.cellbridge.history.HistorySource
+import com.cellbridge.history.TextHistoryItem
 import com.cellbridge.protocol.ClientMessage
 import com.cellbridge.protocol.PROTOCOL_VERSION
 import com.cellbridge.protocol.ProtocolJson
@@ -66,6 +69,23 @@ class ControlServerTest {
         override suspend fun dial(number: String): DialOutcome = outcome.also { numbers += number }
     }
 
+    private class FakeHistory : HistorySource {
+        var asked = emptyList<Triple<Long, Long, Int>>()
+        override fun callsAvailable() = true
+        override suspend fun calls(afterId: Long, sinceMs: Long, limit: Int): List<CallLogEntry> {
+            asked = asked + Triple(afterId, sinceMs, limit)
+            return listOf(
+                CallLogEntry(11, "+90555", "Ali", "missed", 1_000, 0),
+                CallLogEntry(12, "+90556", null, "outgoing", 2_000, 31),
+            )
+        }
+        override suspend fun texts(sinceMs: Long, limit: Int) = listOf(
+            TextHistoryItem("1793", "+90555", "merhaba", 1_000, outgoing = false),
+            TextHistoryItem("out-7", "+90555", "selam", 2_000, outgoing = true),
+        )
+    }
+
+    private val history = FakeHistory()
     private val dialer = FakeDialer()
     private val feed = FakeFeed()
     private val commands = FakeCommands()
@@ -81,6 +101,7 @@ class ControlServerTest {
                     feed, commands, bridge, sms, dialer, token = "SECRET",
                     capabilities = { listOf("calls") + if (audio.isAvailable()) listOf("audio") else emptyList() },
                     authFailureDelay = Duration.ZERO,
+                    history = history,
                 )
             }
             val client = createClient { install(WebSockets) }
@@ -349,6 +370,47 @@ class ControlServerTest {
             login()
             feed.flow.emit(CallEvent.Answered(incomingRinging.copy(status = CallStatus.ACTIVE)))
             assertEquals("""{"type":"answered","callId":"c1"}""", hear().toString())
+        }
+    }
+
+    @Test
+    fun `call log request is answered with the newer entries`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"call_log_request","after":"10","since":500}""")
+            val reply = hear()
+            assertEquals("call_log", reply.str("type"))
+            assertEquals(
+                """[{"id":"11","number":"+90555","name":"Ali","kind":"missed","ts":1000,"duration":0},""" +
+                    """{"id":"12","number":"+90556","kind":"outgoing","ts":2000,"duration":31}]""",
+                reply["entries"].toString(),
+            )
+            assertEquals(listOf(Triple(10L, 500L, 300)), history.asked)
+        }
+    }
+
+    @Test
+    fun `call log request without bounds asks for everything`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"call_log_request"}""")
+            hear()
+            assertEquals(listOf(Triple(0L, 0L, 300)), history.asked)
+        }
+    }
+
+    @Test
+    fun `sms history answers with incoming and outgoing texts`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"sms_history_request","since":1}""")
+            val reply = hear()
+            assertEquals("sms_history", reply.str("type"))
+            assertEquals(
+                """[{"id":"1793","peer":"+90555","body":"merhaba","ts":1000,"dir":"in"},""" +
+                    """{"id":"out-7","peer":"+90555","body":"selam","ts":2000,"dir":"out"}]""",
+                reply["items"].toString(),
+            )
         }
     }
 }

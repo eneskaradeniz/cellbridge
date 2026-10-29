@@ -88,6 +88,43 @@ final class MessageStore {
         try update { $0.status == .sending } to: { $0.status = .failed(reason) }
     }
 
+    /// Adds the phone's older texts (docs/protocol.md `sms_history`) as read messages, once each: an incoming text has the
+    /// id a live one would have, a sent text is matched to one this app sent itself by number, body and time. Stored in one
+    /// write. Returns how many were added.
+    @discardableResult
+    func mergeHistory(_ items: [HostText]) throws -> Int {
+        let before = messages
+        var known = Set(messages.map(\.id))
+        var added = 0
+        for item in items.sorted(by: { $0.ts < $1.ts }) {
+            let date = Date(timeIntervalSince1970: Double(item.ts) / 1000)
+            let key = Self.key(for: item.peer)
+            if item.outgoing {
+                let id = item.id.hasPrefix("out-") ? item.id : "out-" + item.id
+                if known.contains(id) { continue }
+                let sentHere = messages.contains {
+                    $0.direction == .outgoing && $0.body == item.body && Self.key(for: $0.peer) == key
+                        && abs($0.date.timeIntervalSince(date)) <= 120
+                }
+                if sentHere { continue }
+                messages.append(TextMessage(id: id, peer: item.peer, body: item.body, date: date, direction: .outgoing, status: .sent))
+                known.insert(id)
+            } else {
+                let id = "in-" + item.id
+                if known.contains(id) { continue }
+                messages.append(TextMessage(id: id, peer: item.peer, body: item.body, date: date, direction: .incoming, status: .received))
+                known.insert(id)
+            }
+            added += 1
+        }
+        guard added > 0 else { return 0 }
+        do { try persist() } catch {
+            messages = before
+            throw error
+        }
+        return added
+    }
+
     /// Everything in the conversation counts as read; `unread` brings the newest incoming text back to unread.
     func markRead(key: String) throws {
         try update { Self.key(for: $0.peer) == key && !$0.isRead } to: { $0.isRead = true }

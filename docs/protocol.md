@@ -9,7 +9,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | type | dir | fields |
 |---|---|---|
 | `hello` | iOS -> host | `version` (int, currently 1), `token` |
-| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`) |
+| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`) |
 | `error` | host -> iOS | `code`, `message?` |
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
@@ -21,6 +21,10 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `sms_ack` | iOS -> host | `id` |
 | `sms_send` | iOS -> host | `clientId`, `to`, `body` |
 | `sms_result` | host -> iOS | `clientId`, `ok`, `error?` |
+| `call_log_request` | iOS -> host | `after?` (host call id, string), `since?` (ms since epoch) |
+| `call_log` | host -> iOS | `entries`: `id`, `number`, `name?`, `kind`, `ts`, `duration` |
+| `sms_history_request` | iOS -> host | `since?` (ms since epoch) |
+| `sms_history` | host -> iOS | `items`: `id`, `peer`, `body`, `ts`, `dir` |
 
 `audio` is advertised only when the root audio daemon is reachable; without it the host runs in control-only mode
 (calls and SMS work, call audio stays on the phone) and the client must not open the audio channel.
@@ -46,6 +50,18 @@ dedupe by `id`. `sms` is advertised in `capabilities` only while the host app is
 `sms_send` is answered by exactly one `sms_result` with the same `clientId`; `ok:false` carries a short `error`
 (`invalid` for a bad number or empty/oversized body, `failed` when the radio refused). Long texts are sent as multipart messages.
 MMS is not supported.
+
+History: everything that happened while the client was away can be fetched, so the iPhone shows what the phone's own logs show.
+`calllog` is advertised while the host may read the phone's call log, `smshistory` while the host app is the default SMS app.
+`call_log_request` is answered by exactly one `call_log`: entries with a host call id greater than `after` and a time not before `since`
+(both optional), the newest 300 at most, oldest first. `kind` is `incoming` (answered), `outgoing`, `missed` or `rejected`; `duration` is
+in seconds (0 for anything that was not connected). Ids only increase; a client remembers the highest one it has seen and asks for
+newer ones after every `hello_ack`. A client that already created a record for the same call from the live events (same number,
+same direction, within 90 s) adopts the host id instead of adding a second record.
+`sms_history_request` is answered by one `sms_history`: texts from `since` on (default 90 days), the newest 500 at most, oldest
+first; `dir` is `in` or `out`. An incoming item has the same `id` the live `sms` message carries, so a text seen both ways is
+stored once; an outgoing item has the id `out-<row>`, and a client matches it to texts it sent itself by number, body and time (within
+2 minutes). History texts count as read and are never acknowledged. Clients ask once per installation.
 
 Keep-alive: WebSocket ping every 10 s; client reconnects after 2 s.
 

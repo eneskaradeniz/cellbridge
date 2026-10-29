@@ -19,6 +19,8 @@ struct CallRecord: Codable, Identifiable, Equatable {
     let outcome: Outcome
     let date: Date
     let duration: TimeInterval
+    /// The phone's call log id once the record is known to the phone (docs/protocol.md `call_log`).
+    var hostId: String?
 
     var isMissed: Bool { outcome == .missed }
 
@@ -77,6 +79,46 @@ final class CallLog {
             entries = before
             throw error
         }
+    }
+
+    /// Adds what the phone's call log has and this phone does not: calls that came in while the app was away, and the
+    /// phone's id for calls it saw live (matched by number, direction and time, so nothing shows twice). Returns how many
+    /// records were added.
+    @discardableResult
+    func merge(host calls: [HostCall]) throws -> Int {
+        let before = entries
+        var added = 0
+        for call in calls.sorted(by: { (Int($0.id) ?? 0) < (Int($1.id) ?? 0) }) {
+            if entries.contains(where: { $0.hostId == call.id }) { continue }
+            let date = Date(timeIntervalSince1970: Double(call.ts) / 1000)
+            let direction: CallRecord.Direction = call.kind == "outgoing" ? .outgoing : .incoming
+            let key = MessageStore.key(for: call.number)
+            if let index = entries.firstIndex(where: {
+                $0.hostId == nil && $0.direction == direction && MessageStore.key(for: $0.number) == key
+                    && abs($0.date.timeIntervalSince(date)) <= 90
+            }) {
+                entries[index].hostId = call.id
+                continue
+            }
+            let outcome: CallRecord.Outcome
+            switch call.kind {
+            case "missed": outcome = .missed
+            case "rejected": outcome = .declined
+            case "outgoing": outcome = call.duration > 0 ? .answered : .noAnswer
+            default: outcome = .answered
+            }
+            entries.append(CallRecord(id: UUID(), number: call.number, title: call.name ?? call.number, direction: direction,
+                                      outcome: outcome, date: date, duration: TimeInterval(call.duration), hostId: call.id))
+            added += 1
+        }
+        entries.sort { $0.date > $1.date }
+        if entries.count > Self.limit { entries.removeLast(entries.count - Self.limit) }
+        guard entries != before else { return 0 }
+        do { try persist() } catch {
+            entries = before
+            throw error
+        }
+        return added
     }
 
     func clear() throws {
