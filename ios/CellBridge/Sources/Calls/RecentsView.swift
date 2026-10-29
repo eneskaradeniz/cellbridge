@@ -49,8 +49,9 @@ struct RecentsView: View {
                             Button(role: .destructive) { model.deleteRecents(group.ids) } label: { Label("Delete", systemImage: "trash") }
                         }
                 }
-                SyncFooter(date: model.lastSync)
             }
+            .refreshable { await model.refreshHistory() }
+            .navigationSubtitle(model.syncSubtitle)
             .navigationDestination(item: $detail) { CallDetailView(group: $0) }
             .onAppear { model.markRecentsSeen() }
             .onChange(of: model.recents) { _, _ in model.markRecentsSeen() }

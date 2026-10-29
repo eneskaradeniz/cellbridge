@@ -34,9 +34,10 @@ struct MessagesView: View {
                     Button(role: .destructive) { deleting = conversation } label: { Label("Delete", systemImage: "trash") }
                 }
                 }
-                if !model.messages.conversations.isEmpty { SyncFooter(date: model.lastSync) }
             }
             .listStyle(.plain)
+            .refreshable { await model.refreshHistory() }
+            .navigationSubtitle(model.syncSubtitle)
             .overlay {
                 if model.messages.conversations.isEmpty {
                     ContentUnavailableView("No Messages", systemImage: "message",

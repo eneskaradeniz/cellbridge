@@ -127,6 +127,7 @@ final class AppModel: ObservableObject {
         if sampling {
             contactsAuthorized = true
             contactBook = ContactBook(contacts: Sample.contacts)
+            lastSync = Date().addingTimeInterval(-300)
         }
         #endif
         messages.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
@@ -275,6 +276,28 @@ final class AppModel: ObservableObject {
     private var callLogCursor: Int? {
         get { UserDefaults.standard.object(forKey: "callLogCursor") as? Int }
         set { UserDefaults.standard.set(newValue, forKey: "callLogCursor") }
+    }
+
+    /// "Updated 17:12" for the top of the lists; empty until the first sync.
+    var syncSubtitle: String {
+        guard let lastSync else { return "" }
+        return String(localized: "Updated \(MessageDisplay.timestamp(lastSync))")
+    }
+
+    /// Pull to refresh: reconnects if needed, asks the phone for what the call log has that this app does not, and waits
+    /// (a few seconds at most) for the answer so the spinner means something.
+    func refreshHistory() async {
+        let before = lastSync
+        if case .connected = client.state {} else {
+            if wantsConnection { client.restart() } else if canConnect { connect() }
+            for _ in 0..<60 {
+                if case .connected = client.state { break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+        guard case .connected(let capabilities) = client.state else { return }
+        if capabilities.contains("calllog") { requestCallLog() }
+        for _ in 0..<50 where lastSync == before { try? await Task.sleep(for: .milliseconds(100)) }
     }
 
     private func markSynced() {
