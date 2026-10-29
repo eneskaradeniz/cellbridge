@@ -20,6 +20,7 @@ struct MessagesView: View {
                 }
             }
             .navigationTitle("Messages")
+            .toolbarTitleDisplayMode(.inlineLarge)
             .navigationDestination(for: String.self) { ThreadView(key: $0) }
             .toolbar {
                 Button { composing = true } label: { Image(systemName: "square.and.pencil") }
@@ -85,6 +86,9 @@ struct ThreadView: View {
         .safeAreaInset(edge: .bottom) { composer }
         .navigationTitle(model.displayName(for: conversation?.peer ?? ""))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarVisibility(.hidden, for: .tabBar)
+        .onAppear { model.threadOpen = true }
+        .onDisappear { model.threadOpen = false }
         .sensoryFeedback(.success, trigger: conversation?.messages.count) { old, new in
             (new ?? 0) > (old ?? 0) && conversation?.last.direction == .outgoing
         }

@@ -19,14 +19,14 @@ struct KeypadView: View {
         [Key(digit: "*", letters: ""), Key(digit: "0", letters: "+"), Key(digit: "#", letters: "")],
     ]
 
-    private let keySize: CGFloat = 78
+    private let keySize: CGFloat = 84
 
     var body: some View {
         VStack(spacing: 16) {
             Spacer(minLength: 0)
             VStack(spacing: 4) {
                 Text(number.isEmpty ? " " : number)
-                    .font(.system(size: 40, weight: .light))
+                    .font(.system(size: 44, weight: .light))
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                     .frame(maxWidth: .infinity)
@@ -38,7 +38,7 @@ struct KeypadView: View {
                     .padding(.horizontal)
             }
             GlassEffectContainer(spacing: 20) {
-                VStack(spacing: 16) {
+                VStack(spacing: 14) {
                     ForEach(rows.indices, id: \.self) { row in
                         HStack(spacing: 24) {
                             ForEach(rows[row]) { key in keyView(key) }

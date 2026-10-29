@@ -18,6 +18,7 @@ struct ContactsView: View {
         NavigationStack {
             content
                 .navigationTitle(onPick == nil ? "Contacts" : "Choose a Number")
+                .toolbarTitleDisplayMode(.inlineLarge)
                 .searchable(text: $query, prompt: "Search")
                 .toolbar {
                     if onPick != nil { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }

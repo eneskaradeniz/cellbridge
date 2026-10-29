@@ -10,12 +10,21 @@ struct RecentsView: View {
 
     var body: some View {
         NavigationStack {
-            List(shown) { record in
-                Button { model.dial(record.number) } label: {
-                    Row(record: record, name: model.displayName(for: record.number, fallback: record.title))
+            List {
+                Picker("Filter", selection: $missedOnly) {
+                    Text("All").tag(false)
+                    Text("Missed").tag(true)
                 }
-                .buttonStyle(.plain)
-                .allowsHitTesting(model.canDial && !record.number.isEmpty)
+                .pickerStyle(.segmented)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                ForEach(shown) { record in
+                    Button { model.dial(record.number) } label: {
+                        Row(record: record, name: model.displayName(for: record.number, fallback: record.title))
+                    }
+                    .buttonStyle(.plain)
+                    .allowsHitTesting(model.canDial && !record.number.isEmpty)
+                }
             }
             .listStyle(.plain)
             .overlay {
@@ -27,15 +36,8 @@ struct RecentsView: View {
                 }
             }
             .navigationTitle("Recents")
+            .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("Filter", selection: $missedOnly) {
-                        Text("All").tag(false)
-                        Text("Missed").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 180)
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Clear") { confirmingClear = true }.disabled(model.recents.isEmpty)
                 }
@@ -52,14 +54,13 @@ struct RecentsView: View {
 
         var body: some View {
             HStack(spacing: 12) {
-                Avatar(name: name, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name)
-                        .font(.headline)
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(record.isMissed ? Color.red : Color.primary)
                         .lineLimit(1)
                     HStack(spacing: 4) {
-                        Image(systemName: record.direction == .outgoing ? "phone.arrow.up.right" : "phone.arrow.down.left")
+                        if record.direction == .outgoing { Image(systemName: "phone.fill").imageScale(.small) }
                         Text(detail)
                     }
                     .font(.subheadline)

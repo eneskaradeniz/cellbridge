@@ -20,7 +20,7 @@ struct CellBridgeApp: App {
                 Tab("Settings", systemImage: "gearshape", value: AppTab.settings) { SettingsView() }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
-            .tabViewBottomAccessory(isEnabled: tab != .settings && !isConnected) {
+            .tabViewBottomAccessory(isEnabled: tab != .settings && !isConnected && !model.threadOpen) {
                 ConnectionBanner(status: status) { tab = .settings }
             }
             .animation(.smooth, value: status)

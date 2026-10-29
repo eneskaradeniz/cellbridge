@@ -13,6 +13,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var audioTestRunning = false
     @Published private(set) var contactBook = ContactBook()
     @Published private(set) var contactsAuthorized = false
+    /// A conversation is open and owns the bottom edge, so the link banner stays out of its way.
+    @Published var threadOpen = false
     private let contactProvider = ContactStoreProvider()
 
     let client = ControlClient()

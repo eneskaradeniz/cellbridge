@@ -60,6 +60,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .toolbarTitleDisplayMode(.inlineLarge)
             .dismissibleKeyboard()
         }
     }
