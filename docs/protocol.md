@@ -14,6 +14,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
 | `ring_ack` | iOS -> host | `callId` |
+| `dtmf` | iOS -> host | `callId`, `digit` (one of `0-9 * #`) |
 | `transfer_to_host` | iOS -> host | `callId` |
 | `transfer_result` | host -> iOS | `callId`, `ok` |
 | `transfer_offer` | host -> iOS | `callId`, `number?`, `connectedAt?` (ms since epoch) |
@@ -45,6 +46,9 @@ call that is still ringing, so a reconnecting client catches up; clients dedupe 
 Ringing: the client answers every `ring` with `ring_ack` (also the repeats after a reconnect) once its own call UI is up. The host then
 silences the phone's ringtone and vibration for that call, so only the iPhone rings; without an ack (no client, a dead socket) the
 phone keeps ringing and a call is never swallowed. `ring_ack` has no reply.
+
+Tones: `dtmf` plays one keypad tone into the call (menus of banks and call centres). The host plays it for about 150 ms; a client with
+several digits sends them one by one, about 200 ms apart. An unknown call gets `error` `unknown_call`, any other digit `bad_message`.
 
 Transfer: an active call can change hands without hanging up. `transfer_to_host` asks the host to stop the audio relay for the call; the call
 goes on on the phone itself (its own earpiece, microphone and speaker) and the host answers with one `transfer_result`. The client then

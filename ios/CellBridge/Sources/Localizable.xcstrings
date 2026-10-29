@@ -1581,6 +1581,16 @@
           }
         }
       }
+    },
+    "Hide": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gizle"
+          }
+        }
+      }
     }
   }
 }

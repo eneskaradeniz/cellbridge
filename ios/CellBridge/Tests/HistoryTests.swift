@@ -22,6 +22,10 @@ final class HistoryProtocolTests: XCTestCase {
         XCTAssertEqual(ClientMessage.ringAck(callId: "c1").encoded(), #"{"callId":"c1","type":"ring_ack"}"#)
     }
 
+    func testDtmfEncodes() {
+        XCTAssertEqual(ClientMessage.dtmf(callId: "c1", digit: "5").encoded(), #"{"callId":"c1","digit":"5","type":"dtmf"}"#)
+    }
+
     func testTransferMessagesRoundTrip() {
         XCTAssertEqual(ClientMessage.transferToHost(callId: "c1").encoded(), #"{"callId":"c1","type":"transfer_to_host"}"#)
         XCTAssertEqual(ClientMessage.transferAccept(callId: "c1", udpPort: 4000).encoded(), #"{"callId":"c1","type":"transfer_accept","udpPort":4000}"#)

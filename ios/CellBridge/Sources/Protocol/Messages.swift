@@ -9,6 +9,7 @@ enum ClientMessage: Equatable {
     case reject(callId: String)
     case hangup(callId: String)
     case ringAck(callId: String)
+    case dtmf(callId: String, digit: String)
     case transferToHost(callId: String)
     case transferAccept(callId: String, udpPort: Int?)
     case dial(clientId: String, number: String, udpPort: Int?)
@@ -31,6 +32,8 @@ enum ClientMessage: Equatable {
             object = ["type": "hangup", "callId": callId]
         case .ringAck(let callId):
             object = ["type": "ring_ack", "callId": callId]
+        case .dtmf(let callId, let digit):
+            object = ["type": "dtmf", "callId": callId, "digit": digit]
         case .transferToHost(let callId):
             object = ["type": "transfer_to_host", "callId": callId]
         case .transferAccept(let callId, let udpPort):

@@ -28,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -93,6 +94,7 @@ class InCallActivity : ComponentActivity() {
                             toggleSpeaker = { inCallAudio.setSpeaker(!audio.speaker) },
                             toIphone = { transfers.toIphone(call.id) },
                             toPhone = { scope.launch { transfers.toPhone(call.id) } },
+                            dtmf = { commands.dtmf(call.id, it) },
                         ),
                     )
                 }
@@ -109,6 +111,7 @@ class CallActions(
     val toggleSpeaker: () -> Unit,
     val toIphone: () -> Unit,
     val toPhone: () -> Unit,
+    val dtmf: (Char) -> Unit,
 )
 
 @Composable
@@ -125,6 +128,7 @@ private fun InCallScreen(
     val activeSince = call.connectedAtMs.takeIf { it > 0 } ?: openedAt
     LaunchedEffect(Unit) { while (true) { delay(1_000); now = System.currentTimeMillis() } }
     val phase = phaseOf(call)
+    var keypad by remember(call.id) { mutableStateOf(false) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF0A1A22), contentColor = Color.White) {
         Column(
@@ -157,10 +161,14 @@ private fun InCallScreen(
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(28.dp)) {
-                if (phase == CallPhase.ACTIVE || phase == CallPhase.HOLDING) {
+                if (keypad && (phase == CallPhase.ACTIVE || phase == CallPhase.HOLDING)) {
+                    DialPad(actions.dtmf)
+                    Toggle(stringResource(R.string.incall_hide_keypad), false, { keypad = false }, Modifier.fillMaxWidth())
+                } else if (phase == CallPhase.ACTIVE || phase == CallPhase.HOLDING) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Toggle(stringResource(R.string.incall_mute), muted, actions.toggleMute, Modifier.weight(1f))
                         Toggle(stringResource(R.string.incall_speaker), speaker, actions.toggleSpeaker, Modifier.weight(1f))
+                        Toggle(stringResource(R.string.incall_keypad), false, { keypad = true }, Modifier.weight(1f))
                     }
                     when {
                         onIphone -> Toggle(stringResource(R.string.incall_take_here), false, actions.toPhone, Modifier.fillMaxWidth())
@@ -174,6 +182,26 @@ private fun InCallScreen(
                     } else {
                         CallButton(stringResource(R.string.incall_end), Color(0xFFD32F2F), actions.hangup)
                     }
+                }
+            }
+        }
+    }
+}
+
+/** The keypad of a running call: menus of banks and call centres ask for tones. */
+@Composable
+private fun DialPad(onDigit: (Char) -> Unit) {
+    val rows = listOf("123", "456", "789", "*0#")
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        rows.forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                row.forEach { digit ->
+                    FilledTonalButton(
+                        onClick = { onDigit(digit) },
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFF1B2D36), contentColor = Color.White),
+                    ) { Text(digit.toString(), fontSize = 24.sp) }
                 }
             }
         }

@@ -297,6 +297,8 @@ final class AppModel: ObservableObject {
 
     func transferToPhone(_ id: UUID) { calls.transferToHost(id) }
 
+    func sendDigits(_ digits: String, call id: UUID) { calls.sendDigits(digits, for: id) }
+
     /// What the call screen shows: the running call, else the one that just ended.
     /// A second incoming call while one is running.
     var waitingCall: ActiveCall? {

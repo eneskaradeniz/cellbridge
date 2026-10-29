@@ -12,6 +12,9 @@ interface CallHandle {
 
     /** Stops the phone from ringing (and vibrating) for this call without answering it. */
     fun silence()
+
+    /** Plays one keypad tone (0-9, *, #) into the call. */
+    fun dtmf(digit: Char)
 }
 
 /** Client commands addressed by call id; each returns false when no such call is live. */
@@ -20,6 +23,7 @@ interface CallCommands {
     fun reject(callId: String): Boolean
     fun hangup(callId: String): Boolean
     fun silence(callId: String): Boolean
+    fun dtmf(callId: String, digit: Char): Boolean
 }
 
 /** Maps call ids to the live telecom calls so control-server commands can reach them. */
@@ -42,4 +46,6 @@ class CallRegistry @Inject constructor() : CallCommands {
     override fun hangup(callId: String) = handles[callId]?.hangup() != null
 
     override fun silence(callId: String) = handles[callId]?.silence() != null
+
+    override fun dtmf(callId: String, digit: Char) = handles[callId]?.dtmf(digit) != null
 }

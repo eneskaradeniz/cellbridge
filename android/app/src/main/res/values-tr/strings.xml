@@ -49,4 +49,6 @@
     <string name="show_code">Göster</string>
     <string name="hide_code">Gizle</string>
     <string name="pairing_hint">iPhone\'daki CellBridge ile QR kodunu tarayın ya da kodu orada bir kez girin. On saniye sonra yeniden gizlenir.</string>
+    <string name="incall_keypad">Tuş takımı</string>
+    <string name="incall_hide_keypad">Tuş takımını gizle</string>
 </resources>

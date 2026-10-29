@@ -12,6 +12,7 @@ struct InCallView: View {
             InCallScreen(
                 call: call, waiting: model.waitingCall, linkLost: !model.canDial, muted: model.muted, speakerOn: model.speakerOn,
                 toggleMute: model.toggleMute, toggleSpeaker: model.toggleSpeaker,
+                sendDigit: { model.sendDigits($0, call: call.id) },
                 transfer: model.canTransfer ? { model.transferToPhone(call.id) } : nil,
                 end: { model.endCall(call.id) }, answer: { model.answerCall(call.id) })
                 .onAppear { last = call }
@@ -33,8 +34,12 @@ struct InCallScreen: View {
     let speakerOn: Bool
     let toggleMute: () -> Void
     let toggleSpeaker: () -> Void
+    /// One keypad tone into the call; nil outside a real call (previews).
+    var sendDigit: ((String) -> Void)?
     /// Moves the call to the phone itself; nil when the host cannot.
     var transfer: (() -> Void)?
+    @State private var keypadOpen = false
+    @State private var typed = ""
     let end: () -> Void
     let answer: () -> Void
 
@@ -65,7 +70,7 @@ struct InCallScreen: View {
                 .padding(.top, 72)
                 .padding(.horizontal)
                 Spacer()
-                GlassEffectContainer(spacing: 40) {
+                GlassEffectContainer(spacing: 4) { // close glass shapes melt into one another: keep the merge distance below the gaps
                     VStack(spacing: 48) {
                         if call.isAnswered && !call.isEnded { controls }
                         if !call.isEnded { buttons }
@@ -87,6 +92,10 @@ struct InCallScreen: View {
             UIDevice.current.isProximityMonitoringEnabled = false
         }
         .onChange(of: call.isAnswered) { _, _ in updateProximity() }
+        .onChange(of: call.id) { _, _ in
+            keypadOpen = false
+            typed = ""
+        }
         .onChange(of: speakerOn) { _, _ in updateProximity() }
     }
 
@@ -117,20 +126,60 @@ struct InCallScreen: View {
         }
     }
 
+    @ViewBuilder
     private var controls: some View {
-        HStack(spacing: 20) {
-            toggle(muted ? "mic.slash.fill" : "mic.fill", "Mute", on: muted, action: toggleMute)
-            toggle(speakerOn ? "speaker.wave.3.fill" : "speaker.fill", "Speaker", on: speakerOn, action: toggleSpeaker)
-            VStack(spacing: 8) {
-                RoutePicker()
-                    .frame(width: 76, height: 76)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                Text("Audio").font(.footnote)
+        if keypadOpen {
+            keypad.transition(.opacity)
+        } else {
+            // Three across, like the Phone app: what the bridge cannot do (hold, add call) is simply not there.
+            Grid(horizontalSpacing: 24, verticalSpacing: 18) {
+                GridRow {
+                    toggle(muted ? "mic.slash.fill" : "mic.fill", "Mute", on: muted, action: toggleMute)
+                    toggle("circle.grid.3x3.fill", "Keypad", on: false) { keypadOpen = true }
+                    toggle(speakerOn ? "speaker.wave.3.fill" : "speaker.fill", "Speaker", on: speakerOn, action: toggleSpeaker)
+                }
+                GridRow {
+                    VStack(spacing: 8) {
+                        RoutePicker()
+                            .frame(width: 76, height: 76)
+                            .glassEffect(.regular.interactive(), in: .circle)
+                        Text("Audio").font(.footnote)
+                    }
+                    .accessibilityElement(children: .combine)
+                    if let transfer { toggle("arrow.left.arrow.right", "To Android", on: false, action: transfer) } else { Color.clear.frame(width: 76, height: 76) }
+                    Color.clear.frame(width: 76, height: 76)
+                }
             }
-            .accessibilityElement(children: .combine)
-            if let transfer { toggle("arrow.left.arrow.right", "To Android", on: false, action: transfer) }
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
         }
-        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+    }
+
+    /// The digits typed so far, then a pad whose keys each play a tone into the call.
+    private var keypad: some View {
+        VStack(spacing: 14) {
+            Text(typed.isEmpty ? " " : typed)
+                .font(.system(size: 32, weight: .light))
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            Grid(horizontalSpacing: 20, verticalSpacing: 12) {
+                ForEach(["123", "456", "789", "*0#"], id: \.self) { row in
+                    GridRow {
+                        ForEach(Array(row), id: \.self) { digit in
+                            Button {
+                                typed.append(digit)
+                                sendDigit?(String(digit))
+                            } label: {
+                                Text(String(digit)).font(.system(size: 30)).frame(width: 68, height: 68)
+                                    .glassEffect(.regular.interactive(), in: .circle)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(String(digit))
+                        }
+                    }
+                }
+            }
+            Button("Hide") { keypadOpen = false }.font(.body.weight(.semibold))
+        }
     }
 
     @ViewBuilder

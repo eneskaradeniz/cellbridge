@@ -30,6 +30,9 @@ sealed interface ClientMessage {
     @Serializable @SerialName("ring_ack")
     data class RingAck(val callId: String) : ClientMessage
 
+    @Serializable @SerialName("dtmf")
+    data class Dtmf(val callId: String, val digit: String) : ClientMessage
+
     @Serializable @SerialName("transfer_to_host")
     data class TransferToHost(val callId: String) : ClientMessage
 

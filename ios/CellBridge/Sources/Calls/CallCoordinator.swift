@@ -103,6 +103,19 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     private var adoptedIncoming: [UUID: Date?] = [:]
     private var transferringToHost = Set<UUID>()
 
+    /// Keypad tones for a running call (menus of banks and call centres): one digit at a time, spaced so the host can play each.
+    func sendDigits(_ digits: String, for uuid: UUID) {
+        guard let callId = book.callId(for: uuid), book.isAnswered(uuid) else { return }
+        let valid = digits.filter { "0123456789*#".contains($0) }
+        guard !valid.isEmpty else { return }
+        Task { @MainActor in
+            for digit in valid {
+                send(.dtmf(callId: callId, digit: String(digit)))
+                try? await Task.sleep(for: .milliseconds(220))
+            }
+        }
+    }
+
     /// Moves the call to the phone itself: the host stops the relay, the call goes on there, and ours ends without a hang-up.
     func transferToHost(_ uuid: UUID) {
         guard let callId = book.callId(for: uuid), book.isAnswered(uuid) else { return }
@@ -233,7 +246,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         update.localizedCallerName = title
         update.hasVideo = false
         update.supportsHolding = false
-        update.supportsDTMF = false
+        update.supportsDTMF = true
         update.supportsGrouping = false
         update.supportsUngrouping = false
         return update
@@ -359,6 +372,13 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
                 self.logFinished(uuid, by: .local)
                 self.book.requestEnd(uuid) // the host has not told us the call id yet; dial_result completes the hang-up
             }
+            action.fulfill()
+        }
+    }
+
+    nonisolated func provider(_ provider: CXProvider, perform action: CXPlayDTMFCallAction) {
+        Task { @MainActor in
+            self.sendDigits(action.digits, for: action.callUUID)
             action.fulfill()
         }
     }

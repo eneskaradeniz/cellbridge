@@ -49,4 +49,6 @@
     <string name="show_code">Show</string>
     <string name="hide_code">Hide</string>
     <string name="pairing_hint">Scan the QR code with the iPhone\'s CellBridge, or enter the code there once. It hides again after ten seconds.</string>
+    <string name="incall_keypad">Keypad</string>
+    <string name="incall_hide_keypad">Hide keypad</string>
 </resources>

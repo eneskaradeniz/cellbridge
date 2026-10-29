@@ -274,6 +274,10 @@ private class Session(
                 if (peer == null || !audio.attach(message.callId, peer)) send(ServerMessage.Error("unknown_call", message.callId))
                 return
             }
+            is ClientMessage.Dtmf -> {
+                if (message.digit.length != 1 || message.digit[0] !in "0123456789*#") return send(ServerMessage.Error("bad_message"))
+                message.callId to commands.dtmf(message.callId, message.digit[0])
+            }
             is ClientMessage.RingAck -> {
                 // The iPhone is ringing: the phone in the pocket can stop. Without this ack it keeps ringing, so a dead
                 // connection never swallows a call.

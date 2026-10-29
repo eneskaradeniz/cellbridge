@@ -91,6 +91,14 @@ class CellBridgeInCallService : InCallService() {
         override fun reject() { main.post { call.reject(false, null) } }
         override fun hangup() { main.post { call.disconnect() } }
         // The default dialer may silence the ringer; the call keeps ringing for the iPhone, only the phone stops making noise.
+        override fun dtmf(digit: Char) {
+            main.post {
+                call.stopDtmfTone() // a digit still sounding from the one before
+                call.playDtmfTone(digit)
+                main.postDelayed({ call.stopDtmfTone() }, DTMF_MS)
+            }
+        }
+
         override fun silence() { main.post { getSystemService(TelecomManager::class.java)?.silenceRinger() } }
     }
 
@@ -144,5 +152,6 @@ class CellBridgeInCallService : InCallService() {
         const val TAG = "CellBridge"
         const val CALL_CHANNEL = "call"
         const val CALL_NOTIFICATION_ID = 2
+        const val DTMF_MS = 150L
     }
 }

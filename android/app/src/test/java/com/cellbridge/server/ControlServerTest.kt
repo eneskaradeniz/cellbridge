@@ -64,6 +64,7 @@ class ControlServerTest {
         override fun reject(callId: String) = callId == "c1".also { calls += "reject:$callId" }
         override fun hangup(callId: String) = callId == "c1".also { calls += "hangup:$callId" }
         override fun silence(callId: String) = callId == "c1".also { calls += "silence:$callId" }
+        override fun dtmf(callId: String, digit: Char) = callId == "c1".also { calls += "dtmf:$callId:$digit" }
     }
 
     private class FakeDialer : CallDialer {
@@ -560,6 +561,30 @@ class ControlServerTest {
             assertEquals("true", reply.str("ok"))
             assertEquals(1, audio.stops)
             assertEquals(false, transfers.toPhone("c1")) // already on the phone
+        }
+    }
+
+    @Test
+    fun `a keypad tone reaches the call`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"dtmf","callId":"c1","digit":"5"}""")
+            say("""{"type":"dtmf","callId":"c1","digit":"#"}""")
+            eventually { commands.calls == listOf("dtmf:c1:5", "dtmf:c1:#") }
+        }
+    }
+
+    @Test
+    fun `a keypad tone for an unknown call or with a bad digit is an error`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"dtmf","callId":"nope","digit":"5"}""")
+            assertEquals("unknown_call", hear().str("code"))
+            say("""{"type":"dtmf","callId":"c1","digit":"55"}""")
+            assertEquals("bad_message", hear().str("code"))
+            say("""{"type":"dtmf","callId":"c1","digit":"x"}""")
+            assertEquals("bad_message", hear().str("code"))
+            assertEquals(listOf("dtmf:nope:5"), commands.calls) // the bad digits never reached the call
         }
     }
 }
