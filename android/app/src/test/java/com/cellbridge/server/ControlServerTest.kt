@@ -107,7 +107,10 @@ class ControlServerTest {
     private val transfers = TransferController(presence, bridge)
     private val incomingRinging = CallSnapshot("c1", "+90555", CallDirection.INCOMING, CallStatus.RINGING)
 
-    private fun withServer(block: suspend (connect: suspend (suspend DefaultClientWebSocketSession.() -> Unit) -> Unit) -> Unit) =
+    private fun withServer(
+        status: com.cellbridge.status.PhoneStatusSource = com.cellbridge.status.NoPhoneStatus,
+        block: suspend (connect: suspend (suspend DefaultClientWebSocketSession.() -> Unit) -> Unit) -> Unit,
+    ) =
         testApplication {
             application {
                 controlModule(
@@ -118,6 +121,7 @@ class ControlServerTest {
                     push = push,
                     presence = presence,
                     transfers = transfers,
+                    phoneStatus = status,
                 )
             }
             val client = createClient { install(WebSockets) }
@@ -585,6 +589,21 @@ class ControlServerTest {
             say("""{"type":"dtmf","callId":"c1","digit":"x"}""")
             assertEquals("bad_message", hear().str("code"))
             assertEquals(listOf("dtmf:nope:5"), commands.calls) // the bad digits never reached the call
+        }
+    }
+
+    @Test
+    fun `the phone's status follows hello_ack`() = withServer(
+        status = com.cellbridge.status.PhoneStatusSource { com.cellbridge.status.PhoneStatus(78, true, 3, "Turkcell") },
+    ) { connect ->
+        connect {
+            login()
+            val status = hear()
+            assertEquals("host_status", status.str("type"))
+            assertEquals("78", status.str("battery"))
+            assertEquals("true", status.str("charging"))
+            assertEquals("3", status.str("signal"))
+            assertEquals("Turkcell", status.str("operator"))
         }
     }
 }

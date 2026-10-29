@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.telephony.TelephonyManager
 import com.cellbridge.audio.CallAudioBridge
 import com.cellbridge.push.PushNotifier
 import com.cellbridge.server.ClientPresence
@@ -50,21 +51,34 @@ fun pickAddresses(interfaces: List<Pair<String, String>>): List<AddressInfo> =
         if (isLocalNetwork(address)) AddressInfo(label, address) else null
     }.distinct()
 
+/** What the iPhone is told about the phone (`host_status`). */
+data class PhoneStatus(val battery: Int?, val charging: Boolean, val signal: Int?, val operator: String?)
+
+fun interface PhoneStatusSource {
+    suspend fun phone(): PhoneStatus?
+}
+
+object NoPhoneStatus : PhoneStatusSource {
+    override suspend fun phone(): PhoneStatus? = null
+}
+
 @Singleton
 class HostStatusReader @Inject constructor(
     @ApplicationContext private val context: Context,
     private val presence: ClientPresence,
-    private val server: ControlServer,
+    private val server: dagger.Lazy<ControlServer>,
     private val audio: CallAudioBridge,
     private val push: PushNotifier,
-) {
+) : PhoneStatusSource {
+    override suspend fun phone(): PhoneStatus? = phoneStatus()
+
     suspend fun read(): HostStatus {
         val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
         val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
         return HostStatus(
-            serverRunning = server.running.value,
+            serverRunning = server.get().running.value,
             iphoneConnected = presence.connected,
             lastConnectedAtMs = presence.lastJoinedMs.value,
             audioReady = runCatching { audio.isAvailable() }.getOrDefault(false),
@@ -73,6 +87,22 @@ class HostStatusReader @Inject constructor(
             charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL,
             pushKey = push.available(),
             pushToken = push.hasToken(),
+        )
+    }
+
+    /** Battery and cellular state for the iPhone; nothing here needs the network. */
+    fun phoneStatus(): PhoneStatus {
+        val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val telephony = context.getSystemService(TelephonyManager::class.java)
+        val signal = runCatching { telephony?.signalStrength?.level }.getOrNull()
+        return PhoneStatus(
+            battery = if (level >= 0 && scale > 0) level * 100 / scale else null,
+            charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL,
+            signal = signal,
+            operator = telephony?.networkOperatorName?.takeIf { it.isNotBlank() },
         )
     }
 

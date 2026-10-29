@@ -38,6 +38,9 @@ struct SettingsView: View {
                     case .connecting:
                         EmptyView() // it keeps trying on its own: nothing to press until it is connected
                     }
+                    if case .connected = model.client.state, let info = model.hostInfo {
+                        LabeledContent("Phone") { Text(info.summary).foregroundStyle(info.isLow ? Color.orange : Color.secondary) }
+                    }
                     if let synced = model.lastSync {
                         LabeledContent("Last sync", value: MessageDisplay.timestamp(synced))
                     }

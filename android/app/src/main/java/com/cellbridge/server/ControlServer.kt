@@ -13,6 +13,8 @@ import com.cellbridge.history.NoHistory
 import com.cellbridge.push.NoPush
 import com.cellbridge.push.PushNotifier
 import com.cellbridge.push.PushRegistry
+import com.cellbridge.status.NoPhoneStatus
+import com.cellbridge.status.PhoneStatusSource
 import com.cellbridge.push.PushTarget
 import com.cellbridge.sms.SmsGateway
 import com.cellbridge.telecom.CallDialer
@@ -83,6 +85,7 @@ class ControlServer @Inject constructor(
     private val presence: ClientPresence,
     private val transfers: TransferController,
     private val advertiser: ServiceAdvertiser,
+    private val phoneStatus: PhoneStatusSource,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
     private val _running = MutableStateFlow(false)
@@ -105,7 +108,7 @@ class ControlServer @Inject constructor(
                 CIO,
                 rootConfig = serverConfig {
                     parentCoroutineContext = onFailure
-                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, presence = presence, transfers = transfers) }
+                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, presence = presence, transfers = transfers, phoneStatus = phoneStatus) }
                 },
                 configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
             ).also { server ->
@@ -140,6 +143,7 @@ class ControlServer @Inject constructor(
         if (sms.isAvailable()) add("smshistory")
         if (push.available()) add("push")
         if (audio.isAvailable()) add("transfer")
+        add("status")
     }
 
     private companion object {
@@ -162,6 +166,7 @@ fun Application.controlModule(
     push: PushRegistry = NoPush,
     presence: ClientPresence = ClientPresence(),
     transfers: TransferController = TransferController(presence, audio),
+    phoneStatus: PhoneStatusSource = NoPhoneStatus,
 ) {
     install(WebSockets) {
         pingPeriod = 10.seconds
@@ -169,11 +174,12 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, history, push, presence, transfers).run() }
+        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, history, push, presence, transfers, phoneStatus).run() }
     }
 }
 
 private const val MAX_FRAME_BYTES = 64L * 1024
+private const val STATUS_INTERVAL_MS = 30_000L
 private const val CALL_LOG_LIMIT = 300
 private const val SMS_HISTORY_LIMIT = 500
 private const val HISTORY_DAYS = 90L
@@ -193,6 +199,7 @@ private class Session(
     private val push: PushRegistry,
     private val presence: ClientPresence,
     private val transfers: TransferController,
+    private val phoneStatus: PhoneStatusSource,
 ) {
     suspend fun run() {
         val hello = ws.incoming.receive().let { (it as? Frame.Text)?.readText() }?.let(::decodeClientMessage)
@@ -225,6 +232,18 @@ private class Session(
                     send(ServerMessage.TransferResult(callId, ok = true))
                 }
             }
+            val statusForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
+                acked.await()
+                var last: com.cellbridge.status.PhoneStatus? = null
+                while (true) {
+                    val now = runCatching { phoneStatus.phone() }.getOrNull()
+                    if (now != null && now != last) {
+                        send(ServerMessage.HostStatus(now.battery, now.charging, now.signal, now.operator))
+                        last = now
+                    }
+                    delay(STATUS_INTERVAL_MS)
+                }
+            }
             val smsForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
                 sms.incoming.collect {
                     acked.await()
@@ -249,6 +268,7 @@ private class Session(
                 forwarder.cancel()
                 offerForwarder.cancel()
                 takeBackForwarder.cancel()
+                statusForwarder.cancel()
                 smsForwarder.cancel()
             }
         }

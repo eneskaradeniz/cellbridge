@@ -1591,6 +1591,36 @@
           }
         }
       }
+    },
+    "The phone's battery is low": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonun pili azaldı"
+          }
+        }
+      }
+    },
+    "The phone is at %lld%%. Plug it in, or calls and texts stop reaching this iPhone.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefon %%%lld. Şarja takın, yoksa aramalar ve mesajlar bu iPhone'a ulaşmaz."
+          }
+        }
+      }
+    },
+    "charging": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "şarj oluyor"
+          }
+        }
+      }
     }
   }
 }

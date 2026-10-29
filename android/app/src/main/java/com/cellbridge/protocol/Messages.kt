@@ -87,6 +87,9 @@ sealed interface ServerMessage {
     @Serializable @SerialName("transfer_offer")
     data class TransferOffer(val callId: String, val number: String? = null, val connectedAt: Long? = null) : ServerMessage
 
+    @Serializable @SerialName("host_status")
+    data class HostStatus(val battery: Int? = null, val charging: Boolean = false, val signal: Int? = null, val operator: String? = null) : ServerMessage
+
     @Serializable @SerialName("call_log")
     data class CallLog(val entries: List<CallLogItem>) : ServerMessage
 

@@ -83,7 +83,7 @@ final class AppModel: ObservableObject {
             transmit: { [weak self] in self?.client.send($0) },
             notify: { [weak self] id, from, body in
                 guard let self else { return }
-                notifier.notify(id: id, peer: from, title: displayName(for: from), body: body)
+                notifier.notify(id: id, peer: from, kind: nil, title: displayName(for: from), body: body)
             },
             log: { [weak self] in self?.log($0) }
         )
@@ -93,6 +93,7 @@ final class AppModel: ObservableObject {
             self?.calls.handle(message)
             self?.messages.handle(message)
             self?.handleHistory(message)
+            self?.handleHostStatus(message)
         }
         // Sends that never got an answer cannot be confirmed once the connection is gone.
         client.$state.removeDuplicates().sink { [weak self] state in
@@ -317,6 +318,22 @@ final class AppModel: ObservableObject {
 
     func answerCall(_ id: UUID) { calls.answer(id) }
 
+    // MARK: the phone's own state
+
+    /// The phone's battery and signal, as of the last message; kept after a disconnect so the last known state stays visible.
+    @Published private(set) var hostInfo: HostInfo?
+
+    private func handleHostStatus(_ message: ServerMessage) {
+        guard case .hostStatus(let info) = message else { return }
+        hostInfo = info
+        let outcome = BatteryAlert.evaluate(level: info.battery, charging: info.charging, warned: UserDefaults.standard.bool(forKey: "batteryWarned"))
+        UserDefaults.standard.set(outcome.warned, forKey: "batteryWarned")
+        if outcome.warn, let level = info.battery {
+            notifier.notify(id: "battery", peer: "", kind: "battery", title: String(localized: "The phone's battery is low"),
+                            body: String(localized: "The phone is at \(level)%. Plug it in, or calls and texts stop reaching this iPhone."))
+        }
+    }
+
     // MARK: history from the phone (docs/protocol.md)
 
     private static let historyDays = 90.0
@@ -472,6 +489,7 @@ final class AppModel: ObservableObject {
         case .answered(let callId): return "answered \(callId.prefix(8))"
         case .sms(let id, _, _, _): return "sms \(id)" // never log the sender or the text
         case .smsResult(let clientId, let ok, _): return "sms result \(clientId.prefix(8)) \(ok ? "sent" : "failed")"
+        case .hostStatus: return "phone status"
         case .transferResult(let callId, let ok): return "transfer to the phone \(callId.prefix(8)) \(ok ? "ok" : "refused")"
         case .transferOffer(let callId, _, _): return "transfer offer \(callId.prefix(8))"
         case .callLog(let entries): return "call log \(entries.count)"

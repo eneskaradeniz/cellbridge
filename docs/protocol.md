@@ -9,10 +9,11 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | type | dir | fields |
 |---|---|---|
 | `hello` | iOS -> host | `version` (int, currently 1), `token` |
-| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `transfer`) |
+| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `transfer`, `status`) |
 | `error` | host -> iOS | `code`, `message?` |
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
+| `host_status` | host -> iOS | `battery?` (0-100), `charging`, `signal?` (0-4), `operator?` |
 | `ring_ack` | iOS -> host | `callId` |
 | `dtmf` | iOS -> host | `callId`, `digit` (one of `0-9 * #`) |
 | `transfer_to_host` | iOS -> host | `callId` |
@@ -46,6 +47,9 @@ call that is still ringing, so a reconnecting client catches up; clients dedupe 
 Ringing: the client answers every `ring` with `ring_ack` (also the repeats after a reconnect) once its own call UI is up. The host then
 silences the phone's ringtone and vibration for that call, so only the iPhone rings; without an ack (no client, a dead socket) the
 phone keeps ringing and a call is never swallowed. `ring_ack` has no reply.
+
+Phone status: after `hello_ack` and whenever it changes (checked every 30 s) the host sends `host_status`: battery percentage, whether it
+is charging, the cellular signal bars (0-4) and the operator name. A client shows it and warns before the phone's battery runs out.
 
 Tones: `dtmf` plays one keypad tone into the call (menus of banks and call centres). The host plays it for about 150 ms; a client with
 several digits sends them one by one, about 200 ms apart. An unknown call gets `error` `unknown_call`, any other digit `bad_message`.

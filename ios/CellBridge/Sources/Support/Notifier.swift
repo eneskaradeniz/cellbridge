@@ -22,13 +22,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// `id` is the host's text id, so a replayed text replaces its notification instead of stacking another.
-    func notify(id: String, peer: String, title: String, body: String) {
+    func notify(id: String, peer: String, kind: String?, title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
-        content.userInfo = ["peer": peer]
-        content.threadIdentifier = peer // one stack per sender in Notification Centre
+        content.userInfo = kind.map { ["kind": $0] } ?? ["peer": peer]
+        if kind == nil { content.threadIdentifier = peer } // one stack per sender in Notification Centre
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "sms-" + id, content: content, trigger: nil))
     }
 
@@ -37,6 +37,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let content = response.notification.request.content
+        if content.userInfo["kind"] != nil { return completionHandlerOnMain(completionHandler) } // a battery warning and the like: nothing to open
         // Notifications posted before `peer` was stored carry the sender's number as their title.
         let peer = content.userInfo["peer"] as? String ?? (content.title.isEmpty ? nil : content.title)
         DispatchQueue.main.async {
@@ -44,6 +45,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             completionHandler()
         }
     }
+
+    private nonisolated func completionHandlerOnMain(_ handler: @escaping () -> Void) { DispatchQueue.main.async { handler() } }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                             withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {

@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- Signal strength for the status the iPhone shows; granted with the dialer role. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <!-- Granted together with the dialer role; lets the iPhone fetch calls it missed while away. -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
