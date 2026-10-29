@@ -41,6 +41,9 @@ sealed interface ClientMessage {
 
     @Serializable @SerialName("sms_history_request")
     data class SmsHistoryRequest(val since: Long? = null) : ClientMessage
+
+    @Serializable @SerialName("push_token")
+    data class PushToken(val token: String, val env: String, val topic: String, val key: String) : ClientMessage
 }
 
 @Serializable

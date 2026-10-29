@@ -13,6 +13,8 @@ import com.cellbridge.domain.model.EndReason
 import com.cellbridge.history.CallLogEntry
 import com.cellbridge.history.HistorySource
 import com.cellbridge.history.TextHistoryItem
+import com.cellbridge.push.PushRegistry
+import com.cellbridge.push.PushTarget
 import com.cellbridge.protocol.ClientMessage
 import com.cellbridge.protocol.PROTOCOL_VERSION
 import com.cellbridge.protocol.ProtocolJson
@@ -85,6 +87,14 @@ class ControlServerTest {
         )
     }
 
+    private class FakePush(var available: Boolean = true) : PushRegistry {
+        var registered: PushTarget? = null
+        override fun available() = available
+        override fun register(target: PushTarget) { registered = target }
+    }
+
+    private val push = FakePush()
+    private val presence = ClientPresence()
     private val history = FakeHistory()
     private val dialer = FakeDialer()
     private val feed = FakeFeed()
@@ -102,6 +112,8 @@ class ControlServerTest {
                     capabilities = { listOf("calls") + if (audio.isAvailable()) listOf("audio") else emptyList() },
                     authFailureDelay = Duration.ZERO,
                     history = history,
+                    push = push,
+                    presence = presence,
                 )
             }
             val client = createClient { install(WebSockets) }
@@ -412,5 +424,52 @@ class ControlServerTest {
                 reply["items"].toString(),
             )
         }
+    }
+
+    private val goodKey = java.util.Base64.getEncoder().encodeToString(ByteArray(32) { it.toByte() })
+
+    @Test
+    fun `a push token is stored`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"push_token","token":"${"ab".repeat(32)}","env":"sandbox","topic":"com.example.app.voip","key":"$goodKey"}""")
+            eventually { push.registered != null }
+            val target = push.registered!!
+            assertEquals("ab".repeat(32), target.token)
+            assertEquals(true, target.sandbox)
+            assertEquals("com.example.app.voip", target.topic)
+            assertEquals(32, target.key.size)
+        }
+    }
+
+    @Test
+    fun `a malformed push token is refused and not stored`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"push_token","token":"short","env":"sandbox","topic":"t","key":"$goodKey"}""")
+            assertEquals("bad_message", hear().str("code"))
+            say("""{"type":"push_token","token":"${"ab".repeat(32)}","env":"sandbox","topic":"t","key":"AAAA"}""")
+            assertEquals("bad_message", hear().str("code"))
+            assertNull(push.registered)
+        }
+    }
+
+    @Test
+    fun `a push token is refused while the host has no APNs key`() = withServer { connect ->
+        push.available = false
+        connect {
+            login()
+            say("""{"type":"push_token","token":"${"ab".repeat(32)}","env":"production","topic":"t","key":"$goodKey"}""")
+            assertEquals("bad_message", hear().str("code"))
+        }
+    }
+
+    @Test
+    fun `the presence count follows the connection`() = withServer { connect ->
+        connect {
+            login()
+            eventually { presence.connected }
+        }
+        eventually { !presence.connected }
     }
 }

@@ -9,6 +9,10 @@ import com.cellbridge.domain.model.IncomingSms
 import com.cellbridge.domain.model.SendResult
 import com.cellbridge.history.HistorySource
 import com.cellbridge.history.NoHistory
+import com.cellbridge.push.NoPush
+import com.cellbridge.push.PushNotifier
+import com.cellbridge.push.PushRegistry
+import com.cellbridge.push.PushTarget
 import com.cellbridge.sms.SmsGateway
 import com.cellbridge.telecom.CallDialer
 import com.cellbridge.telecom.DialOutcome
@@ -74,6 +78,8 @@ class ControlServer @Inject constructor(
     private val dialer: CallDialer,
     private val pairingToken: PairingToken,
     private val history: HistorySource,
+    private val push: PushNotifier,
+    private val presence: ClientPresence,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
     private val _running = MutableStateFlow(false)
@@ -96,7 +102,7 @@ class ControlServer @Inject constructor(
                 CIO,
                 rootConfig = serverConfig {
                     parentCoroutineContext = onFailure
-                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history) }
+                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, presence = presence) }
                 },
                 configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
             ).also { server ->
@@ -105,7 +111,7 @@ class ControlServer @Inject constructor(
             }
         }.onSuccess {
             engine = it
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also(audio::start)
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { audio.start(it); push.start(it) }
             _running.value = true
         }.onFailure { Log.e(TAG, "control server failed to start", it) }
     }
@@ -127,6 +133,7 @@ class ControlServer @Inject constructor(
         if (audio.isAvailable()) add("audio")
         if (history.callsAvailable()) add("calllog")
         if (sms.isAvailable()) add("smshistory")
+        if (push.available()) add("push")
     }
 
     private companion object {
@@ -146,6 +153,8 @@ fun Application.controlModule(
     capabilities: suspend () -> List<String>,
     authFailureDelay: Duration = 1.seconds,
     history: HistorySource = NoHistory,
+    push: PushRegistry = NoPush,
+    presence: ClientPresence = ClientPresence(),
 ) {
     install(WebSockets) {
         pingPeriod = 10.seconds
@@ -153,7 +162,7 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, history).run() }
+        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, history, push, presence).run() }
     }
 }
 
@@ -174,6 +183,8 @@ private class Session(
     private val capabilities: suspend () -> List<String>,
     private val authFailureDelay: Duration,
     private val history: HistorySource,
+    private val push: PushRegistry,
+    private val presence: ClientPresence,
 ) {
     suspend fun run() {
         val hello = ws.incoming.receive().let { (it as? Frame.Text)?.readText() }?.let(::decodeClientMessage)
@@ -207,11 +218,13 @@ private class Session(
             if (sms.isAvailable()) runCatching { sms.unacknowledged() }.getOrDefault(emptyList()).forEach { send(it.toMessage()) }
             acked.complete(Unit)
 
+            presence.joined()
             try {
                 for (frame in ws.incoming) {
                     if (frame is Frame.Text) handle(decodeClientMessage(frame.readText()), scope = this@coroutineScope)
                 }
             } finally {
+                presence.left()
                 forwarder.cancel()
                 smsForwarder.cancel()
             }
@@ -264,6 +277,14 @@ private class Session(
                 val since = message.since ?: (System.currentTimeMillis() - HISTORY_DAYS * DAY_MS)
                 val items = if (sms.isAvailable()) history.texts(since, SMS_HISTORY_LIMIT) else emptyList()
                 send(ServerMessage.SmsHistory(items.map { SmsHistoryItem(it.id, it.peer, it.body, it.timestamp, if (it.outgoing) "out" else "in") }))
+                return
+            }
+            is ClientMessage.PushToken -> {
+                val key = runCatching { java.util.Base64.getDecoder().decode(message.key) }.getOrNull()
+                if (!push.available() || key?.size != 32 || message.token.length < 32 || message.env !in setOf("sandbox", "production")) {
+                    return send(ServerMessage.Error("bad_message"))
+                }
+                push.register(PushTarget(message.token, message.env == "sandbox", message.topic, key))
                 return
             }
             is ClientMessage.Hello, null -> return send(ServerMessage.Error("bad_message"))

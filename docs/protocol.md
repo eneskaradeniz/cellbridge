@@ -9,7 +9,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | type | dir | fields |
 |---|---|---|
 | `hello` | iOS -> host | `version` (int, currently 1), `token` |
-| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`) |
+| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`) |
 | `error` | host -> iOS | `code`, `message?` |
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
@@ -25,6 +25,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `call_log` | host -> iOS | `entries`: `id`, `number`, `name?`, `kind`, `ts`, `duration` |
 | `sms_history_request` | iOS -> host | `since?` (ms since epoch) |
 | `sms_history` | host -> iOS | `items`: `id`, `peer`, `body`, `ts`, `dir` |
+| `push_token` | iOS -> host | `token` (hex), `env` (`sandbox`/`production`), `topic`, `key` (base64, 32 bytes) |
 
 `audio` is advertised only when the root audio daemon is reachable; without it the host runs in control-only mode
 (calls and SMS work, call audio stays on the phone) and the client must not open the audio channel.
@@ -62,6 +63,17 @@ same direction, within 90 s) adopts the host id instead of adding a second recor
 first; `dir` is `in` or `out`. An incoming item has the same `id` the live `sms` message carries, so a text seen both ways is
 stored once; an outgoing item has the id `out-<row>`, and a client matches it to texts it sent itself by number, body and time (within
 2 minutes). History texts count as read and are never acknowledged. Clients ask once per installation.
+
+Waking a closed app: iOS only starts an app that was swiped away for a VoIP push (PushKit, via Apple's APNs), so the host sends one
+when a call starts ringing. `push` is advertised while the host holds an APNs key. After `hello_ack` the client sends `push_token`
+with its PushKit token, whether the build is a development one (`sandbox`) or not (`production`), the APNs `topic`
+(bundle id + `.voip`) and `key`: 32 random bytes the client keeps in its Keychain, so nobody but the two phones can read what
+the push carries. The host stores the latest `push_token`. When an incoming call rings and no client is connected, it posts to
+APNs at once; when a client is connected it waits 3 s and posts only if the call is still ringing (the connection may be dead).
+The push body is `{"cb": "<sealed>"}` where `sealed` is base64(`nonce` (12 bytes) + AES-256-GCM ciphertext + tag) of
+`{"callId":...,"number":...,"name":...}` under `key`, with the string `cellbridge-push-v1` as additional data. The client must
+report a call to CallKit for every push it receives (iOS terminates apps that do not), using a call UUID derived from `callId` so a
+push for a call it already knows is harmless; it then connects, and ends the call again if the host does not list it as ringing.
 
 Keep-alive: WebSocket ping every 10 s; client reconnects after 2 s.
 
