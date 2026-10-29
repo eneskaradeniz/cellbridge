@@ -9,6 +9,12 @@ final class BonjourDiscovery: ObservableObject {
     /// The phone's installation id from its TXT record: not secret, not derived from the pairing code.
     @Published private(set) var deviceId: String?
 
+    /// With several phones on the network, the one paired (its installation id from the QR code).
+    var preferredId: String? {
+        didSet { if oldValue != preferredId { resolve(lastResults) } }
+    }
+
+    private var lastResults: Set<NWBrowser.Result> = []
     private var browser: NWBrowser?
     private var probe: NWConnection?
 
@@ -35,7 +41,12 @@ final class BonjourDiscovery: ObservableObject {
     /// A browse result is a name, not an address: connecting to it once shows the IPv4 address the system resolved.
     private func resolve(_ results: Set<NWBrowser.Result>) {
         probe?.cancel()
-        guard let result = results.first else {
+        lastResults = results
+        let match = results.first { result in
+            if case .bonjour(let txt) = result.metadata { return preferredId != nil && txt["id"] == preferredId }
+            return false
+        }
+        guard let result = match ?? results.first else {
             address = nil
             deviceId = nil
             return

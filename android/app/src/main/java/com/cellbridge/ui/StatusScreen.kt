@@ -1,6 +1,7 @@
 package com.cellbridge.ui
 
 import android.text.format.DateFormat
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -42,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cellbridge.R
 import com.cellbridge.status.HostStatus
+import com.cellbridge.status.qrModules
 import kotlinx.coroutines.delay
 import java.util.Date
 
@@ -51,7 +55,7 @@ private val Bad = Color(0xFFD6453D)
 
 /** The phone's main screen: is the bridge up, where to point the iPhone, is everything it needs in place. */
 @Composable
-fun StatusScreen(status: HostStatus?, pairingCode: String, roles: @Composable () -> Unit) {
+fun StatusScreen(status: HostStatus?, pairingCode: String, pairingLink: String, roles: @Composable () -> Unit) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier.safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
@@ -114,7 +118,7 @@ fun StatusScreen(status: HostStatus?, pairingCode: String, roles: @Composable ()
 
             Section(stringResource(R.string.card_roles)) { roles() }
 
-            Section(stringResource(R.string.card_pairing)) { PairingCode(pairingCode) }
+            Section(stringResource(R.string.card_pairing)) { PairingCode(pairingCode, pairingLink) }
         }
     }
 }
@@ -148,7 +152,7 @@ private fun Detail(text: String) {
 
 /** Hidden until asked for, and hidden again after ten seconds: it is the key to the phone's calls and texts. */
 @Composable
-private fun PairingCode(code: String) {
+private fun PairingCode(code: String, link: String) {
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(shown) { if (shown) { delay(10_000); shown = false } }
     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
@@ -160,6 +164,23 @@ private fun PairingCode(code: String) {
         TextButton(onClick = { shown = !shown }) { Text(stringResource(if (shown) R.string.hide_code else R.string.show_code)) }
     }
     Detail(stringResource(R.string.pairing_hint))
+    if (shown) QrCode(link)
+}
+
+/** The pairing link as a QR code, dark modules on white so any camera reads it in either theme. */
+@Composable
+private fun QrCode(link: String) {
+    val modules = remember(link) { qrModules(link) }
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(240.dp).clip(RoundedCornerShape(12.dp)).background(Color.White).padding(14.dp)) {
+            val cell = size.width / modules.size
+            modules.forEachIndexed { y, row ->
+                row.forEachIndexed { x, dark ->
+                    if (dark) drawRect(Color.Black, Offset(x * cell, y * cell), Size(cell + 0.5f, cell + 0.5f))
+                }
+            }
+        }
+    }
 }
 
 @Composable

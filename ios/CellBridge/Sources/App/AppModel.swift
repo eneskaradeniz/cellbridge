@@ -126,6 +126,7 @@ final class AppModel: ObservableObject {
         }.store(in: &bag)
         refreshContacts()
         Self.current = self
+        bonjour.preferredId = pairedDeviceId
         notifier.onOpen = { [weak self] in self?.openThread($0, focusesComposer: false) }
         messages.$conversations.sink { [weak self] conversations in
             self?.notifier.setBadge(conversations.reduce(0) { $0 + $1.unreadCount })
@@ -155,6 +156,29 @@ final class AppModel: ObservableObject {
 
     /// Found without typing: the phone announcing itself on the network, else the Wi-Fi gateway (its hotspot).
     var detectedAddress: String? { bonjour.address ?? gateway.address }
+
+    /// The phone's installation id from the QR code: when several phones announce themselves, this one is meant.
+    private(set) var pairedDeviceId: String? = UserDefaults.standard.string(forKey: "pairedDeviceId")
+
+    /// Takes what a QR code on the phone's screen holds, and connects.
+    func pair(with link: PairingLink) {
+        token = link.code
+        host = link.host ?? ""
+        pairedDeviceId = link.deviceId
+        UserDefaults.standard.set(link.deviceId, forKey: "pairedDeviceId")
+        bonjour.preferredId = link.deviceId
+        disconnect()
+        connect()
+    }
+
+    func forgetPairing() {
+        disconnect()
+        token = ""
+        host = ""
+        pairedDeviceId = nil
+        UserDefaults.standard.removeObject(forKey: "pairedDeviceId")
+        bonjour.preferredId = nil
+    }
 
     var hostLooksValid: Bool { HostAddress.isValid(host) }
 
@@ -197,7 +221,7 @@ final class AppModel: ObservableObject {
     var connectHint: String? {
         if !hostLooksValid { return String(localized: "That does not look like an address. Use numbers like 192.168.43.1.") }
         if effectiveHost.isEmpty { return String(localized: "Enter the phone's address.") }
-        if cleanToken.isEmpty { return String(localized: "Enter the pairing code shown on the phone.") }
+        if cleanToken.isEmpty { return String(localized: "Scan the QR code shown on the phone.") }
         return nil
     }
 

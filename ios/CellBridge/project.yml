@@ -17,6 +17,8 @@ targets:
         CFBundleDisplayName: CellBridge
         CFBundleLocalizations: [en, tr]
         NSBonjourServices: [_cellbridge._tcp]
+        NSCameraUsageDescription: Scans the QR code on the phone to pair with it once.
+        NSFaceIDUsageDescription: Keeps the pairing details hidden until you unlock them.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         CFBundleURLTypes:
           - CFBundleURLName: cellbridge

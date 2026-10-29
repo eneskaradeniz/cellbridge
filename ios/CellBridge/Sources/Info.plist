@@ -45,8 +45,12 @@
 	<array>
 		<string>_cellbridge._tcp</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Scans the QR code on the phone to pair with it once.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Shows who is calling or texting and lets you pick a number from your contacts. Contacts stay on this phone.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Keeps the pairing details hidden until you unlock them.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Talks to the CellBridge host on the local network.</string>
 	<key>NSMicrophoneUsageDescription</key>

@@ -1441,6 +1441,146 @@
           }
         }
       }
+    },
+    "Scan the QR code": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR kodunu tara"
+          }
+        }
+      }
+    },
+    "Phone Details": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefon Ayrıntıları"
+          }
+        }
+      }
+    },
+    "That is not a CellBridge QR code.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu bir CellBridge QR kodu değil."
+          }
+        }
+      }
+    },
+    "Open CellBridge on the Android phone and scan the QR code shown there, once. After that this iPhone finds the phone by itself.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Android telefonda CellBridge'i açıp orada görünen QR kodunu bir kez tarayın. Sonrasında iPhone telefonu kendisi bulur."
+          }
+        }
+      }
+    },
+    "Unlock with Face ID": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Face ID ile aç"
+          }
+        }
+      }
+    },
+    "Could not unlock. Try again.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Açılamadı. Tekrar deneyin."
+          }
+        }
+      }
+    },
+    "The pairing details are hidden.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleşme ayrıntıları gizli."
+          }
+        }
+      }
+    },
+    "Normally the phone is found by itself. Type an address only on a network where that does not work.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normalde telefon kendiliğinden bulunur. Adresi yalnızca bunun çalışmadığı bir ağda yazın."
+          }
+        }
+      }
+    },
+    "Forget this phone": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu telefonu unut"
+          }
+        }
+      }
+    },
+    "Forget this phone?": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu telefon unutulsun mu?"
+          }
+        }
+      }
+    },
+    "Forget": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unut"
+          }
+        }
+      }
+    },
+    "You will have to scan its QR code again.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR kodunu yeniden taramanız gerekir."
+          }
+        }
+      }
+    },
+    "Show the pairing details": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleşme ayrıntılarını göster"
+          }
+        }
+      }
+    },
+    "Scan the QR code shown on the phone.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonda görünen QR kodunu tarayın."
+          }
+        }
+      }
     }
   }
 }

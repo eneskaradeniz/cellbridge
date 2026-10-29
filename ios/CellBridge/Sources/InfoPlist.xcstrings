@@ -65,6 +65,38 @@
           }
         }
       }
+    },
+    "NSCameraUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scans the QR code on the phone to pair with it once."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefondaki QR kodunu bir kez tarayıp eşleşmek için kamerayı kullanır."
+          }
+        }
+      }
+    },
+    "NSFaceIDUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keeps the pairing details hidden until you unlock them."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleşme ayrıntılarını kilidini açana kadar gizli tutar."
+          }
+        }
+      }
     }
   }
 }

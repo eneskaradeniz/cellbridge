@@ -23,7 +23,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.produceState
 import com.cellbridge.status.HostStatus
+import com.cellbridge.server.CONTROL_PORT
 import com.cellbridge.status.HostStatusReader
+import com.cellbridge.status.pairingLink
 import com.cellbridge.ui.StatusScreen
 import kotlinx.coroutines.delay
 import androidx.compose.material3.Text
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var roles: DefaultRoles
     @Inject lateinit var feed: com.cellbridge.telecom.CallFeed
     @Inject lateinit var statusReader: HostStatusReader
+    @Inject lateinit var deviceId: com.cellbridge.discovery.DeviceId
     @Inject lateinit var pairingToken: PairingToken
     @Inject lateinit var controlServer: ControlServer
 
@@ -73,7 +76,8 @@ class MainActivity : ComponentActivity() {
                         delay(2_000)
                     }
                 }
-                StatusScreen(status, pairingToken.value) {
+                val link = pairingLink(pairingToken.value, deviceId.value, status?.addresses?.firstOrNull()?.address, CONTROL_PORT)
+                StatusScreen(status, pairingToken.value, link) {
                     RoleRow(AppRole.DIALER, R.string.role_dialer)
                     RoleRow(AppRole.SMS, R.string.role_sms)
                 }

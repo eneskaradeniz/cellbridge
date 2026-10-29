@@ -3,6 +3,8 @@ import SwiftUI
 /// Where the phone is found and paired. The audio tools and the event log live one level down, under Developer.
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
+    @State private var scanning = false
+    @State private var scanFailed = false
 
     private var status: LinkStatus { LinkStatus(model.client.state, unreachable: model.unreachable) }
 
@@ -44,29 +46,13 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    LabeledContent("Address") {
-                        TextField("Automatic", text: $model.host)
-                            .keyboardType(.numbersAndPunctuation)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    LabeledContent("Pairing code") {
-                        TextField("From the phone", text: $model.token)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.characters)
-                            .multilineTextAlignment(.trailing)
-                            .monospaced()
-                            .submitLabel(.go)
-                            .onSubmit { if model.canConnect { model.connect() } }
-                    }
+                    Button { scanning = true } label: { Label("Scan the QR code", systemImage: "qrcode.viewfinder") }
+                    NavigationLink { PhoneDetailsView() } label: { Label("Phone Details", systemImage: "lock") }
                 } header: {
                     Text("Phone")
                 } footer: {
-                    if let detected = model.detectedAddress, model.host.isEmpty {
-                        Text("Detected \(detected). Leave the address empty to use it, or type the phone's own address. The code is shown in the CellBridge app on the phone.")
-                    } else {
-                        Text("The phone's address on this Wi-Fi network, and the code its CellBridge app shows.")
+                    if scanFailed { Text("That is not a CellBridge QR code.").foregroundStyle(.red) } else {
+                        Text("Open CellBridge on the Android phone and scan the QR code shown there, once. After that this iPhone finds the phone by itself.")
                     }
                 }
 
@@ -87,6 +73,23 @@ struct SettingsView: View {
                     } label: {
                         Label("Developer", systemImage: "hammer")
                     }
+                }
+            }
+            .sheet(isPresented: $scanning) {
+                NavigationStack {
+                    QRScannerView { text in
+                        scanning = false
+                        if let link = PairingLink.parse(text) {
+                            scanFailed = false
+                            model.pair(with: link)
+                        } else {
+                            scanFailed = true
+                        }
+                    }
+                    .ignoresSafeArea()
+                    .navigationTitle("Scan the QR code")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { scanning = false } } }
                 }
             }
             .navigationTitle("Settings")

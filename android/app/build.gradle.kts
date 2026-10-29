@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.websockets)
     implementation(libs.slf4j.android) // routes Ktor's SLF4J logging to logcat
+    implementation(libs.zxing.core) // draws the pairing QR code; the only thing it is used for
     implementation(libs.okhttp) // HTTP/2 client for APNs (the platform's HttpURLConnection does not promise HTTP/2)
 
     testImplementation(libs.junit)
