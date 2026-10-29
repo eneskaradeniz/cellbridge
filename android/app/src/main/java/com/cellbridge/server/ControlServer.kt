@@ -242,6 +242,12 @@ private class Session(
             }
             is ClientMessage.Reject -> message.callId to commands.reject(message.callId)
             is ClientMessage.Hangup -> message.callId to commands.hangup(message.callId)
+            is ClientMessage.RingAck -> {
+                // The iPhone is ringing: the phone in the pocket can stop. Without this ack it keeps ringing, so a dead
+                // connection never swallows a call.
+                commands.silence(message.callId)
+                return
+            }
             is ClientMessage.Dial -> {
                 // Placing a call takes a moment; keep reading frames meanwhile.
                 scope.launch {

@@ -18,6 +18,10 @@ final class HistoryProtocolTests: XCTestCase {
         ]))
     }
 
+    func testRingAckEncodes() {
+        XCTAssertEqual(ClientMessage.ringAck(callId: "c1").encoded(), #"{"callId":"c1","type":"ring_ack"}"#)
+    }
+
     func testRequestsEncode() {
         XCTAssertEqual(ClientMessage.callLogRequest(after: "10", since: nil).encoded(), #"{"after":"10","type":"call_log_request"}"#)
         XCTAssertEqual(ClientMessage.callLogRequest(after: nil, since: 500).encoded(), #"{"since":500,"type":"call_log_request"}"#)

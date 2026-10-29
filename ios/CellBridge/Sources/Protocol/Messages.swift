@@ -8,6 +8,7 @@ enum ClientMessage: Equatable {
     case answer(callId: String, udpPort: Int?)
     case reject(callId: String)
     case hangup(callId: String)
+    case ringAck(callId: String)
     case dial(clientId: String, number: String, udpPort: Int?)
     case smsAck(id: String)
     case smsSend(clientId: String, to: String, body: String)
@@ -26,6 +27,8 @@ enum ClientMessage: Equatable {
             object = ["type": "reject", "callId": callId]
         case .hangup(let callId):
             object = ["type": "hangup", "callId": callId]
+        case .ringAck(let callId):
+            object = ["type": "ring_ack", "callId": callId]
         case .dial(let clientId, let number, let udpPort):
             object = ["type": "dial", "clientId": clientId, "number": number]
             if let udpPort { object["udpPort"] = udpPort }

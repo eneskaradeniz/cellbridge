@@ -9,6 +9,9 @@ interface CallHandle {
     fun answer()
     fun reject()
     fun hangup()
+
+    /** Stops the phone from ringing (and vibrating) for this call without answering it. */
+    fun silence()
 }
 
 /** Client commands addressed by call id; each returns false when no such call is live. */
@@ -16,6 +19,7 @@ interface CallCommands {
     fun answer(callId: String): Boolean
     fun reject(callId: String): Boolean
     fun hangup(callId: String): Boolean
+    fun silence(callId: String): Boolean
 }
 
 /** Maps call ids to the live telecom calls so control-server commands can reach them. */
@@ -36,4 +40,6 @@ class CallRegistry @Inject constructor() : CallCommands {
     override fun reject(callId: String) = handles[callId]?.reject() != null
 
     override fun hangup(callId: String) = handles[callId]?.hangup() != null
+
+    override fun silence(callId: String) = handles[callId]?.silence() != null
 }

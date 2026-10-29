@@ -63,6 +63,7 @@ class ControlServerTest {
         override fun answer(callId: String) = callId == "c1".also { calls += "answer:$callId" }
         override fun reject(callId: String) = callId == "c1".also { calls += "reject:$callId" }
         override fun hangup(callId: String) = callId == "c1".also { calls += "hangup:$callId" }
+        override fun silence(callId: String) = callId == "c1".also { calls += "silence:$callId" }
     }
 
     private class FakeDialer : CallDialer {
@@ -471,5 +472,14 @@ class ControlServerTest {
             eventually { presence.connected }
         }
         eventually { !presence.connected }
+    }
+
+    @Test
+    fun `a ring ack silences the phone and gets no reply`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"ring_ack","callId":"c1"}""")
+            eventually { commands.calls == listOf("silence:c1") }
+        }
     }
 }

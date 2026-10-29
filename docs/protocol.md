@@ -13,6 +13,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `error` | host -> iOS | `code`, `message?` |
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
+| `ring_ack` | iOS -> host | `callId` |
 | `ended` | host -> iOS | `callId`, `reason?` |
 | `dial` | iOS -> host | `clientId`, `number`, `udpPort?` |
 | `dial_result` | host -> iOS | `clientId`, `ok`, `callId?`, `error?` |
@@ -36,6 +37,10 @@ and the host closes the socket. Later errors (`bad_message`, `unknown_call`) lea
 `ended.reason` is `missed` for an incoming call that ended without being answered (the caller gave up), `rejected` when the host
 rejected it on the client's request; it is absent for a call that was answered. After `hello_ack` the host re-sends `ring` for every
 call that is still ringing, so a reconnecting client catches up; clients dedupe by `callId`.
+
+Ringing: the client answers every `ring` with `ring_ack` (also the repeats after a reconnect) once its own call UI is up. The host then
+silences the phone's ringtone and vibration for that call, so only the iPhone rings; without an ack (no client, a dead socket) the
+phone keeps ringing and a call is never swallowed. `ring_ack` has no reply.
 
 Outgoing calls: `dial` is answered by exactly one `dial_result` with the same `clientId`. On `ok:true` the call exists on the host
 under `callId` (dialing); `answered` follows when the far end picks up (it is also sent for incoming calls once they are

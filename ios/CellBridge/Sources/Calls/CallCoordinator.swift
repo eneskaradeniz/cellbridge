@@ -105,6 +105,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         switch message {
         case .ring(let callId, let number, let name):
             ring(callId: callId, number: number, name: name)
+            send(.ringAck(callId: callId)) // the phone in the pocket may stop ringing now
         case .ended(let callId, let reason):
             // reportCall(endedAt:) does not call back into CXEndCallAction, so nothing is sent to the host.
             guard let uuid = book.uuid(forCallId: callId) else { return }

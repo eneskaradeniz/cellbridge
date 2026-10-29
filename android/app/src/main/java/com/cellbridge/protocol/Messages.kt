@@ -27,6 +27,9 @@ sealed interface ClientMessage {
     @Serializable @SerialName("hangup")
     data class Hangup(val callId: String) : ClientMessage
 
+    @Serializable @SerialName("ring_ack")
+    data class RingAck(val callId: String) : ClientMessage
+
     @Serializable @SerialName("dial")
     data class Dial(val clientId: String, val number: String, val udpPort: Int? = null) : ClientMessage
 

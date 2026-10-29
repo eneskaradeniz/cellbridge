@@ -11,6 +11,7 @@ class CallRegistryTest {
         override fun answer() { actions += "answer" }
         override fun reject() { actions += "reject" }
         override fun hangup() { actions += "hangup" }
+        override fun silence() { actions += "silence" }
     }
 
     private val registry = CallRegistry()
@@ -21,7 +22,8 @@ class CallRegistryTest {
         assertTrue(registry.answer("c1"))
         assertTrue(registry.reject("c1"))
         assertTrue(registry.hangup("c1"))
-        assertEquals(listOf("answer", "reject", "hangup"), handle.actions)
+        assertTrue(registry.silence("c1"))
+        assertEquals(listOf("answer", "reject", "hangup", "silence"), handle.actions)
     }
 
     @Test

@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.telecom.DisconnectCause
 import android.telecom.InCallService
+import android.telecom.TelecomManager
 import android.telecom.VideoProfile
 import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallSnapshot
@@ -67,6 +68,8 @@ class CellBridgeInCallService : InCallService() {
         override fun answer() { main.post { call.answer(VideoProfile.STATE_AUDIO_ONLY) } }
         override fun reject() { main.post { call.reject(false, null) } }
         override fun hangup() { main.post { call.disconnect() } }
+        // The default dialer may silence the ringer; the call keeps ringing for the iPhone, only the phone stops making noise.
+        override fun silence() { main.post { getSystemService(TelecomManager::class.java)?.silenceRinger() } }
     }
 
     private fun report(call: Call, state: Int) {
