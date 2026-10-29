@@ -78,4 +78,14 @@ final class CallLogTests: XCTestCase {
         XCTAssertThrowsError(try failing.record(CallRecord.make(detail(outgoing: true, answered: false), endedBy: .local)))
         XCTAssertTrue(failing.entries.isEmpty)
     }
+
+    func testRemoveForgetsOnlyTheGivenCalls() throws {
+        let log = CallLog(url: nil)
+        let keep = CallRecord(id: UUID(), number: "1", title: "a", direction: .incoming, outcome: .answered, date: Date(), duration: 3)
+        let drop = CallRecord(id: UUID(), number: "2", title: "b", direction: .outgoing, outcome: .noAnswer, date: Date(), duration: 0)
+        try log.record(keep)
+        try log.record(drop)
+        try log.remove(ids: [drop.id])
+        XCTAssertEqual(log.entries, [keep])
+    }
 }

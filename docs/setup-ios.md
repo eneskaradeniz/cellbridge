@@ -48,3 +48,12 @@ From then on the app reconnects by itself (after a network change, when reopened
 | No `audio` in the status | the daemon is not running on the Android phone |
 | You cannot hear the far end | tap the speaker button (the earpiece is quiet unless held to the ear) |
 | Something odd after hours of running | pull the log: `xcrun devicectl device copy from --device <udid> --domain-type appDataContainer --domain-identifier <your bundle id> --source "Library/Application Support/CellBridge/events.log" --destination events.log` (numbers and texts are never logged) |
+
+## Limits of a free Apple ID
+
+- **Default calling app:** iOS 18.2+ lets an app be chosen under Settings → Apps → Default Apps → Calling, so numbers tapped in
+  Contacts or Safari would open CellBridge. That needs the `com.apple.developer.calling-app` capability, which Xcode refuses for
+  personal teams ("do not support the Default Calling App capability"). Until a paid developer account is used, start calls from
+  CellBridge itself, from the **Call with CellBridge** shortcut (Shortcuts, Spotlight, Siri, Action button), or with
+  `cellbridge://call?number=<number>`.
+- Default messaging apps and default dialers are EU-only features and not available.

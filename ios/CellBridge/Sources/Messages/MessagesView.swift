@@ -3,13 +3,17 @@ import SwiftUI
 struct MessagesView: View {
     @EnvironmentObject var model: AppModel
     @State private var composing = false
-    @State private var path: [String] = []
+    @State private var path: [ThreadRoute] = []
 
     var body: some View {
         NavigationStack(path: $path) {
             List(model.messages.conversations) { conversation in
-                NavigationLink(value: conversation.key) {
+                NavigationLink(value: ThreadRoute(key: conversation.key, peer: conversation.peer)) {
                     Row(conversation: conversation, name: model.displayName(for: conversation.peer))
+                }
+                .contextMenu {
+                    Button { model.dial(conversation.peer) } label: { Label("Call", systemImage: "phone") }
+                    Button { UIPasteboard.general.string = conversation.peer } label: { Label("Copy Number", systemImage: "doc.on.doc") }
                 }
             }
             .listStyle(.plain)
@@ -21,17 +25,26 @@ struct MessagesView: View {
             }
             .navigationTitle("Messages")
             .toolbarTitleDisplayMode(.inlineLarge)
-            .navigationDestination(for: String.self) { ThreadView(key: $0) }
+            .navigationDestination(for: ThreadRoute.self) { ThreadView(route: $0) }
             .toolbar {
                 Button { composing = true } label: { Image(systemName: "square.and.pencil") }
-                    .disabled(!model.canSendSms)
                     .accessibilityLabel("New message")
             }
             .sheet(isPresented: $composing) { NewMessageView() }
-            #if DEBUG
-            .onAppear { if Sample.opensThread, let first = model.messages.conversations.first { path = [first.key] } }
-            #endif
+            .onChange(of: model.threadRequest) { _, _ in openRequestedThread() }
+            .onAppear {
+                openRequestedThread() // the tab is built lazily: a request made before it existed is waiting
+                #if DEBUG
+                if Sample.opensThread, let first = model.messages.conversations.first { path = [ThreadRoute(key: first.key, peer: first.peer)] }
+                #endif
+            }
         }
+    }
+
+    private func openRequestedThread() {
+        guard let route = model.threadRequest else { return }
+        path = [route]
+        model.threadRequest = nil
     }
 
     private struct Row: View {
@@ -57,39 +70,55 @@ struct MessagesView: View {
 
 struct ThreadView: View {
     @EnvironmentObject var model: AppModel
-    let key: String
+    let route: ThreadRoute
     @State private var draft = ""
+    @FocusState private var composing: Bool
 
-    private var conversation: Conversation? { model.messages.conversations.first { $0.key == key } }
+    private var conversation: Conversation? { model.messages.conversations.first { $0.key == route.key } }
+    private var peer: String { conversation?.peer ?? route.peer }
 
     private var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.canSendSms }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 2) {
-                ForEach(MessageDisplay.days(conversation?.messages ?? []), id: \.day) { day in
-                    Text(MessageDisplay.dayTitle(day.day))
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 10)
-                    ForEach(Array(day.messages.enumerated()), id: \.element.id) { index, message in
-                        Bubble(message: message, showsStatus: showsStatus(index, in: day.messages)) { model.messages.retry(message) }
-                            .padding(.bottom, showsStatus(index, in: day.messages) ? 8 : 0)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(MessageDisplay.days(conversation?.messages ?? []), id: \.day) { day in
+                        Text(MessageDisplay.dayTitle(day.day))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 10)
+                            .accessibilityAddTraits(.isHeader)
+                        ForEach(Array(day.messages.enumerated()), id: \.element.id) { index, message in
+                            Bubble(message: message, showsStatus: showsStatus(index, in: day.messages)) { model.messages.retry(message) }
+                                .padding(.bottom, showsStatus(index, in: day.messages) ? 8 : 0)
+                        }
                     }
                 }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+            .defaultScrollAnchor(.bottom)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: conversation?.messages.count) { _, _ in
+                guard let last = conversation?.messages.last else { return }
+                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+            }
         }
-        .defaultScrollAnchor(.bottom)
-        .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) { composer }
-        .navigationTitle(model.displayName(for: conversation?.peer ?? ""))
+        .navigationTitle(model.displayName(for: peer))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            Button { model.dial(peer) } label: { Image(systemName: "phone") }
+                .accessibilityLabel("Call")
+        }
         .toolbarVisibility(.hidden, for: .tabBar)
-        .onAppear { model.threadOpen = true }
+        .onAppear {
+            model.threadOpen = true
+            if route.focusesComposer { composing = true }
+        }
         .onDisappear { model.threadOpen = false }
-        .sensoryFeedback(.success, trigger: conversation?.messages.count) { old, new in
+        .sensoryFeedback(.impact(weight: .light), trigger: conversation?.messages.count) { old, new in
             (new ?? 0) > (old ?? 0) && conversation?.last.direction == .outgoing
         }
     }
@@ -108,22 +137,21 @@ struct ThreadView: View {
 
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("Message", text: $draft, axis: .vertical)
+            TextField(model.canSendSms ? "Message" : "Connect to the phone to send", text: $draft, axis: .vertical)
+                .focused($composing)
                 .lineLimit(1...5)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .glassEffect(.regular, in: .rect(cornerRadius: 22))
             Button {
-                if let peer = conversation?.peer {
-                    model.messages.send(to: peer, body: draft)
-                    draft = ""
-                }
+                model.messages.send(to: peer, body: draft)
+                draft = ""
             } label: {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.body.weight(.bold))
                     .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .glassEffect(.regular.tint(.accentColor.opacity(canSend ? 1 : 0.3)).interactive(), in: .circle)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.tint(.accentColor.opacity(canSend ? 1 : 0.3)).interactive(canSend), in: .circle)
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
@@ -150,7 +178,10 @@ private struct Bubble: View {
                 .background(outgoing ? Color.accentColor : Color(.systemGray5), in: shape(outgoing))
                 .opacity(message.status == .sending ? 0.7 : 1)
                 .frame(maxWidth: 300, alignment: outgoing ? .trailing : .leading)
-                .textSelection(.enabled)
+                .contextMenu {
+                    Button { UIPasteboard.general.string = message.body } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    if line.failed { Button(action: retry) { Label("Try Again", systemImage: "arrow.clockwise") } }
+                }
             if showsStatus {
                 Text(line.text).font(.caption2).foregroundStyle(line.failed ? Color.red : Color.secondary)
             }
@@ -196,6 +227,8 @@ struct NewMessageView: View {
                 }
                 Section {
                     TextField("Message", text: $body_, axis: .vertical).lineLimit(4...10)
+                } footer: {
+                    if !model.canSendSms { Text("Connect to the phone to send.") }
                 }
             }
             .navigationTitle("New Message")
@@ -206,8 +239,10 @@ struct NewMessageView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Send", systemImage: "arrow.up") {
-                        model.messages.send(to: to, body: body_)
+                        let number = to
+                        model.messages.send(to: number, body: body_)
                         dismiss()
+                        model.openThread(number) // land in the conversation, like the Messages app
                     }
                     .disabled(!canSend)
                 }

@@ -19,11 +19,28 @@ struct RecentsView: View {
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 ForEach(shown) { record in
-                    Button { model.dial(record.number) } label: {
-                        Row(record: record, name: model.displayName(for: record.number, fallback: record.title))
-                    }
-                    .buttonStyle(.plain)
-                    .allowsHitTesting(model.canDial && !record.number.isEmpty)
+                    let name = model.displayName(for: record.number, fallback: record.title)
+                    let callable = !record.number.isEmpty
+                    Button { model.dial(record.number) } label: { Row(record: record, name: name) }
+                        .buttonStyle(.plain)
+                        .disabled(!callable)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) { model.deleteRecents([record.id]) } label: { Label("Delete", systemImage: "trash") }
+                        }
+                        .swipeActions(edge: .leading) {
+                            if callable {
+                                Button { model.dial(record.number) } label: { Label("Call", systemImage: "phone.fill") }.tint(.green)
+                                Button { model.openThread(record.number) } label: { Label("Message", systemImage: "message.fill") }.tint(.blue)
+                            }
+                        }
+                        .contextMenu {
+                            if callable {
+                                Button { model.dial(record.number) } label: { Label("Call", systemImage: "phone") }
+                                Button { model.openThread(record.number) } label: { Label("Message", systemImage: "message") }
+                                Button { UIPasteboard.general.string = record.number } label: { Label("Copy Number", systemImage: "doc.on.doc") }
+                            }
+                            Button(role: .destructive) { model.deleteRecents([record.id]) } label: { Label("Delete", systemImage: "trash") }
+                        }
                 }
             }
             .listStyle(.plain)
@@ -55,12 +72,13 @@ struct RecentsView: View {
         var body: some View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(name)
-                        .font(.title3.weight(.semibold))
+                    Text(name.isEmpty ? String(localized: "Unknown") : name)
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(record.isMissed ? Color.red : Color.primary)
                         .lineLimit(1)
                     HStack(spacing: 4) {
-                        if record.direction == .outgoing { Image(systemName: "phone.fill").imageScale(.small) }
+                        Image(systemName: record.direction == .outgoing ? "phone.arrow.up.right" : "phone.arrow.down.left")
+                            .imageScale(.small)
                         Text(detail)
                     }
                     .font(.subheadline)
@@ -71,6 +89,7 @@ struct RecentsView: View {
             }
             .contentShape(Rectangle())
             .accessibilityElement(children: .combine)
+            .accessibilityHint(record.number.isEmpty ? "" : String(localized: "Calls back"))
         }
 
         private var detail: String {
@@ -83,8 +102,14 @@ struct RecentsView: View {
             }
         }
 
-        static func when(_ date: Date) -> String {
-            Calendar.current.isDateInToday(date) ? date.formatted(date: .omitted, time: .shortened) : date.formatted(date: .numeric, time: .omitted)
+        /// Time today, "Yesterday", the weekday within the last week, else a short date: like the Phone app.
+        static func when(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+            if calendar.isDate(date, inSameDayAs: now) { return date.formatted(date: .omitted, time: .shortened) }
+            if calendar.isDateInYesterday(date) { return String(localized: "Yesterday") }
+            if let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day, days < 7 {
+                return date.formatted(.dateTime.weekday(.wide))
+            }
+            return date.formatted(.dateTime.year(.twoDigits).month(.twoDigits).day(.twoDigits))
         }
 
         static func duration(_ seconds: TimeInterval) -> String {

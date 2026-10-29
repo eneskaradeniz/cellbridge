@@ -322,36 +322,6 @@
         }
       }
     },
-    "calling…": {
-      "localizations": {
-        "tr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "aranıyor…"
-          }
-        }
-      }
-    },
-    "mute": {
-      "localizations": {
-        "tr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "sessiz"
-          }
-        }
-      }
-    },
-    "speaker": {
-      "localizations": {
-        "tr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "hoparlör"
-          }
-        }
-      }
-    },
     "Decline": {
       "localizations": {
         "tr": {
@@ -798,6 +768,436 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gönderilemedi: %@ · %@"
+          }
+        }
+      }
+    },
+    "Calling…": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aranıyor…"
+          }
+        }
+      }
+    },
+    "Mute": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessiz"
+          }
+        }
+      }
+    },
+    "Speaker": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hoparlör"
+          }
+        }
+      }
+    },
+    "Call Failed": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arama Başarısız"
+          }
+        }
+      }
+    },
+    "Unknown": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bilinmeyen"
+          }
+        }
+      }
+    },
+    "Calls back": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geri arar"
+          }
+        }
+      }
+    },
+    "Copy Number": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numarayı Kopyala"
+          }
+        }
+      }
+    },
+    "Copy": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopyala"
+          }
+        }
+      }
+    },
+    "Paste": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yapıştır"
+          }
+        }
+      }
+    },
+    "Copy %@": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ numarasını kopyala"
+          }
+        }
+      }
+    },
+    "No number entered": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numara girilmedi"
+          }
+        }
+      }
+    },
+    "Touch and hold to clear": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hepsini silmek için basılı tut"
+          }
+        }
+      }
+    },
+    "Call %@": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ara"
+          }
+        }
+      }
+    },
+    "Message %@": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ mesaj gönder"
+          }
+        }
+      }
+    },
+    "No contact named %@ was found.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ adında kişi bulunamadı."
+          }
+        }
+      }
+    },
+    "Connect to the phone to send": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Göndermek için telefona bağlan"
+          }
+        }
+      }
+    },
+    "Connect to the phone to send.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Göndermek için telefona bağlan."
+          }
+        }
+      }
+    },
+    "Enter the phone's address.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonun adresini gir."
+          }
+        }
+      }
+    },
+    "Enter the pairing code shown on the phone.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonda görünen eşleşme kodunu gir."
+          }
+        }
+      }
+    },
+    "Automatic": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otomatik"
+          }
+        }
+      }
+    },
+    "Detected %@. Leave the address empty to use it, or type the phone's own address. The code is shown in the CellBridge app on the phone.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ bulundu. Kullanmak için adresi boş bırak ya da telefonun kendi adresini yaz. Kod, telefondaki CellBridge uygulamasında görünür."
+          }
+        }
+      }
+    },
+    "Open iOS Settings": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS Ayarlarını Aç"
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sürüm"
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hakkında"
+          }
+        }
+      }
+    },
+    "Microphone, contacts, notifications and the app's language are set in iOS Settings.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mikrofon, kişiler, bildirimler ve uygulama dili iOS Ayarları'ndan değiştirilir."
+          }
+        }
+      }
+    },
+    "Call with CellBridge": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CellBridge ile Ara"
+          }
+        }
+      }
+    },
+    "Name or number": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "İsim ya da numara"
+          }
+        }
+      }
+    },
+    "Places a call through the connected phone.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bağlı telefon üzerinden arama yapar."
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bitti"
+          }
+        }
+      }
+    },
+    "Audio": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ses"
+          }
+        }
+      }
+    },
+    "Events": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Olaylar"
+          }
+        }
+      }
+    },
+    "Copy all": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tümünü kopyala"
+          }
+        }
+      }
+    },
+    "Audio test": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ses testi"
+          }
+        }
+      }
+    },
+    "Voice processing": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ses işleme"
+          }
+        }
+      }
+    },
+    "Record the far end": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Karşı sesi kaydet"
+          }
+        }
+      }
+    },
+    "Full (default)": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tam (varsayılan)"
+          }
+        }
+      }
+    },
+    "Full, no auto gain": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tam, otomatik kazanç yok"
+          }
+        }
+      }
+    },
+    "Bypassed": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atlanmış"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kapalı"
+          }
+        }
+      }
+    },
+    "Mic test (speak steadily)": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mikrofon testi (düzenli konuş)"
+          }
+        }
+      }
+    },
+    "Testing… (about 10 s)": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test ediliyor… (yaklaşık 10 sn)"
+          }
+        }
+      }
+    },
+    "Testing… (about 18 s)": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test ediliyor… (yaklaşık 18 sn)"
+          }
+        }
+      }
+    },
+    "The audio test plays a tone through the call's audio path in four ways and logs what the mixer renders. Turn the volume up; no call needed.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ses testi, arama ses yolunda dört farklı biçimde bir ton çalar ve mikserin ne ürettiğini kaydeder. Sesi aç; arama gerekmez."
           }
         }
       }

@@ -6,6 +6,11 @@ struct SettingsView: View {
 
     private var status: LinkStatus { LinkStatus(model.client.state) }
 
+    private static var version: String {
+        let info = Bundle.main.infoDictionary
+        return "\(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))"
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -23,16 +28,19 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
                     .accessibilityElement(children: .combine)
-                    if model.client.state == .idle {
-                        Button("Connect") { model.connect() }.disabled(!model.canConnect)
-                    } else {
+                    switch model.client.state {
+                    case .idle, .rejected:
+                        Button(status == .refused ? "Try Again" : "Connect") { model.connect() }.disabled(!model.canConnect)
+                    default:
                         Button("Disconnect", role: .destructive) { model.disconnect() }
                     }
+                } footer: {
+                    if let hint = model.connectHint, model.client.state == .idle { Text(hint) }
                 }
 
                 Section {
                     LabeledContent("Address") {
-                        TextField(model.gateway.address ?? "192.168.43.1", text: $model.host)
+                        TextField("Automatic", text: $model.host)
                             .keyboardType(.numbersAndPunctuation)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
@@ -44,11 +52,28 @@ struct SettingsView: View {
                             .textInputAutocapitalization(.characters)
                             .multilineTextAlignment(.trailing)
                             .monospaced()
+                            .submitLabel(.go)
+                            .onSubmit { if model.canConnect { model.connect() } }
                     }
                 } header: {
                     Text("Phone")
                 } footer: {
-                    Text("The phone's address on this Wi-Fi network, and the code its CellBridge app shows.")
+                    if let detected = model.gateway.address, model.host.isEmpty {
+                        Text("Detected \(detected). Leave the address empty to use it, or type the phone's own address. The code is shown in the CellBridge app on the phone.")
+                    } else {
+                        Text("The phone's address on this Wi-Fi network, and the code its CellBridge app shows.")
+                    }
+                }
+
+                Section {
+                    Button("Open iOS Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    }
+                    LabeledContent("Version", value: Self.version)
+                } header: {
+                    Text("About")
+                } footer: {
+                    Text("Microphone, contacts, notifications and the app's language are set in iOS Settings.")
                 }
 
                 Section {

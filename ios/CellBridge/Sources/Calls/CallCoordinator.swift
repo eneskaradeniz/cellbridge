@@ -58,6 +58,13 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         }
     }
 
+    /// A call was asked for while the phone cannot be reached.
+    func reportNotConnected() { dialError = String(localized: "Not connected. Open Settings to connect.") }
+
+    func clearDialError() { dialError = nil }
+
+    func reportDialError(_ text: String) { dialError = text }
+
     func setMuted(_ muted: Bool) {
         guard let uuid = book.active.first(where: \.isAnswered)?.id else { return }
         controller.request(CXTransaction(action: CXSetMutedCallAction(call: uuid, muted: muted))) { [weak self] error in

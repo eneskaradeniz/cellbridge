@@ -10,6 +10,7 @@ enum Sample {
     static var enabled: Bool { defaults.bool(forKey: "sampleData") }
     static var startTab: AppTab? { defaults.object(forKey: "sampleTab") == nil ? nil : AppTab(rawValue: defaults.integer(forKey: "sampleTab")) }
     static var opensThread: Bool { defaults.bool(forKey: "sampleThread") }
+    static var openNumber: String? { defaults.string(forKey: "sampleOpen") }
     static var call: String? { defaults.string(forKey: "sampleCall") }
 
     static let contacts: [Contact] = [

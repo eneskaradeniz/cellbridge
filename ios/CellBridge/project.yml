@@ -16,6 +16,9 @@ targets:
       properties:
         CFBundleDisplayName: CellBridge
         CFBundleLocalizations: [en, tr]
+        CFBundleURLTypes:
+          - CFBundleURLName: cellbridge
+            CFBundleURLSchemes: [cellbridge]
         UILaunchScreen: {}
         UIBackgroundModes: [audio, voip]
         NSLocalNetworkUsageDescription: Talks to the CellBridge host on the local network.

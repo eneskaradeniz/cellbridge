@@ -8,11 +8,10 @@ enum AppTab: Int, Hashable {
 struct CellBridgeApp: App {
     @StateObject private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
-    @State private var tab: AppTab = .recents
 
     var body: some Scene {
         WindowGroup {
-            TabView(selection: $tab) {
+            TabView(selection: $model.tab) {
                 Tab("Recents", systemImage: "clock", value: AppTab.recents) { RecentsView() }
                 Tab("Contacts", systemImage: "person.crop.circle", value: AppTab.contacts) { ContactsView() }
                 Tab("Keypad", systemImage: "circle.grid.3x3.fill", value: AppTab.keypad) { KeypadView() }
@@ -20,20 +19,42 @@ struct CellBridgeApp: App {
                 Tab("Settings", systemImage: "gearshape", value: AppTab.settings) { SettingsView() }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
-            .tabViewBottomAccessory(isEnabled: tab != .settings && !isConnected && !model.threadOpen) {
-                ConnectionBanner(status: status) { tab = .settings }
+            .tabViewBottomAccessory(isEnabled: model.tab != .settings && !isConnected && !model.threadOpen) {
+                ConnectionBanner(status: status) { model.tab = .settings }
             }
             .animation(.smooth, value: status)
             .sensoryFeedback(.success, trigger: isConnected) { _, connected in connected }
             .fullScreenCover(isPresented: Binding(get: { !model.activeCalls.isEmpty }, set: { _ in })) {
                 InCallView().environmentObject(model)
             }
+            .alert("Call Failed", isPresented: Binding(
+                get: { model.dialError != nil },
+                set: { if !$0 { model.clearDialError() } })) {
+            } message: {
+                Text(model.dialError ?? "")
+            }
+            .onOpenURL { handle($0) }
             .environmentObject(model)
             .onChange(of: scenePhase) { _, phase in if phase == .active { model.resumeIfNeeded() } }
             #if DEBUG
-            .onAppear { if let start = Sample.startTab { tab = start } }
+            .onAppear {
+                if let start = Sample.startTab { model.tab = start }
+                if let number = Sample.openNumber { model.openThread(number) }
+            }
             .overlay { if let call = Sample.activeCall() { InCallScreen(call: call, muted: false, speakerOn: true, toggleMute: {}, toggleSpeaker: {}, end: {}, answer: {}) } }
             #endif
+        }
+    }
+
+    /// `cellbridge://call?number=…` and `cellbridge://message?number=…`, for Shortcuts, Safari and the Home Screen.
+    private func handle(_ url: URL) {
+        guard url.scheme == "cellbridge",
+              let number = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "number" })?.value
+        else { return }
+        switch url.host {
+        case "call": model.dial(number)
+        case "message": model.openThread(number)
+        default: break
         }
     }
 

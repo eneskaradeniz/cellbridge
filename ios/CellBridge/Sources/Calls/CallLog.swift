@@ -68,6 +68,17 @@ final class CallLog {
         }
     }
 
+    /// Forgets the given calls (swipe or menu delete).
+    func remove(ids: Set<UUID>) throws {
+        let before = entries
+        entries.removeAll { ids.contains($0.id) }
+        guard entries != before else { return }
+        do { try persist() } catch {
+            entries = before
+            throw error
+        }
+    }
+
     func clear() throws {
         let before = entries
         entries = []

@@ -36,9 +36,10 @@ struct InCallScreen: View {
                     Avatar(name: call.title, size: 112)
                         .shadow(color: .black.opacity(0.3), radius: 20, y: 8)
                     Text(call.title)
-                        .font(.system(size: 34, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
+                        .font(.largeTitle.weight(.semibold))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.6)
                     status.font(.title3).foregroundStyle(.white.opacity(0.7))
                 }
                 .padding(.top, 72)
@@ -57,7 +58,19 @@ struct InCallScreen: View {
         .preferredColorScheme(.dark)
         .animation(.smooth, value: call.isAnswered)
         .sensoryFeedback(.impact, trigger: call.isAnswered)
+        .sensoryFeedback(.selection, trigger: muted)
+        .sensoryFeedback(.selection, trigger: speakerOn)
+        // The screen stays on during a call; held to the ear (speaker off) it goes dark so the cheek touches nothing.
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+            UIDevice.current.isProximityMonitoringEnabled = false
+        }
+        .onChange(of: call.isAnswered) { _, _ in updateProximity() }
+        .onChange(of: speakerOn) { _, _ in updateProximity() }
     }
+
+    private func updateProximity() { UIDevice.current.isProximityMonitoringEnabled = call.isAnswered && !speakerOn }
 
     private var background: some View {
         let tint = Avatar.palette[Avatar(name: call.title).index].bottom
@@ -73,7 +86,7 @@ struct InCallScreen: View {
         if let answeredAt = call.answeredAt {
             Text(answeredAt, style: .timer).monospacedDigit()
         } else if call.isOutgoing {
-            Text("calling…")
+            Text("Calling…")
         } else {
             Text("CellBridge")
         }
@@ -81,8 +94,8 @@ struct InCallScreen: View {
 
     private var controls: some View {
         HStack(spacing: 36) {
-            toggle(muted ? "mic.slash.fill" : "mic.fill", "mute", on: muted, action: toggleMute)
-            toggle(speakerOn ? "speaker.wave.3.fill" : "speaker.fill", "speaker", on: speakerOn, action: toggleSpeaker)
+            toggle(muted ? "mic.slash.fill" : "mic.fill", "Mute", on: muted, action: toggleMute)
+            toggle(speakerOn ? "speaker.wave.3.fill" : "speaker.fill", "Speaker", on: speakerOn, action: toggleSpeaker)
         }
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
     }

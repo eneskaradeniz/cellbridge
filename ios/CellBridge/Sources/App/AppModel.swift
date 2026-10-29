@@ -15,6 +15,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var contactsAuthorized = false
     /// A conversation is open and owns the bottom edge, so the link banner stays out of its way.
     @Published var threadOpen = false
+    @Published var tab: AppTab = .recents
+    /// Set by `openThread`; Messages consumes it and pushes the conversation.
+    @Published var threadRequest: ThreadRoute?
+    @Published private(set) var lastDialed = UserDefaults.standard.string(forKey: "lastDialed") ?? ""
+    /// The running model, for App Intents (Shortcuts, Siri), which are created outside the view tree.
+    static private(set) weak var current: AppModel?
     private let contactProvider = ContactStoreProvider()
 
     let client = ControlClient()
@@ -34,7 +40,9 @@ final class AppModel: ObservableObject {
 
     init() {
         host = UserDefaults.standard.string(forKey: "host") ?? ""
-        token = TokenStore.load()
+        let storedToken = TokenStore.load()
+        token = storedToken
+        tab = storedToken.isEmpty ? .settings : .recents // first run: nothing works until the phone is paired
         var support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         #if DEBUG
         let sampling = Sample.enabled
@@ -89,6 +97,7 @@ final class AppModel: ObservableObject {
             self?.refreshContacts()
         }.store(in: &bag)
         refreshContacts()
+        Self.current = self
         #if DEBUG
         if sampling {
             contactsAuthorized = true
@@ -135,7 +144,17 @@ final class AppModel: ObservableObject {
         Task { contactBook = ContactBook(contacts: await contactProvider.load()) }
     }
 
-    var canConnect: Bool { !effectiveHost.isEmpty && !token.isEmpty }
+    var canConnect: Bool { !effectiveHost.isEmpty && !cleanToken.isEmpty }
+
+    /// What was typed or pasted, without stray spaces or line breaks.
+    private var cleanToken: String { token.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
+
+    /// Why Connect is not available yet, in words; nil when it is.
+    var connectHint: String? {
+        if effectiveHost.isEmpty { return String(localized: "Enter the phone's address.") }
+        if cleanToken.isEmpty { return String(localized: "Enter the pairing code shown on the phone.") }
+        return nil
+    }
 
     /// True while the user wants to be connected: survives restarts, so the app reconnects on its own when reopened.
     private var wantsConnection: Bool {
@@ -157,7 +176,7 @@ final class AppModel: ObservableObject {
         notifier.requestPermission()
         if canAskForContacts { requestContacts() }
         keepAlive.start()
-        client.connect(host: { [weak self] in self?.effectiveHost ?? "" }, token: token.uppercased())
+        client.connect(host: { [weak self] in self?.effectiveHost ?? "" }, token: cleanToken)
     }
 
     /// Settings → Audio test: tries the call's audio graph in a few shapes and logs what the mixer renders.
@@ -227,7 +246,37 @@ final class AppModel: ObservableObject {
         return false
     }
 
-    func dial(_ number: String) { calls.dial(number) }
+    func dial(_ number: String) {
+        guard canDial else { return calls.reportNotConnected() }
+        lastDialed = number
+        UserDefaults.standard.set(number, forKey: "lastDialed")
+        calls.dial(number)
+    }
+
+    func clearDialError() { calls.clearDialError() }
+
+    /// Shortcuts and Siri hand over what the person said: a number, or part of a contact's name.
+    func dial(query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.filter(\.isNumber).count >= 3 { return dial(trimmed) }
+        if let number = contactBook.search(trimmed).first?.numbers.first?.value { return dial(number) }
+        calls.reportDialError(String(localized: "No contact named \(trimmed) was found."))
+    }
+
+    /// Shows the conversation with `number` in the Messages tab, with the keyboard up.
+    func openThread(_ number: String) {
+        threadRequest = ThreadRoute(key: MessageStore.key(for: number), peer: number, focusesComposer: true)
+        tab = .messages
+    }
+
+    func deleteRecents(_ ids: Set<UUID>) {
+        do {
+            try callLog.remove(ids: ids)
+            recents = callLog.entries
+        } catch {
+            log("could not delete from the history: \(error.localizedDescription)")
+        }
+    }
 
     func toggleSpeaker() { calls.speaker.toggle() }
 

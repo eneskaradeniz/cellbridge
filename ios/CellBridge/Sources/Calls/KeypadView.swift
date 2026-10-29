@@ -31,9 +31,18 @@ struct KeypadView: View {
                     .minimumScaleFactor(0.5)
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal)
+                    .accessibilityLabel(number.isEmpty ? String(localized: "No number entered") : number)
+                    .contextMenu {
+                        if UIPasteboard.general.hasStrings {
+                            Button { number = DialInput.sanitize(UIPasteboard.general.string ?? "") } label: { Label("Paste", systemImage: "doc.on.clipboard") }
+                        }
+                        if !number.isEmpty {
+                            Button { UIPasteboard.general.string = number } label: { Label("Copy", systemImage: "doc.on.doc") }
+                        }
+                    }
                 Text(hint ?? " ")
                     .font(.footnote)
-                    .foregroundStyle(model.dialError == nil ? Color.secondary : Color.red)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
@@ -51,10 +60,7 @@ struct KeypadView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Choose from contacts")
-                        Button {
-                            model.dial(number)
-                            number = ""
-                        } label: {
+                        Button(action: call) {
                             Image(systemName: "phone.fill").font(.system(size: 30)).foregroundStyle(.white)
                                 .frame(width: keySize, height: keySize)
                                 .glassEffect(.regular.tint(.green.opacity(canCall ? 1 : 0.4)).interactive(), in: .circle)
@@ -69,6 +75,9 @@ struct KeypadView: View {
                         .buttonStyle(.plain)
                         .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in number = "" })
                         .opacity(number.isEmpty ? 0 : 1)
+                        .allowsHitTesting(!number.isEmpty)
+                        .accessibilityHidden(number.isEmpty)
+                        .accessibilityHint(String(localized: "Touch and hold to clear"))
                         .accessibilityLabel("Delete")
                     }
                 }
@@ -77,14 +86,17 @@ struct KeypadView: View {
         }
         .padding(.bottom, 8)
         .sensoryFeedback(.selection, trigger: number)
+        .onChange(of: model.activeCalls.isEmpty) { _, idle in if !idle { number = "" } } // kept until the call really starts, so a refused dial loses nothing
         .sheet(isPresented: $choosing) { ContactsView(onPick: { number = $0 }) }
     }
 
-    private var canCall: Bool { !number.isEmpty && model.canDial }
+    private var canCall: Bool { !number.isEmpty || !model.lastDialed.isEmpty }
 
-    private var hint: String? {
-        if let error = model.dialError { return error }
-        return model.canDial ? nil : String(localized: "Not connected. Open Settings to connect.")
+    private var hint: String? { model.canDial ? nil : String(localized: "Not connected. Open Settings to connect.") }
+
+    /// Like the Phone app: with nothing typed, Call brings back the last number instead of dialing.
+    private func call() {
+        if number.isEmpty { number = model.lastDialed } else { model.dial(number) }
     }
 
     /// `*` and `#` are shown for the familiar layout but stay inactive: the host refuses service codes.
@@ -99,9 +111,19 @@ struct KeypadView: View {
         .opacity(enabled ? 1 : 0.4)
         .contentShape(Circle())
         .onTapGesture { if enabled { number += key.digit } }
-        .onLongPressGesture(minimumDuration: 0.5) { if key.digit == "0" { number += "+" } }
+        .onLongPressGesture(minimumDuration: 0.5) { if key.digit == "0", number.isEmpty { number = "+" } }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(key.digit)
+        .accessibilityLabel(key.letters.isEmpty ? key.digit : "\(key.digit), \(key.letters.map(String.init).joined(separator: " "))")
         .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// What may be dialed: digits, `*`, `#`, and a `+` only in front. Pasted numbers arrive with spaces, dashes and brackets.
+enum DialInput {
+    static func sanitize(_ text: String) -> String {
+        let kept = text.filter { $0.isASCII && ($0.isNumber || "*#+".contains($0)) }
+        guard let first = kept.first else { return "" }
+        let rest = kept.dropFirst().filter { $0 != "+" }
+        return String(first) + rest
     }
 }
