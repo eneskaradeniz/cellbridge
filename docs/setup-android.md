@@ -12,16 +12,17 @@ cd android
 ./gradlew :app:installDebug
 ```
 
-The first start shows the **pairing code** (8 characters) and two role rows.
+The app opens on a **Status** tab (is the iPhone connected, the address it can use, whether the call-audio daemon answers, the phone's battery, the
+roles) with two more tabs: **Keypad** and **Recents**. The pairing code is hidden until you tap **Show**, which also shows a QR code for the iPhone to scan.
 
 ## 2. Give the app the default phone and SMS roles
 
 Tap **Request** next to "Default phone app" and "Default SMS app" and confirm each system dialog (or use
 `adb shell cmd role add-role-holder --user 0 android.app.role.DIALER com.cellbridge`, same with `…SMS`).
 
-Consequences: the phone's own dialer and messaging apps are no longer the defaults. CellBridge has a minimal call screen
-(answer, decline, end) and no SMS screen, so the phone is no longer a comfortable phone by itself. Only the default SMS app
-may write the system SMS database, which is why the SMS role is needed. To undo, hand the roles back
+Consequences: the phone's own dialer and messaging apps are no longer the defaults. CellBridge has a keypad, a call log and a call screen
+(answer, decline, end, mute, speaker, keypad tones, move to the iPhone) but **no SMS screen**; texts are read on the iPhone. Only the default
+SMS app may write the system SMS database, which is why the SMS role is needed. To undo, hand the roles back
 (`… add-role-holder … com.android.dialer` / `com.android.messaging`; package names differ between ROMs).
 
 ## 3. Network prerequisites
@@ -67,7 +68,8 @@ from a `service.sh` module instead (not tested).
 
 ## 5. Check
 
-The iPhone's Settings tab should say `Connected (calls, sms, audio)`. Call the SIM from another phone: the iPhone rings.
+The iPhone's Settings tab should say `Connected` with Calls · Texts · Voice, and the Android Status tab shows the iPhone as connected. Call the SIM from another
+phone: the iPhone rings and the phone stays silent.
 
 ## Limits worth knowing
 

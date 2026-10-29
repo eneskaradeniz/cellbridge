@@ -9,3 +9,5 @@ Mac-side helpers for testing the Android host without the iPhone. Both need a Py
 - `audiod_selftest.py` — end-to-end self-test of the root audio daemon's loopback protocol (no call needed, needs `adb root`).
 - `install-daemon-system.sh install|uninstall` — installs the daemon as an init service on a userdebug device
   (**permanent change to `/system`**, see `docs/setup-android.md`).
+- `install-apns-key.sh install <AuthKey.p8> <key id> <team id> | remove` — puts the team's APNs key into the app's private storage on the phone so it
+  can wake the iPhone app (`docs/push.md`). The key is a secret and never goes into the repository.

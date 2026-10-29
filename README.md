@@ -18,12 +18,17 @@ and the radio. No internet and no cloud: everything stays on the local network (
 
 | | Status |
 |---|---|
-| Incoming calls: rings on the lock screen (CallKit), answer / decline / hang up from the iPhone, two-way audio | working |
-| Outgoing calls from the iPhone (keypad, recents, in-call screen), refusal of emergency numbers and `*`/`#` service codes | working |
-| SMS: receive (lossless: nothing is lost while the iPhone is offline), send, long texts (multipart), notifications | working |
-| Call history on the iPhone; call screen on the Android phone itself | working |
-| Starts by itself: server after boot, audio daemon from `init` | working (see limitations) |
-| MMS, DTMF tones, conference / second call, contacts, voicemail | not supported |
+| Incoming calls: rings on the iPhone's lock screen (CallKit), answer / decline / hang up, two-way audio; the phone itself stays silent | working |
+| Outgoing calls from the iPhone (keypad, contacts, recents, in-call screen), keypad tones (DTMF) during a call | working |
+| Moving a running call between the phone and the iPhone, both ways | working (in the background iOS makes you tap Accept) |
+| SMS: receive (lossless while the iPhone is offline), send (safe to repeat after a dropped connection), long texts, delivery reports ("Delivered"), notifications that open the conversation, security codes offered by the keyboard | working |
+| History: calls and texts the phone saw while the iPhone was away (missed calls, older conversations) are fetched after reconnecting; pull to refresh | working |
+| Pairing: the iPhone finds the phone by itself (Bonjour), pairs once by scanning a QR code; the code is hidden behind Face ID | working |
+| The phone's own app: status, a keypad and the call log, so it is still usable as a phone | working |
+| The phone's battery and signal on the iPhone, with a warning before it runs out | working |
+| English and Turkish, iOS 26 Liquid Glass design | working |
+| Waking a closed iPhone app for a call (VoIP push through Apple) | host side done, iPhone side needs a paid developer account: [docs/push.md](docs/push.md) |
+| MMS, conference / second call, voicemail, numbers tapped in Contacts or Safari opening CellBridge | not supported (see limitations) |
 
 ## Requirements
 
@@ -36,35 +41,49 @@ and the radio. No internet and no cloud: everything stays on the local network (
 ## Quick start
 
 1. [docs/setup-android.md](docs/setup-android.md): install the app, give it the default phone / SMS roles, start the audio daemon.
-2. [docs/setup-ios.md](docs/setup-ios.md): build and install the iPhone app, enter the pairing code shown on the Android phone.
+2. [docs/setup-ios.md](docs/setup-ios.md): build and install the iPhone app, scan the QR code shown on the Android phone.
 
 ## Known limitations
 
+- **The iPhone app has to be running** to ring for a call: iOS starts a closed app only for a push through Apple, which needs a paid
+  developer account and an APNs key ([docs/push.md](docs/push.md)). Do not swipe the app away; iOS may still end it under memory pressure.
+- **Both phones must be on the same network** (the Android phone's hotspot, or one Wi-Fi). Audio travels by local UDP, so away from the
+  network the iPhone would ring but could not talk.
+- Call audio quality is good on a home Wi-Fi (about 0.1% of the frames concealed each way in a real call). The hotspot is 2.4 GHz only on the reference
+  phone (5 GHz failed there), which is worse in crowded places; measure before relying on it.
+- iOS does not let a third-party app take over `tel:` links without the paid *Default Calling App* capability: start calls from CellBridge,
+  the **Call with CellBridge** shortcut, or `cellbridge://call?number=...`. Default messaging apps are EU-only.
+- Security codes arrive as CellBridge notifications; the iOS keyboard offers them for one-time-code fields (iOS 26). They are not in Apple's Messages.
 - After an Android reboot the **hotspot must be switched on by hand**, and with a screen lock the phone must be **unlocked once**
   before the app's server starts (Android keeps app data encrypted until then). Removing the screen lock avoids the second one.
 - The installed daemon service lives in `/system` and is **removed by a ROM update**; run the install script again afterwards.
-- One call at a time. End-to-end audio latency has not been measured yet; the adaptive jitter buffers (40-140 ms) on both sides add to the network delay.
-- iPhone background behaviour relies on a silent audio session to keep the connection alive; battery impact is not yet measured.
+- One call at a time. The ringing phone is silenced only while the iPhone is there to ring (it keeps ringing otherwise, so a call is never lost).
+- With a free Apple ID the iPhone app expires after 7 days and must be installed again.
+- iPhone background behaviour relies on a silent audio session; its battery cost is not measured yet.
 
 ## Security notes
 
-- Pairing uses an 8-character code from a 32-symbol alphabet shown on the Android phone (about 40 bits; wrong attempts are delayed).
-  It is **not strong against a determined attacker on the same network**.
+- Pairing uses an 8-character code from a 32-symbol alphabet shown on the Android phone (about 40 bits; wrong attempts are delayed),
+  as a QR code for ten seconds on request. It is **not strong against a determined attacker on the same network**. The iPhone keeps it
+  in the Keychain and shows it only after Face ID.
 - The control channel and the audio are **not encrypted**. Use a network you control, such as your own phone's WPA2/WPA3 hotspot.
 - The audio daemon listens on `127.0.0.1` only and authenticates the app with the same code, read from a file only the app and root can read.
-- Emergency numbers are never dialed through the bridge, and neither are `*`/`#` service codes.
+- Emergency numbers are never dialed through the bridge, and neither are `*`/`#` service codes. The Android phone's own keypad dials them through Telecom.
+- Waking the iPhone goes through Apple's push service. What the push carries (the call and number) is sealed with a key only the two phones know;
+  Apple sees that a push was sent, not who called.
+- The Bonjour announcement carries a random installation id, nothing derived from the pairing code.
 - Logs never contain phone numbers or message text.
 
 ## Repository layout
 
 | Path | What |
 |---|---|
-| `android/app` | Kotlin app: default dialer / SMS role, `InCallService`, Ktor WebSocket server, SMS store, call screen |
+| `android/app` | Kotlin app: default dialer / SMS role, `InCallService`, Ktor WebSocket server, SMS and call history, push to APNs, status / keypad / recents screens, call screen |
 | `android/daemon` | C daemon (tinyalsa): call-audio capture and injection, UDP streaming, jitter buffer, device profiles, init service |
-| `ios/CellBridge` | Swift app: control client, CallKit, audio engine, recents, keypad, messages |
+| `ios/CellBridge` | Swift app: control client, Bonjour, QR pairing, CallKit, audio engine, recents, keypad, contacts, messages |
 | `docs/protocol.md` | The single contract between both sides: change it first, then both implementations |
-| `docs/` | Setup guides, device profiles, and the audio findings from the first spike |
-| `tools/` | Mac-side test helpers |
+| `docs/` | Setup guides, push setup, device profiles, and the audio findings from the first spike |
+| `tools/` | Mac-side helpers: control-channel test client, daemon self-test, daemon and APNs key installers |
 
 ## Building and testing
 

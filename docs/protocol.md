@@ -1,7 +1,13 @@
 # CellBridge protocol (v1)
 
 Android (host) <-> iOS (client, iPhone). Same Wi-Fi hotspot, no internet needed.
-Host address: the hotspot gateway (its subnet is not fixed; the iOS app asks the system for the Wi-Fi gateway).
+Finding the host: the host advertises `_cellbridge._tcp` on port 8765 (Bonjour / mDNS) with the TXT records `v=1` and `id=<random installation id>`
+(not secret, not derived from the pairing code); the client browses for it and resolves the IPv4 address, so a changed address is found again. When several
+hosts announce themselves the one whose `id` the client paired with is chosen. Fallbacks: an address typed by the user, and on the host's own hotspot the
+Wi-Fi gateway (its subnet is not fixed; the iOS app asks the system for it).
+
+Pairing: the host shows a QR code on request holding `cellbridge://pair?code=<pairing code>&id=<installation id>&port=8765&host=<address>` (`host` optional).
+The client reads it once, keeps the code in its Keychain and the id for choosing among announcements, and sends the code as `token` in `hello`.
 
 ## Control channel — WebSocket (TCP), JSON text frames
 Host listens on `ws://<host>:8765`. Every message has `"type"`.

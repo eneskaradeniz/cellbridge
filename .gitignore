@@ -11,3 +11,6 @@ __pycache__/
 
 CLAUDE.md
 Local.xcconfig
+
+# Apple push keys
+*.p8
