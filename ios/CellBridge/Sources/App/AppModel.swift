@@ -78,7 +78,10 @@ final class AppModel: ObservableObject {
         messages = MessageCoordinator(
             store: MessageStore(url: support.appendingPathComponent("CellBridge/messages.json")),
             transmit: { [weak self] in self?.client.send($0) },
-            notify: { [weak self] in self?.notifier.notify(id: $0, title: $1, body: $2) },
+            notify: { [weak self] id, from, body in
+                guard let self else { return }
+                notifier.notify(id: id, peer: from, title: displayName(for: from), body: body)
+            },
             log: { [weak self] in self?.log($0) }
         )
         client.onLog = { [weak self] in self?.log($0) }
@@ -113,6 +116,7 @@ final class AppModel: ObservableObject {
         }.store(in: &bag)
         refreshContacts()
         Self.current = self
+        notifier.onOpen = { [weak self] in self?.openThread($0, focusesComposer: false) }
         messages.$conversations.sink { [weak self] conversations in
             self?.notifier.setBadge(conversations.reduce(0) { $0 + $1.unreadCount })
         }.store(in: &bag)
@@ -303,8 +307,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Shows the conversation with `number` in the Messages tab, with the keyboard up.
-    func openThread(_ number: String) {
-        threadRequest = ThreadRoute(key: MessageStore.key(for: number), peer: number, focusesComposer: true)
+    func openThread(_ number: String, focusesComposer: Bool = true) {
+        threadRequest = ThreadRoute(key: MessageStore.key(for: number), peer: number, focusesComposer: focusesComposer)
         tab = .messages
     }
 

@@ -4,6 +4,9 @@ import UserNotifications
 /// Local notifications for texts that arrive while the app is not in front (the WebSocket stays up in the background).
 @MainActor
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
+    /// Called with the sender's number when a text's notification is tapped.
+    var onOpen: ((String) -> Void)?
+
     override init() {
         super.init()
         UNUserNotificationCenter.current().delegate = self
@@ -19,16 +22,31 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// `id` is the host's text id, so a replayed text replaces its notification instead of stacking another.
-    func notify(id: String, title: String, body: String) {
+    func notify(id: String, peer: String, title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
+        content.userInfo = ["peer": peer]
+        content.threadIdentifier = peer // one stack per sender in Notification Centre
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "sms-" + id, content: content, trigger: nil))
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
-        -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+    /// A tap opens that conversation. The completion-handler form, called on the main queue: the `async` form finished
+    /// on a Swift concurrency thread, and UIKit aborts the app when its completion handler runs off the main thread.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        let content = response.notification.request.content
+        // Notifications posted before `peer` was stored carry the sender's number as their title.
+        let peer = content.userInfo["peer"] as? String ?? (content.title.isEmpty ? nil : content.title)
+        DispatchQueue.main.async {
+            if let peer { MainActor.assumeIsolated { self.onOpen?(peer) } }
+            completionHandler()
+        }
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        DispatchQueue.main.async { completionHandler([.banner, .sound]) }
     }
 }
