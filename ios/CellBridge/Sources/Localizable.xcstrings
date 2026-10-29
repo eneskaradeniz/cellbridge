@@ -1421,6 +1421,26 @@
           }
         }
       }
+    },
+    "To Android": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Android'e"
+          }
+        }
+      }
+    },
+    "The call could not be moved to the phone.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arama telefona aktarılamadı."
+          }
+        }
+      }
     }
   }
 }

@@ -16,6 +16,8 @@ data class CallSnapshot(
     val status: CallStatus,
     /** Only meaningful once DISCONNECTED: the platform says this side declined the call. */
     val rejected: Boolean = false,
+    /** When the call connected (platform clock, ms), 0 while it has not. */
+    val connectedAtMs: Long = 0,
 )
 
 /** Why an incoming call ended without being answered. */

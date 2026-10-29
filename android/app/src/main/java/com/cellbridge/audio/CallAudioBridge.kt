@@ -2,9 +2,14 @@ package com.cellbridge.audio
 
 import android.util.Log
 import com.cellbridge.domain.model.CallEvent
+import com.cellbridge.domain.model.CallStatus
 import com.cellbridge.telecom.CallFeed
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
@@ -22,6 +27,10 @@ class CallAudioBridge @Inject constructor(
 ) {
     private val peers = ConcurrentHashMap<String, InetSocketAddress>()
     private var job: Job? = null
+    private val _bridged = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Calls whose audio is flowing to the client right now; the phone's own call screen shows "on the iPhone" for them. */
+    val bridged: StateFlow<Set<String>> = _bridged.asStateFlow()
 
     @Synchronized
     fun start(scope: CoroutineScope) {
@@ -46,11 +55,33 @@ class CallAudioBridge @Inject constructor(
         peers.remove(callId)
     }
 
+    /** Transfer to the phone: stops the relay for [callId] (the call goes on on the phone's own audio). False if it was not relayed. */
+    suspend fun release(callId: String): Boolean {
+        if (peers.remove(callId) == null) return false
+        audio.stop()
+        _bridged.update { it - callId }
+        return true
+    }
+
+    /** Transfer to the client: starts the relay for a call that is already active. */
+    suspend fun attach(callId: String, peer: InetSocketAddress): Boolean {
+        if (feed.liveCalls().none { it.id == callId && it.status == CallStatus.ACTIVE }) return false
+        peers[callId] = peer
+        val started = audio.start(peer)
+        if (started) _bridged.update { it + callId } else peers.remove(callId)
+        return started
+    }
+
     private suspend fun onEvent(event: CallEvent) {
         val id = event.call.id
         when (event) {
-            is CallEvent.Answered -> peers[id]?.let { if (!audio.start(it)) Log.w(TAG, "audio daemon did not start (id=$id)") }
-            is CallEvent.Ended -> if (peers.remove(id) != null) audio.stop()
+            is CallEvent.Answered -> peers[id]?.let {
+                if (audio.start(it)) _bridged.update { set -> set + id } else Log.w(TAG, "audio daemon did not start (id=$id)")
+            }
+            is CallEvent.Ended -> {
+                _bridged.update { it - id }
+                if (peers.remove(id) != null) audio.stop()
+            }
             is CallEvent.Ringing, is CallEvent.Dialing -> Unit
         }
     }

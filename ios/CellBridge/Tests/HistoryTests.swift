@@ -22,6 +22,16 @@ final class HistoryProtocolTests: XCTestCase {
         XCTAssertEqual(ClientMessage.ringAck(callId: "c1").encoded(), #"{"callId":"c1","type":"ring_ack"}"#)
     }
 
+    func testTransferMessagesRoundTrip() {
+        XCTAssertEqual(ClientMessage.transferToHost(callId: "c1").encoded(), #"{"callId":"c1","type":"transfer_to_host"}"#)
+        XCTAssertEqual(ClientMessage.transferAccept(callId: "c1", udpPort: 4000).encoded(), #"{"callId":"c1","type":"transfer_accept","udpPort":4000}"#)
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"transfer_result","callId":"c1","ok":true}"#), .transferResult(callId: "c1", ok: true))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"transfer_offer","callId":"c1","number":"+90555"}"#), .transferOffer(callId: "c1", number: "+90555", connectedAt: nil))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"transfer_offer","callId":"c1"}"#), .transferOffer(callId: "c1", number: nil, connectedAt: nil))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"transfer_offer","callId":"c1","connectedAt":1700000000000}"#),
+                       .transferOffer(callId: "c1", number: nil, connectedAt: 1_700_000_000_000))
+    }
+
     func testRequestsEncode() {
         XCTAssertEqual(ClientMessage.callLogRequest(after: "10", since: nil).encoded(), #"{"after":"10","type":"call_log_request"}"#)
         XCTAssertEqual(ClientMessage.callLogRequest(after: nil, since: 500).encoded(), #"{"since":500,"type":"call_log_request"}"#)

@@ -1,4 +1,5 @@
 import AVFoundation
+import UIKit
 import CallKit
 import Foundation
 
@@ -94,6 +95,74 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         }
     }
 
+    /// Calls the phone handed over (transfer to the iPhone): CallKit starts them without dialing, under the phone's call id.
+    private var adopting: [UUID: (callId: String, number: String?, since: Date?)] = [:]
+    /// Taken over while the app was in the background: CallKit refuses every call request an app makes then (start and answer
+    /// fail with InvalidAction), so the call is reported as an incoming one and the user taps Accept on the lock screen.
+    /// The value is the time the call had already been running.
+    private var adoptedIncoming: [UUID: Date?] = [:]
+    private var transferringToHost = Set<UUID>()
+
+    /// Moves the call to the phone itself: the host stops the relay, the call goes on there, and ours ends without a hang-up.
+    func transferToHost(_ uuid: UUID) {
+        guard let callId = book.callId(for: uuid), book.isAnswered(uuid) else { return }
+        transferringToHost.insert(uuid)
+        send(.transferToHost(callId: callId))
+    }
+
+    private func transferResult(callId: String, ok: Bool) {
+        // Also arrives unasked, when the phone's user took the call back: then there is nothing to report if it failed.
+        guard let uuid = book.uuid(forCallId: callId) else { return }
+        let asked = transferringToHost.remove(uuid) != nil
+        guard ok else {
+            if asked { dialError = String(localized: "The call could not be moved to the phone.") }
+            return
+        }
+        book.end(uuid: uuid) // not logged: the phone's call log has this call
+        audio.sessionEnded()
+        resetCallSettings()
+        provider.reportCall(with: uuid, endedAt: Date(), reason: .remoteEnded) // does not call back into CXEndCallAction: no hang-up
+    }
+
+    /// The phone's user pressed "transfer to iPhone": put the running call on this screen.
+    private func adopt(callId: String, number: String?, since: Date?) {
+        guard book.uuid(forCallId: callId) == nil, !adopting.values.contains(where: { $0.callId == callId }) else { return }
+        let handle = number.map { CXHandle(type: .phoneNumber, value: $0) } ?? CXHandle(type: .generic, value: "unknown")
+        let state = UIApplication.shared.applicationState
+        log("transfer offer: app is \(state == .active ? "in front" : state == .inactive ? "inactive" : "in the background")")
+        if state != .active {
+            adoptInBackground(callId: callId, number: number, since: since, handle: handle)
+            return
+        }
+        let uuid = UUID()
+        adopting[uuid] = (callId, number, since)
+        controller.request(CXTransaction(action: CXStartCallAction(call: uuid, handle: handle))) { [weak self] error in
+            guard let error else { return }
+            Task { @MainActor in
+                guard let self else { return }
+                self.adopting[uuid] = nil
+                let known = self.controller.callObserver.calls.map { "\($0.uuid.uuidString.prefix(4)) out=\($0.isOutgoing) on=\($0.isOnHold) done=\($0.hasConnected) ended=\($0.hasEnded)" }
+                self.log("could not take the call over: code \((error as NSError).code) \(error.localizedDescription); calls known to the system: \(known)")
+            }
+        }
+    }
+
+    private func adoptInBackground(callId: String, number: String?, since: Date?, handle: CXHandle) {
+        let title = number.flatMap(nameFor) ?? number ?? String(localized: "Unknown caller")
+        guard let uuid = book.ring(callId: callId, title: title, number: number ?? "") else { return }
+        adoptedIncoming[uuid] = since
+        provider.reportNewIncomingCall(with: uuid, update: Self.callUpdate(handle: handle, title: title)) { [weak self] error in
+            Task { @MainActor in
+                guard let self else { return }
+                if let error {
+                    self.adoptedIncoming[uuid] = nil
+                    self.book.end(uuid: uuid)
+                    self.log("could not take the call over in the background: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
     /// Ends a call from our own screen through the system, so CallKit and the host stay in step.
     func end(_ uuid: UUID) {
         controller.request(CXTransaction(action: CXEndCallAction(call: uuid))) { [weak self] error in
@@ -115,7 +184,18 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
             provider.reportCall(with: uuid, endedAt: Date(), reason: CallBook.callKitReason(for: reason))
         case .dialResult(let clientId, let ok, let callId, let error):
             dialResult(clientId: clientId, ok: ok, callId: callId, error: error)
+        case .transferResult(let callId, let ok):
+            transferResult(callId: callId, ok: ok)
+        case .transferOffer(let callId, let number, let connectedAt):
+            adopt(callId: callId, number: number, since: connectedAt.map { Date(timeIntervalSince1970: Double($0) / 1000) })
         case .answered(let callId):
+            // Answered on the phone itself while ours was still ringing: stop ringing, like iOS does for a call taken on another device.
+            if let uuid = book.uuid(forCallId: callId), !book.isOutgoing(uuid), !book.isAnswered(uuid) {
+                book.end(uuid: uuid) // not logged: the phone's call log has the call
+                resetCallSettings()
+                provider.reportCall(with: uuid, endedAt: Date(), reason: .answeredElsewhere)
+                return
+            }
             // Incoming calls are answered by us; only an outgoing call needs to be told that the far end picked up.
             guard let uuid = book.uuid(forCallId: callId), book.isOutgoing(uuid) else { return }
             book.markAnswered(uuid)
@@ -213,6 +293,14 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
 
     nonisolated func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
         Task { @MainActor in
+            if let since = self.adoptedIncoming.removeValue(forKey: action.callUUID), let callId = self.book.callId(for: action.callUUID) {
+                // A call already running on the phone: no answer to send, just take the audio and tell the host where to send it.
+                self.book.markAnswered(action.callUUID, now: since ?? Date())
+                let port = self.hostOffersAudio() ? self.audio.prepare(host: self.host()) : nil
+                self.send(.transferAccept(callId: callId, udpPort: port.map(Int.init)))
+                action.fulfill()
+                return
+            }
             if let callId = self.book.callId(for: action.callUUID) {
                 self.book.markAnswered(action.callUUID)
                 // The UDP port goes into the answer so the host can stream to us the moment the call is active.
@@ -228,6 +316,20 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
             let uuid = action.callUUID
             let number = action.handle.value
             let title = self.nameFor(number) ?? number
+            if let adopted = self.adopting.removeValue(forKey: uuid) {
+                // A call that is already running on the phone: no dial, just take the audio and tell the host where to send it.
+                self.book.startOutgoing(uuid, title: adopted.number.flatMap(self.nameFor) ?? adopted.number ?? String(localized: "Unknown caller"),
+                                        number: adopted.number)
+                _ = self.book.attach(callId: adopted.callId, to: uuid)
+                self.book.markAnswered(uuid, now: adopted.since ?? Date())
+                let port = self.hostOffersAudio() ? self.audio.prepare(host: self.host()) : nil
+                self.send(.transferAccept(callId: adopted.callId, udpPort: port.map(Int.init)))
+                action.fulfill()
+                self.provider.reportCall(with: uuid, updated: Self.callUpdate(handle: action.handle, title: title))
+                self.provider.reportOutgoingCall(with: uuid, startedConnectingAt: Date())
+                self.provider.reportOutgoingCall(with: uuid, connectedAt: adopted.since ?? Date())
+                return
+            }
             self.book.startOutgoing(uuid, title: title, number: number)
             // The UDP port goes into the dial so the host can stream to us the moment the far end answers.
             let port = self.hostOffersAudio() ? self.audio.prepare(host: self.host()) : nil
@@ -240,6 +342,12 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     nonisolated func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
         Task { @MainActor in
             let uuid = action.callUUID
+            if self.adoptedIncoming.removeValue(forKey: uuid) != nil {
+                // Declined the call handed over from the phone: it is running there, so only our side goes away.
+                self.book.end(uuid: uuid)
+                action.fulfill()
+                return
+            }
             if let callId = self.book.callId(for: uuid) {
                 // Only an incoming call that is still ringing is declined; anything we placed or answered is hung up.
                 let hangUp = self.book.isOutgoing(uuid) || self.book.isAnswered(uuid)

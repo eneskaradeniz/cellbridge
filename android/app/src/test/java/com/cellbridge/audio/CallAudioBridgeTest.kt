@@ -30,7 +30,8 @@ class CallAudioBridgeTest {
     private class FakeFeed : CallFeed {
         val flow = MutableSharedFlow<CallEvent>(extraBufferCapacity = 8)
         override val events: SharedFlow<CallEvent> = flow
-        override fun liveCalls() = emptyList<CallSnapshot>()
+        var live = emptyList<CallSnapshot>()
+        override fun liveCalls() = live
     }
 
     private val feed = FakeFeed()
@@ -89,5 +90,41 @@ class CallAudioBridgeTest {
         feed.flow.emit(CallEvent.Answered(call(CallStatus.ACTIVE)))
         feed.flow.emit(CallEvent.Ended(call(CallStatus.DISCONNECTED), reason = null))
         assertEquals(1, audio.stops) // stop is idempotent on the daemon side
+    }
+
+    @Test
+    fun `release stops the relay and forgets the peer`() = runBlocking {
+        bridge.expect("c1", peer)
+        feed.flow.emit(CallEvent.Answered(call(CallStatus.ACTIVE)))
+        assertEquals(setOf("c1"), bridge.bridged.value)
+
+        assertEquals(true, bridge.release("c1"))
+        assertEquals(1, audio.stops)
+        assertEquals(emptySet<String>(), bridge.bridged.value)
+        assertEquals(false, bridge.release("c1")) // nothing left to release
+    }
+
+    @Test
+    fun `attach starts the relay for a call that is already active`() = runBlocking {
+        feed.live = listOf(call(CallStatus.ACTIVE))
+        assertEquals(true, bridge.attach("c1", peer))
+        assertEquals(listOf(peer), audio.started)
+        assertEquals(setOf("c1"), bridge.bridged.value)
+
+        feed.flow.emit(CallEvent.Ended(call(CallStatus.DISCONNECTED), reason = null))
+        assertEquals(1, audio.stops)
+        assertEquals(emptySet<String>(), bridge.bridged.value)
+    }
+
+    @Test
+    fun `attach refuses a call that is not active or when the daemon will not start`() = runBlocking {
+        feed.live = listOf(call(CallStatus.RINGING))
+        assertEquals(false, bridge.attach("c1", peer))
+        assertEquals(emptyList<InetSocketAddress>(), audio.started)
+
+        feed.live = listOf(call(CallStatus.ACTIVE))
+        audio.startResult = false
+        assertEquals(false, bridge.attach("c1", peer))
+        assertEquals(emptySet<String>(), bridge.bridged.value)
     }
 }

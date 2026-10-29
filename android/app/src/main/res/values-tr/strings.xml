@@ -1,0 +1,31 @@
+<resources>
+    <string name="app_name">CellBridge</string>
+    <string name="role_dialer">Varsayılan telefon uygulaması</string>
+    <string name="role_sms">Varsayılan SMS uygulaması</string>
+    <string name="role_granted">Verildi</string>
+    <string name="role_missing">Verilmedi</string>
+    <string name="role_unavailable">Bu cihazda kullanılamıyor</string>
+    <string name="role_request">İste</string>
+    <string name="pairing_token">Eşleşme kodu (iPhone\'a girin)</string>
+    <string name="server_running">Kontrol sunucusu çalışıyor</string>
+    <string name="server_stopped">Kontrol sunucusu çalışmıyor</string>
+    <string name="notification_channel">Kontrol sunucusu</string>
+    <string name="notification_starting">Başlıyor…</string>
+    <string name="notification_running">Çalışıyor, eşleşme kodu uygulama ekranında</string>
+    <string name="notification_failed">Başlatılamadı (8765 numaralı bağlantı noktası kullanımda mı?)</string>
+    <string name="incall_unknown">Bilinmeyen numara</string>
+    <string name="incall_incoming">Gelen arama</string>
+    <string name="incall_dialing">Aranıyor…</string>
+    <string name="incall_active">Görüşmede</string>
+    <string name="incall_holding">Beklemede</string>
+    <string name="incall_answer">Cevapla</string>
+    <string name="incall_reject">Reddet</string>
+    <string name="incall_end">Bitir</string>
+    <string name="incall_mute">Sessiz</string>
+    <string name="incall_speaker">Hoparlör</string>
+    <string name="incall_to_iphone">iPhone\'a aktar</string>
+    <string name="incall_take_here">Bu telefona al</string>
+    <string name="incall_on_iphone">iPhone\'da</string>
+    <string name="call_channel">Aramalar</string>
+    <string name="call_notification_text">Aramaya dönmek için dokunun</string>
+</resources>

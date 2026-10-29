@@ -103,6 +103,7 @@ class ControlServerTest {
     private val audio = FakeAudio()
     private val sms = FakeSmsGateway()
     private val bridge = CallAudioBridge(feed, audio).also { it.start(CoroutineScope(Dispatchers.Unconfined + Job())) }
+    private val transfers = TransferController(presence, bridge)
     private val incomingRinging = CallSnapshot("c1", "+90555", CallDirection.INCOMING, CallStatus.RINGING)
 
     private fun withServer(block: suspend (connect: suspend (suspend DefaultClientWebSocketSession.() -> Unit) -> Unit) -> Unit) =
@@ -115,6 +116,7 @@ class ControlServerTest {
                     history = history,
                     push = push,
                     presence = presence,
+                    transfers = transfers,
                 )
             }
             val client = createClient { install(WebSockets) }
@@ -480,6 +482,84 @@ class ControlServerTest {
             login()
             say("""{"type":"ring_ack","callId":"c1"}""")
             eventually { commands.calls == listOf("silence:c1") }
+        }
+    }
+
+    private val activeCall = CallSnapshot("c1", "+90555", CallDirection.INCOMING, CallStatus.ACTIVE)
+
+    @Test
+    fun `transfer to the phone stops the relay and answers`() = withServer { connect ->
+        bridge.expect("c1", java.net.InetSocketAddress("127.0.0.1", 40000))
+        feed.live = listOf(activeCall)
+        feed.flow.emit(CallEvent.Answered(activeCall))
+        eventually { audio.started.isNotEmpty() }
+        connect {
+            login()
+            say("""{"type":"transfer_to_host","callId":"c1"}""")
+            val reply = hear()
+            assertEquals("transfer_result", reply.str("type"))
+            assertEquals("true", reply.str("ok"))
+            assertEquals(1, audio.stops)
+            say("""{"type":"transfer_to_host","callId":"c1"}""")
+            assertEquals("false", hear().str("ok")) // not relayed any more
+        }
+    }
+
+    @Test
+    fun `transfer accept starts the relay for an active call`() = withServer { connect ->
+        feed.live = listOf(activeCall)
+        connect {
+            login()
+            say("""{"type":"transfer_accept","callId":"c1","udpPort":40001}""")
+            eventually { audio.started.size == 1 }
+            assertEquals(40001, audio.started.single().port)
+        }
+    }
+
+    @Test
+    fun `transfer accept for an unknown call is an error`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"transfer_accept","callId":"nope","udpPort":40001}""")
+            assertEquals("unknown_call", hear().str("code"))
+        }
+    }
+
+    @Test
+    fun `an offer from the phone reaches the client with the number and when the call connected`() = withServer { connect ->
+        feed.live = listOf(activeCall.copy(connectedAtMs = 1_700_000_000_000))
+        connect {
+            login()
+            eventually { presence.connected }
+            assertEquals(true, transfers.toIphone("c1"))
+            val offer = hear()
+            assertEquals("transfer_offer", offer.str("type"))
+            assertEquals("c1", offer.str("callId"))
+            assertEquals("+90555", offer.str("number"))
+            assertEquals("1700000000000", offer.str("connectedAt"))
+        }
+    }
+
+    @Test
+    fun `an offer with no client connected is refused`() {
+        assertEquals(false, TransferController(ClientPresence(), bridge).toIphone("c1"))
+    }
+
+    @Test
+    fun `taking the call back stops the relay and tells the client`() = withServer { connect ->
+        bridge.expect("c1", java.net.InetSocketAddress("127.0.0.1", 40000))
+        feed.live = listOf(activeCall)
+        feed.flow.emit(CallEvent.Answered(activeCall))
+        eventually { audio.started.isNotEmpty() }
+        connect {
+            login()
+            eventually { presence.connected }
+            assertEquals(true, transfers.toPhone("c1"))
+            val reply = hear()
+            assertEquals("transfer_result", reply.str("type"))
+            assertEquals("true", reply.str("ok"))
+            assertEquals(1, audio.stops)
+            assertEquals(false, transfers.toPhone("c1")) // already on the phone
         }
     }
 }

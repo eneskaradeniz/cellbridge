@@ -9,11 +9,15 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | type | dir | fields |
 |---|---|---|
 | `hello` | iOS -> host | `version` (int, currently 1), `token` |
-| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`) |
+| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `transfer`) |
 | `error` | host -> iOS | `code`, `message?` |
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
 | `ring_ack` | iOS -> host | `callId` |
+| `transfer_to_host` | iOS -> host | `callId` |
+| `transfer_result` | host -> iOS | `callId`, `ok` |
+| `transfer_offer` | host -> iOS | `callId`, `number?`, `connectedAt?` (ms since epoch) |
+| `transfer_accept` | iOS -> host | `callId`, `udpPort?` |
 | `ended` | host -> iOS | `callId`, `reason?` |
 | `dial` | iOS -> host | `clientId`, `number`, `udpPort?` |
 | `dial_result` | host -> iOS | `clientId`, `ok`, `callId?`, `error?` |
@@ -41,6 +45,13 @@ call that is still ringing, so a reconnecting client catches up; clients dedupe 
 Ringing: the client answers every `ring` with `ring_ack` (also the repeats after a reconnect) once its own call UI is up. The host then
 silences the phone's ringtone and vibration for that call, so only the iPhone rings; without an ack (no client, a dead socket) the
 phone keeps ringing and a call is never swallowed. `ring_ack` has no reply.
+
+Transfer: an active call can change hands without hanging up. `transfer_to_host` asks the host to stop the audio relay for the call; the call
+goes on on the phone itself (its own earpiece, microphone and speaker) and the host answers with one `transfer_result`. The client then
+ends its own call UI **without** sending `hangup`, and does not log the call (the phone's call log has it). The other way round, when
+the user presses "transfer to iPhone" on the phone the host sends `transfer_offer`; a connected client puts the active call on its
+screen (as an answered call under `callId`, its timer counting from `connectedAt`) and replies with `transfer_accept` carrying its `udpPort`, which starts the audio relay
+for that call. A client that cannot take the call simply does not reply. `transfer` is advertised with `audio`.
 
 Outgoing calls: `dial` is answered by exactly one `dial_result` with the same `clientId`. On `ok:true` the call exists on the host
 under `callId` (dialing); `answered` follows when the far end picks up (it is also sent for incoming calls once they are

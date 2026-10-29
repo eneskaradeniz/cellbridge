@@ -9,6 +9,8 @@ enum ClientMessage: Equatable {
     case reject(callId: String)
     case hangup(callId: String)
     case ringAck(callId: String)
+    case transferToHost(callId: String)
+    case transferAccept(callId: String, udpPort: Int?)
     case dial(clientId: String, number: String, udpPort: Int?)
     case smsAck(id: String)
     case smsSend(clientId: String, to: String, body: String)
@@ -29,6 +31,11 @@ enum ClientMessage: Equatable {
             object = ["type": "hangup", "callId": callId]
         case .ringAck(let callId):
             object = ["type": "ring_ack", "callId": callId]
+        case .transferToHost(let callId):
+            object = ["type": "transfer_to_host", "callId": callId]
+        case .transferAccept(let callId, let udpPort):
+            object = ["type": "transfer_accept", "callId": callId]
+            if let udpPort { object["udpPort"] = udpPort }
         case .dial(let clientId, let number, let udpPort):
             object = ["type": "dial", "clientId": clientId, "number": number]
             if let udpPort { object["udpPort"] = udpPort }
@@ -80,6 +87,8 @@ enum ServerMessage: Equatable {
     case answered(callId: String)
     case sms(id: String, from: String, body: String, ts: Int64)
     case smsResult(clientId: String, ok: Bool, error: String?)
+    case transferResult(callId: String, ok: Bool)
+    case transferOffer(callId: String, number: String?, connectedAt: Int64?)
     case callLog(entries: [HostCall])
     case smsHistory(items: [HostText])
     case error(code: String, message: String?)
@@ -112,6 +121,13 @@ enum ServerMessage: Equatable {
         case "sms_result":
             guard let clientId = object["clientId"] as? String, let ok = object["ok"] as? Bool else { return nil }
             return .smsResult(clientId: clientId, ok: ok, error: object["error"] as? String)
+        case "transfer_result":
+            guard let callId = object["callId"] as? String, let ok = object["ok"] as? Bool else { return nil }
+            return .transferResult(callId: callId, ok: ok)
+        case "transfer_offer":
+            guard let callId = object["callId"] as? String else { return nil }
+            return .transferOffer(callId: callId, number: object["number"] as? String,
+                                  connectedAt: (object["connectedAt"] as? NSNumber)?.int64Value)
         case "call_log":
             let rows = object["entries"] as? [[String: Any]] ?? []
             return .callLog(entries: rows.compactMap { row in

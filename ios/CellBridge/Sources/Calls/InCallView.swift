@@ -12,6 +12,7 @@ struct InCallView: View {
             InCallScreen(
                 call: call, waiting: model.waitingCall, linkLost: !model.canDial, muted: model.muted, speakerOn: model.speakerOn,
                 toggleMute: model.toggleMute, toggleSpeaker: model.toggleSpeaker,
+                transfer: model.canTransfer ? { model.transferToPhone(call.id) } : nil,
                 end: { model.endCall(call.id) }, answer: { model.answerCall(call.id) })
                 .onAppear { last = call }
                 .onChange(of: call) { _, new in last = new }
@@ -32,6 +33,8 @@ struct InCallScreen: View {
     let speakerOn: Bool
     let toggleMute: () -> Void
     let toggleSpeaker: () -> Void
+    /// Moves the call to the phone itself; nil when the host cannot.
+    var transfer: (() -> Void)?
     let end: () -> Void
     let answer: () -> Void
 
@@ -115,7 +118,7 @@ struct InCallScreen: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 36) {
+        HStack(spacing: 20) {
             toggle(muted ? "mic.slash.fill" : "mic.fill", "Mute", on: muted, action: toggleMute)
             toggle(speakerOn ? "speaker.wave.3.fill" : "speaker.fill", "Speaker", on: speakerOn, action: toggleSpeaker)
             VStack(spacing: 8) {
@@ -125,6 +128,7 @@ struct InCallScreen: View {
                 Text("Audio").font(.footnote)
             }
             .accessibilityElement(children: .combine)
+            if let transfer { toggle("arrow.left.arrow.right", "To Android", on: false, action: transfer) }
         }
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
     }

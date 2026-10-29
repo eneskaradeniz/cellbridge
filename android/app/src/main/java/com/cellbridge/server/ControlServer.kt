@@ -80,6 +80,7 @@ class ControlServer @Inject constructor(
     private val history: HistorySource,
     private val push: PushNotifier,
     private val presence: ClientPresence,
+    private val transfers: TransferController,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
     private val _running = MutableStateFlow(false)
@@ -102,7 +103,7 @@ class ControlServer @Inject constructor(
                 CIO,
                 rootConfig = serverConfig {
                     parentCoroutineContext = onFailure
-                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, presence = presence) }
+                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, presence = presence, transfers = transfers) }
                 },
                 configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
             ).also { server ->
@@ -134,6 +135,7 @@ class ControlServer @Inject constructor(
         if (history.callsAvailable()) add("calllog")
         if (sms.isAvailable()) add("smshistory")
         if (push.available()) add("push")
+        if (audio.isAvailable()) add("transfer")
     }
 
     private companion object {
@@ -155,6 +157,7 @@ fun Application.controlModule(
     history: HistorySource = NoHistory,
     push: PushRegistry = NoPush,
     presence: ClientPresence = ClientPresence(),
+    transfers: TransferController = TransferController(presence, audio),
 ) {
     install(WebSockets) {
         pingPeriod = 10.seconds
@@ -162,7 +165,7 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, history, push, presence).run() }
+        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, history, push, presence, transfers).run() }
     }
 }
 
@@ -185,6 +188,7 @@ private class Session(
     private val history: HistorySource,
     private val push: PushRegistry,
     private val presence: ClientPresence,
+    private val transfers: TransferController,
 ) {
     suspend fun run() {
         val hello = ws.incoming.receive().let { (it as? Frame.Text)?.readText() }?.let(::decodeClientMessage)
@@ -202,6 +206,19 @@ private class Session(
                 feed.events.collect { event ->
                     acked.await()
                     event.toMessage()?.let { send(it) }
+                }
+            }
+            val offerForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
+                transfers.offers.collect { callId ->
+                    acked.await()
+                    val call = feed.liveCalls().firstOrNull { it.id == callId }
+                    send(ServerMessage.TransferOffer(callId, call?.number, call?.connectedAtMs?.takeIf { it > 0 }))
+                }
+            }
+            val takeBackForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
+                transfers.takeBacks.collect { callId ->
+                    acked.await()
+                    send(ServerMessage.TransferResult(callId, ok = true))
                 }
             }
             val smsForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
@@ -226,6 +243,8 @@ private class Session(
             } finally {
                 presence.left()
                 forwarder.cancel()
+                offerForwarder.cancel()
+                takeBackForwarder.cancel()
                 smsForwarder.cancel()
             }
         }
@@ -242,6 +261,15 @@ private class Session(
             }
             is ClientMessage.Reject -> message.callId to commands.reject(message.callId)
             is ClientMessage.Hangup -> message.callId to commands.hangup(message.callId)
+            is ClientMessage.TransferToHost -> {
+                send(ServerMessage.TransferResult(message.callId, audio.release(message.callId)))
+                return
+            }
+            is ClientMessage.TransferAccept -> {
+                val peer = audioPeer(message.udpPort)
+                if (peer == null || !audio.attach(message.callId, peer)) send(ServerMessage.Error("unknown_call", message.callId))
+                return
+            }
             is ClientMessage.RingAck -> {
                 // The iPhone is ringing: the phone in the pocket can stop. Without this ack it keeps ringing, so a dead
                 // connection never swallows a call.

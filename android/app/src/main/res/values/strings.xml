@@ -21,4 +21,11 @@
     <string name="incall_answer">Answer</string>
     <string name="incall_reject">Decline</string>
     <string name="incall_end">End call</string>
+    <string name="incall_mute">Mute</string>
+    <string name="incall_speaker">Speaker</string>
+    <string name="incall_to_iphone">Transfer to iPhone</string>
+    <string name="incall_take_here">Take it on this phone</string>
+    <string name="incall_on_iphone">On the iPhone</string>
+    <string name="call_channel">Calls</string>
+    <string name="call_notification_text">Tap to return to the call</string>
 </resources>

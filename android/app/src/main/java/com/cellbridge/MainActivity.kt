@@ -38,6 +38,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var roles: DefaultRoles
+    @Inject lateinit var feed: com.cellbridge.telecom.CallFeed
     @Inject lateinit var pairingToken: PairingToken
     @Inject lateinit var controlServer: ControlServer
 
@@ -74,6 +75,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refresh++
+        // A call is running: opening the app (icon, notification) goes to the call screen, the only place to end it.
+        if (feed.liveCalls().isNotEmpty()) startActivity(android.content.Intent(this, com.cellbridge.ui.InCallActivity::class.java))
     }
 
     @Composable

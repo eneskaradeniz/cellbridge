@@ -1,6 +1,11 @@
 package com.cellbridge.telecom
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Intent
+import androidx.core.app.NotificationCompat
+import com.cellbridge.R
 import android.telecom.Call
 import android.util.Log
 import com.cellbridge.server.ControlService
@@ -8,6 +13,7 @@ import com.cellbridge.ui.InCallActivity
 import android.os.Handler
 import android.os.Looper
 import android.telecom.DisconnectCause
+import android.telecom.CallAudioState
 import android.telecom.InCallService
 import android.telecom.TelecomManager
 import android.telecom.VideoProfile
@@ -24,6 +30,7 @@ class CellBridgeInCallService : InCallService() {
     @Inject lateinit var repository: CallRepository
     @Inject lateinit var registry: CallRegistry
     @Inject lateinit var wakeLock: CallWakeLock
+    @Inject lateinit var inCallAudio: InCallAudio
 
     private val ids = HashMap<Call, String>()
     private val main = Handler(Looper.getMainLooper())
@@ -36,6 +43,19 @@ class CellBridgeInCallService : InCallService() {
         super.onCreate()
         // A call can start this process while the server is down (killed in the background): bring it up too.
         ControlService.start(this)
+        inCallAudio.control = object : InCallAudioControl {
+            override fun setMuted(muted: Boolean) { main.post { this@CellBridgeInCallService.setMuted(muted) } }
+
+            @Suppress("DEPRECATION") // setAudioRoute is deprecated from API 34 but still the way on 29-33
+            override fun setSpeaker(on: Boolean) {
+                main.post { setAudioRoute(if (on) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_EARPIECE) }
+            }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onCallAudioStateChanged(audioState: CallAudioState) {
+        inCallAudio.update(audioState.isMuted, audioState.route == CallAudioState.ROUTE_SPEAKER)
     }
 
     override fun onCallAdded(call: Call) {
@@ -56,9 +76,11 @@ class CellBridgeInCallService : InCallService() {
         call.unregisterCallback(callback)
         report(call, Call.STATE_DISCONNECTED) // no-op if already reported
         ids.remove(call)?.let(registry::unregister)
+        if (!repository.hasLiveCalls) getSystemService(NotificationManager::class.java).cancel(CALL_NOTIFICATION_ID)
     }
 
     override fun onDestroy() {
+        inCallAudio.control = null
         wakeLock.setHeld(false)
         super.onDestroy()
     }
@@ -82,8 +104,27 @@ class CellBridgeInCallService : InCallService() {
         }
         val number = call.details.handle?.schemeSpecificPart?.takeIf { it.isNotBlank() }
         val rejected = status == CallStatus.DISCONNECTED && call.details.disconnectCause?.code == DisconnectCause.REJECTED
-        repository.onCallUpdate(CallSnapshot(id, number, direction, status, rejected))
+        repository.onCallUpdate(CallSnapshot(id, number, direction, status, rejected, call.details.connectTimeMillis))
         wakeLock.setHeld(repository.hasLiveCalls)
+        updateCallNotification(number, call.details.connectTimeMillis)
+    }
+
+    /** The way back to the call screen after it was left: an ongoing notification for as long as a call lives. */
+    private fun updateCallNotification(number: String?, connectedAtMs: Long) {
+        val manager = getSystemService(NotificationManager::class.java)
+        if (!repository.hasLiveCalls) return manager.cancel(CALL_NOTIFICATION_ID)
+        manager.createNotificationChannel(NotificationChannel(CALL_CHANNEL, getString(R.string.call_channel), NotificationManager.IMPORTANCE_LOW))
+        val open = PendingIntent.getActivity(this, 0, Intent(this, InCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
+        val notification = NotificationCompat.Builder(this, CALL_CHANNEL)
+            .setSmallIcon(android.R.drawable.sym_action_call)
+            .setContentTitle(number ?: getString(R.string.incall_unknown))
+            .setContentText(getString(R.string.call_notification_text))
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setOngoing(true)
+            .setContentIntent(open)
+            .apply { if (connectedAtMs > 0) setUsesChronometer(true).setWhen(connectedAtMs) }
+            .build()
+        manager.notify(CALL_NOTIFICATION_ID, notification)
     }
 
     @Suppress("DEPRECATION") // Call.Details.getState() needs API 31; minSdk is 29.
@@ -101,5 +142,7 @@ class CellBridgeInCallService : InCallService() {
 
     private companion object {
         const val TAG = "CellBridge"
+        const val CALL_CHANNEL = "call"
+        const val CALL_NOTIFICATION_ID = 2
     }
 }

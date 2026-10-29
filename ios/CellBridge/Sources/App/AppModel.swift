@@ -252,6 +252,14 @@ final class AppModel: ObservableObject {
 
     var activeCalls: [ActiveCall] { calls.active }
 
+    /// The host can hand a running call back to the phone itself.
+    var canTransfer: Bool {
+        if case .connected(let capabilities) = client.state { return capabilities.contains("transfer") }
+        return false
+    }
+
+    func transferToPhone(_ id: UUID) { calls.transferToHost(id) }
+
     /// What the call screen shows: the running call, else the one that just ended.
     /// A second incoming call while one is running.
     var waitingCall: ActiveCall? {
@@ -425,6 +433,8 @@ final class AppModel: ObservableObject {
         case .answered(let callId): return "answered \(callId.prefix(8))"
         case .sms(let id, _, _, _): return "sms \(id)" // never log the sender or the text
         case .smsResult(let clientId, let ok, _): return "sms result \(clientId.prefix(8)) \(ok ? "sent" : "failed")"
+        case .transferResult(let callId, let ok): return "transfer to the phone \(callId.prefix(8)) \(ok ? "ok" : "refused")"
+        case .transferOffer(let callId, _, _): return "transfer offer \(callId.prefix(8))"
         case .callLog(let entries): return "call log \(entries.count)"
         case .smsHistory(let items): return "text history \(items.count)"
         case .error(let code, _): return "error \(code)"

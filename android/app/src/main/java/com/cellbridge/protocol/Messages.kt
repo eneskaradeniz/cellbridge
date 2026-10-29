@@ -30,6 +30,12 @@ sealed interface ClientMessage {
     @Serializable @SerialName("ring_ack")
     data class RingAck(val callId: String) : ClientMessage
 
+    @Serializable @SerialName("transfer_to_host")
+    data class TransferToHost(val callId: String) : ClientMessage
+
+    @Serializable @SerialName("transfer_accept")
+    data class TransferAccept(val callId: String, val udpPort: Int? = null) : ClientMessage
+
     @Serializable @SerialName("dial")
     data class Dial(val clientId: String, val number: String, val udpPort: Int? = null) : ClientMessage
 
@@ -71,6 +77,12 @@ sealed interface ServerMessage {
 
     @Serializable @SerialName("sms_result")
     data class SmsResult(val clientId: String, val ok: Boolean, val error: String? = null) : ServerMessage
+
+    @Serializable @SerialName("transfer_result")
+    data class TransferResult(val callId: String, val ok: Boolean) : ServerMessage
+
+    @Serializable @SerialName("transfer_offer")
+    data class TransferOffer(val callId: String, val number: String? = null, val connectedAt: Long? = null) : ServerMessage
 
     @Serializable @SerialName("call_log")
     data class CallLog(val entries: List<CallLogItem>) : ServerMessage
