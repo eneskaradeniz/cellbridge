@@ -51,4 +51,13 @@
     <string name="pairing_hint">Scan the QR code with the iPhone\'s CellBridge, or enter the code there once. It hides again after ten seconds.</string>
     <string name="incall_keypad">Keypad</string>
     <string name="incall_hide_keypad">Hide keypad</string>
+    <string name="tab_status">Status</string>
+    <string name="tab_keypad">Keypad</string>
+    <string name="tab_recents">Recents</string>
+    <string name="keypad_call">Call</string>
+    <string name="recents_empty">No calls yet</string>
+    <string name="kind_incoming">Incoming</string>
+    <string name="kind_outgoing">Outgoing</string>
+    <string name="kind_missed">Missed</string>
+    <string name="kind_rejected">Declined</string>
 </resources>

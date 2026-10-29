@@ -51,4 +51,13 @@
     <string name="pairing_hint">iPhone\'daki CellBridge ile QR kodunu tarayın ya da kodu orada bir kez girin. On saniye sonra yeniden gizlenir.</string>
     <string name="incall_keypad">Tuş takımı</string>
     <string name="incall_hide_keypad">Tuş takımını gizle</string>
+    <string name="tab_status">Durum</string>
+    <string name="tab_keypad">Tuş Takımı</string>
+    <string name="tab_recents">Geçmiş</string>
+    <string name="keypad_call">Ara</string>
+    <string name="recents_empty">Henüz arama yok</string>
+    <string name="kind_incoming">Gelen</string>
+    <string name="kind_outgoing">Giden</string>
+    <string name="kind_missed">Cevapsız</string>
+    <string name="kind_rejected">Reddedilen</string>
 </resources>

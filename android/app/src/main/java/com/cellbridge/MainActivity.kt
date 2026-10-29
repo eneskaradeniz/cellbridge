@@ -26,7 +26,9 @@ import com.cellbridge.status.HostStatus
 import com.cellbridge.server.CONTROL_PORT
 import com.cellbridge.status.HostStatusReader
 import com.cellbridge.status.pairingLink
-import com.cellbridge.ui.StatusScreen
+import com.cellbridge.history.CallLogEntry
+import com.cellbridge.status.sanitizeDial
+import com.cellbridge.ui.MainScreen
 import kotlinx.coroutines.delay
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,6 +53,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var roles: DefaultRoles
     @Inject lateinit var feed: com.cellbridge.telecom.CallFeed
     @Inject lateinit var statusReader: HostStatusReader
+    @Inject lateinit var history: com.cellbridge.history.HistorySource
     @Inject lateinit var deviceId: com.cellbridge.discovery.DeviceId
     @Inject lateinit var pairingToken: PairingToken
     @Inject lateinit var controlServer: ControlServer
@@ -77,12 +80,26 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 val link = pairingLink(pairingToken.value, deviceId.value, status?.addresses?.firstOrNull()?.address, CONTROL_PORT)
-                StatusScreen(status, pairingToken.value, link) {
+                val recents by produceState(emptyList<CallLogEntry>(), refresh) {
+                    value = runCatching { history.calls(0, 0, 100).reversed() }.getOrDefault(emptyList())
+                }
+                MainScreen(status, pairingToken.value, link, dialNumber, recents, ::placeCall) {
                     RoleRow(AppRole.DIALER, R.string.role_dialer)
                     RoleRow(AppRole.SMS, R.string.role_sms)
                 }
             }
         }
+    }
+
+    /** A number handed over by another app (a tel: link, the DIAL action): the keypad opens with it filled in. */
+    private val dialNumber: String? by lazy {
+        intent?.takeIf { it.action == android.content.Intent.ACTION_DIAL }?.data?.schemeSpecificPart?.let(::sanitizeDial)?.takeIf { it.isNotEmpty() }
+    }
+
+    /** Places a call from this phone itself, through Telecom: that includes emergency numbers, which the bridge refuses. */
+    private fun placeCall(number: String) {
+        if (number.isEmpty()) return
+        runCatching { getSystemService(android.telecom.TelecomManager::class.java).placeCall(android.net.Uri.fromParts("tel", number, null), Bundle()) }
     }
 
     override fun onResume() {

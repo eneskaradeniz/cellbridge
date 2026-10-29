@@ -56,9 +56,9 @@ private val Bad = Color(0xFFD6453D)
 /** The phone's main screen: is the bridge up, where to point the iPhone, is everything it needs in place. */
 @Composable
 fun StatusScreen(status: HostStatus?, pairingCode: String, pairingLink: String, roles: @Composable () -> Unit) {
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    run {
         Column(
-            modifier = Modifier.safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
