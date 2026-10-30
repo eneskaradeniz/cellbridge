@@ -36,7 +36,8 @@ struct SettingsView: View {
                     case .connected:
                         Button("Disconnect", role: .destructive) { model.disconnect() }
                     case .connecting:
-                        Button("Retry") { model.retryConnection() } // it keeps trying on its own; this looks for the phone from scratch
+                        // It keeps trying on its own; only when that has gone on for a while is there something to press.
+                        if model.unreachable { Button("Retry") { model.retryConnection() } }
                     }
                     if case .connected = model.client.state, let info = model.hostInfo {
                         LabeledContent("Phone") { Text(info.summary).foregroundStyle(info.isLow ? Color.orange : Color.secondary) }
