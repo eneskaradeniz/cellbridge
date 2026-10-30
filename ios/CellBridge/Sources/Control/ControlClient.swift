@@ -1,7 +1,7 @@
 import Foundation
 
 /// The single WebSocket to the host (docs/protocol.md): hello with the pairing token, ping every 10 s,
-/// reconnect after 2 s. One connection at a time; connect() while connected replaces it.
+/// reconnect after 2 s, trying the next candidate address after each failed attempt. One connection at a time; connect() while connected replaces it.
 @MainActor
 final class ControlClient: ObservableObject {
     enum State: Equatable {
@@ -15,11 +15,17 @@ final class ControlClient: ObservableObject {
     @Published private(set) var state: State = .idle
     var onMessage: ((ServerMessage) -> Void)?
     var onLog: ((String) -> Void)?
+    /// The address of the host this client is connected to (answered the hello); nil otherwise.
+    private(set) var connectedHost: String?
+    /// Called with the address that answered the hello, so the app can remember it.
+    var onReached: ((String) -> Void)?
+    /// Called after every ping the host answered.
+    var onAlive: (() -> Void)?
 
     private let session: URLSession
     private var task: URLSessionWebSocketTask?
     private var runner: Task<Void, Never>?
-    private var hostProvider: (() -> String)?
+    private var hostProvider: (() -> [String])?
     private var token = ""
 
     init() {
@@ -28,8 +34,9 @@ final class ControlClient: ObservableObject {
         session = URLSession(configuration: configuration)
     }
 
-    /// `host` is asked again before every attempt, so a host that moved (the hotspot's subnet changed) is found again.
-    func connect(host: @escaping () -> String, token: String) {
+    /// `host` is asked again before every attempt, so a host that moved (the hotspot's subnet changed) is found again;
+    /// it lists the addresses to try, best first, and a failed attempt moves on to the next one.
+    func connect(host: @escaping () -> [String], token: String) {
         disconnect()
         hostProvider = host
         self.token = token
@@ -45,6 +52,7 @@ final class ControlClient: ObservableObject {
 
     func disconnect() {
         hostProvider = nil
+        connectedHost = nil
         runner?.cancel()
         runner = nil
         task?.cancel(with: .goingAway, reason: nil)
@@ -61,8 +69,10 @@ final class ControlClient: ObservableObject {
     // MARK: connection loop
 
     private func run() async {
+        var attempt = 0
         while !Task.isCancelled {
-            let host = hostProvider?() ?? ""
+            let hosts = hostProvider?() ?? []
+            let host = hosts.isEmpty ? "" : hosts[attempt % hosts.count]
             guard !host.isEmpty, let url = URL(string: "ws://\(host):8765/") else {
                 state = .connecting // no address yet (the gateway is still being discovered): look again shortly
                 try? await Task.sleep(for: .seconds(1))
@@ -78,7 +88,13 @@ final class ControlClient: ObservableObject {
                 while true {
                     guard case .string(let text) = try await task.receive() else { continue }
                     guard let message = ServerMessage.decode(text) else { continue }
-                    if handle(message) == .stop {
+                    let next = handle(message)
+                    if case .connected = state, connectedHost == nil {
+                        connectedHost = host
+                        attempt = 0
+                        onReached?(host)
+                    }
+                    if next == .stop {
                         pinger.cancel()
                         task.cancel(with: .normalClosure, reason: nil)
                         return
@@ -90,6 +106,8 @@ final class ControlClient: ObservableObject {
             pinger.cancel()
             task.cancel(with: .goingAway, reason: nil)
             if Task.isCancelled { return }
+            if connectedHost == nil { attempt += 1 } // never got an answer: try the next candidate
+            connectedHost = nil
             state = .connecting
             try? await Task.sleep(for: .seconds(2))
         }
@@ -127,6 +145,7 @@ final class ControlClient: ObservableObject {
                 task.cancel(with: .goingAway, reason: nil)
                 return
             }
+            onAlive?()
         }
     }
 }

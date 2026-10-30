@@ -1641,6 +1641,36 @@
           }
         }
       }
+    },
+    "No connection to the phone": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonla bağlantı yok"
+          }
+        }
+      }
+    },
+    "Calls and texts are not reaching this iPhone. Check that it is on the phone's hotspot.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aramalar ve mesajlar bu iPhone'a ulaşmıyor. Telefonun hotspot'una bağlı olduğundan emin ol."
+          }
+        }
+      }
+    },
+    "The phone did not accept the pairing code. Scan its QR code again.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefon eşleştirme kodunu kabul etmedi. QR kodunu yeniden tara."
+          }
+        }
+      }
     }
   }
 }

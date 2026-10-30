@@ -101,6 +101,9 @@ final class AppModel: ObservableObject {
             self?.messages.connectionLost()
         }.store(in: &bag)
         client.$state.removeDuplicates().sink { [weak self] state in
+            self?.linkStateChanged(state)
+        }.store(in: &bag)
+        client.$state.removeDuplicates().sink { [weak self] state in
             guard let self else { return }
             unreachableTimer?.cancel()
             unreachable = false
@@ -110,6 +113,8 @@ final class AppModel: ObservableObject {
                 if !Task.isCancelled { self?.unreachable = true }
             }
         }.store(in: &bag)
+        client.onReached = { [weak self] in self?.lastGoodHost = $0 }
+        client.onAlive = { [weak self] in self?.armLinkDownNotice() }
         // A new gateway means the host is somewhere else now (hotspot toggled, Wi-Fi changed): do not wait for a timeout.
         bonjour.$address.removeDuplicates().sink { [weak self] address in
             guard let self else { return }
@@ -147,16 +152,62 @@ final class AppModel: ObservableObject {
         bonjour.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
     }
 
-    /// What will actually be dialed: the typed host, else the detected gateway.
-    var effectiveHost: String {
-        // The phone announcing itself wins (a typed address may be a stale one after the router handed out another); a typed
-        // address is for networks where that does not work, the Wi-Fi gateway for the hotspot.
-        let typed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        return bonjour.address ?? (typed.isEmpty ? (gateway.address ?? "") : typed)
+    // MARK: link-down notice
+
+    private var linkDownTimer: Task<Void, Never>?
+    private var linkDownTitle: String { String(localized: "No connection to the phone") }
+    private var linkDownBody: String { String(localized: "Calls and texts are not reaching this iPhone. Check that it is on the phone's hotspot.") }
+
+    /// Down for 20 s: tell the user, at most once every 10 minutes. Back up, or switched off by the user: take the notice away.
+    private func linkStateChanged(_ state: ControlClient.State) {
+        linkDownTimer?.cancel()
+        switch state {
+        case .connected:
+            notifier.clearLinkDown()
+            armLinkDownNotice()
+        case .idle:
+            notifier.clearLinkDown()
+        case .connecting, .rejected:
+            guard wantsConnection else { return }
+            let rejected = state != .connecting
+            linkDownTimer = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(20))
+                guard let self, !Task.isCancelled else { return }
+                let last = UserDefaults.standard.object(forKey: "linkDownNoticeAt") as? Date ?? .distantPast
+                guard Date().timeIntervalSince(last) > 600 else { return notifier.clearLinkDown() } // the pending dead-man notice would bypass the cooldown
+                UserDefaults.standard.set(Date(), forKey: "linkDownNoticeAt")
+                notifier.linkDown(title: linkDownTitle, body: rejected
+                    ? String(localized: "The phone did not accept the pairing code. Scan its QR code again.") : linkDownBody)
+            }
+        }
     }
+
+    /// Pushes the dead-man notice 90 s into the future; called while the link is up.
+    private func armLinkDownNotice() {
+        guard wantsConnection else { return }
+        notifier.scheduleLinkDown(after: 90, title: linkDownTitle, body: linkDownBody)
+    }
+
+    /// The addresses to try, best first: the phone announcing itself, the Wi-Fi gateway (its hotspot), a typed address
+    /// (for networks where neither works), the last address that answered. A stale one costs one failed attempt, not a stuck app.
+    var candidateHosts: [String] {
+        let typed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        var seen = Set<String>()
+        return [bonjour.address, gateway.address, typed, lastGoodHost]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    /// What will actually be dialed: the host we are connected to, else the best candidate.
+    var effectiveHost: String { client.connectedHost ?? candidateHosts.first ?? "" }
 
     /// Found without typing: the phone announcing itself on the network, else the Wi-Fi gateway (its hotspot).
     var detectedAddress: String? { bonjour.address ?? gateway.address }
+
+    private var lastGoodHost: String? {
+        get { UserDefaults.standard.string(forKey: "lastGoodHost") }
+        set { UserDefaults.standard.set(newValue, forKey: "lastGoodHost") }
+    }
 
     /// The phone's installation id from the QR code: when several phones announce themselves, this one is meant.
     private(set) var pairedDeviceId: String? = UserDefaults.standard.string(forKey: "pairedDeviceId")
@@ -164,7 +215,8 @@ final class AppModel: ObservableObject {
     /// Takes what a QR code on the phone's screen holds, and connects.
     func pair(with link: PairingLink) {
         token = link.code
-        host = link.host ?? ""
+        host = ""
+        lastGoodHost = link.host // a hint for the first connection only: the QR address goes stale when the subnet changes
         pairedDeviceId = link.deviceId
         UserDefaults.standard.set(link.deviceId, forKey: "pairedDeviceId")
         bonjour.preferredId = link.deviceId
@@ -176,6 +228,7 @@ final class AppModel: ObservableObject {
         disconnect()
         token = ""
         host = ""
+        lastGoodHost = nil
         pairedDeviceId = nil
         UserDefaults.standard.removeObject(forKey: "pairedDeviceId")
         bonjour.preferredId = nil
@@ -249,7 +302,7 @@ final class AppModel: ObservableObject {
         notifier.requestPermission()
         if canAskForContacts { requestContacts() }
         keepAlive.start()
-        client.connect(host: { [weak self] in self?.effectiveHost ?? "" }, token: cleanToken)
+        client.connect(host: { [weak self] in self?.candidateHosts ?? [] }, token: cleanToken)
     }
 
     /// Settings → Audio test: tries the call's audio graph in a few shapes and logs what the mixer renders.
