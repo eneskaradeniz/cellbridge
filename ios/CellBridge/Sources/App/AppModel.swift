@@ -113,7 +113,17 @@ final class AppModel: ObservableObject {
                 if !Task.isCancelled { self?.unreachable = true }
             }
         }.store(in: &bag)
-        client.onReached = { [weak self] in self?.lastGoodHost = $0 }
+        bonjour.onLog = { [weak self] in self?.log($0) }
+        client.onReached = { [weak self] reached in
+            guard let self else { return }
+            lastGoodHost = reached
+            // The phone announced itself, so a typed address is not needed here; one left over from another network only costs timeouts.
+            let typed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+            if bonjour.address == reached, !typed.isEmpty, typed != reached {
+                log("cleared the typed address \(typed): the phone is found by itself")
+                host = ""
+            }
+        }
         client.onAlive = { [weak self] in self?.armLinkDownNotice() }
         // A new gateway means the host is somewhere else now (hotspot toggled, Wi-Fi changed): do not wait for a timeout.
         bonjour.$address.removeDuplicates().sink { [weak self] address in
@@ -150,6 +160,13 @@ final class AppModel: ObservableObject {
         calls.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         gateway.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         bonjour.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
+    }
+
+    /// The banner's "Retry": look for the phone from scratch and dial again at once.
+    func retryConnection() {
+        log("retrying: looking for the phone again")
+        bonjour.start()
+        client.restart()
     }
 
     // MARK: link-down notice

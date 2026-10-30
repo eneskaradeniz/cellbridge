@@ -12,9 +12,12 @@ import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,6 +39,7 @@ class ServiceAdvertiser @Inject constructor(@ApplicationContext private val cont
     private val manager = context.getSystemService(NsdManager::class.java)
     private var listener: NsdManager.RegistrationListener? = null
     private var port = 0
+    private var startedAt = 0L
     private var multicastLock: WifiManager.MulticastLock? = null
     private val handler = Handler(Looper.getMainLooper())
     private val reregister = Runnable { restart() }
@@ -49,6 +53,7 @@ class ServiceAdvertiser @Inject constructor(@ApplicationContext private val cont
 
     /** The network changed (hotspot toggled, Wi-Fi joined or left): the registration is for the old one, so make it again. */
     private fun networkChanged() {
+        if (SystemClock.elapsedRealtime() - startedAt < 3000) return // the callbacks that report the networks already there
         handler.removeCallbacks(reregister)
         handler.postDelayed(reregister, 1500) // changes arrive in bursts
     }
@@ -65,6 +70,7 @@ class ServiceAdvertiser @Inject constructor(@ApplicationContext private val cont
     fun start(port: Int) {
         if (this.port != 0) return
         this.port = port
+        startedAt = SystemClock.elapsedRealtime()
         multicastLock = context.getSystemService(WifiManager::class.java)
             ?.createMulticastLock("cellbridge-mdns")?.apply { setReferenceCounted(false); acquire() }
         runCatching {
@@ -82,6 +88,7 @@ class ServiceAdvertiser @Inject constructor(@ApplicationContext private val cont
             setPort(this@ServiceAdvertiser.port) // `port` alone would read the info's own (unset) port
             setAttribute("v", "1")
             setAttribute("id", deviceId.value)
+            localAddresses().takeIf { it.isNotEmpty() }?.let { setAttribute("ip", it) }
         }
         val registration = object : NsdManager.RegistrationListener {
             override fun onServiceRegistered(info: NsdServiceInfo) { Log.i(TAG, "advertising as ${info.serviceName}") }
@@ -106,6 +113,15 @@ class ServiceAdvertiser @Inject constructor(@ApplicationContext private val cont
         unregister()
     }
 
+    /** The IPv4 addresses on the Wi-Fi and hotspot interfaces: the iPhone reads them from the TXT record instead of trusting a cached name. */
+    private fun localAddresses(): String = runCatching {
+        NetworkInterface.getNetworkInterfaces().toList()
+            .filter { it.isUp && !it.isLoopback && WIFI_INTERFACE.matches(it.name) }
+            .flatMap { it.inetAddresses.toList() }
+            .filterIsInstance<Inet4Address>()
+            .joinToString(",") { it.hostAddress.orEmpty() }
+    }.getOrDefault("")
+
     private fun unregister() {
         listener?.let { runCatching { manager.unregisterService(it) } }
         listener = null
@@ -113,5 +129,6 @@ class ServiceAdvertiser @Inject constructor(@ApplicationContext private val cont
 
     private companion object {
         const val TAG = "CellBridge"
+        val WIFI_INTERFACE = Regex("(wlan|swlan|softap|ap|eth)\\d*")
     }
 }

@@ -36,7 +36,7 @@ struct SettingsView: View {
                     case .connected:
                         Button("Disconnect", role: .destructive) { model.disconnect() }
                     case .connecting:
-                        EmptyView() // it keeps trying on its own: nothing to press until it is connected
+                        Button("Retry") { model.retryConnection() } // it keeps trying on its own; this looks for the phone from scratch
                     }
                     if case .connected = model.client.state, let info = model.hostInfo {
                         LabeledContent("Phone") { Text(info.summary).foregroundStyle(info.isLow ? Color.orange : Color.secondary) }

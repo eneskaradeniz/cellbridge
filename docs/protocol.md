@@ -1,8 +1,10 @@
 # CellBridge protocol (v1)
 
 Android (host) <-> iOS (client, iPhone). Same Wi-Fi hotspot, no internet needed.
-Finding the host: the host advertises `_cellbridge._tcp` on port 8765 (Bonjour / mDNS) with the TXT records `v=1` and `id=<random installation id>`
-(not secret, not derived from the pairing code); the client browses for it and resolves the IPv4 address, so a changed address is found again. When several
+Finding the host: the host advertises `_cellbridge._tcp` on port 8765 (Bonjour / mDNS) with the TXT records `v=1`, `id=<random installation id>`
+(not secret, not derived from the pairing code) and `ip=<IPv4 addresses of the host's Wi-Fi/hotspot interfaces, comma separated>`. The client browses for it and
+takes the `ip` address on its own subnet (resolving the service name's address is the fallback when `ip` is missing: the system's cached answer can be stale
+after the host's address changed), so a changed address is found again. When several
 hosts announce themselves the one whose `id` the client paired with is chosen. Fallbacks: an address typed by the user, and on the host's own hotspot the
 Wi-Fi gateway (its subnet is not fixed; the iOS app asks the system for it).
 
