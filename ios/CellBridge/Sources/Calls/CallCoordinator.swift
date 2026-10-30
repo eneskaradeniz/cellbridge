@@ -82,7 +82,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     func reportDialError(_ text: String) { dialError = text }
 
     func setMuted(_ muted: Bool) {
-        guard let uuid = book.active.first(where: \.isAnswered)?.id else { return }
+        guard let uuid = book.active.first(where: { $0.isAnswered || $0.isOutgoing })?.id else { return }
         controller.request(CXTransaction(action: CXSetMutedCallAction(call: uuid, muted: muted))) { [weak self] error in
             if let error { Task { @MainActor in self?.log("mute failed: \(error.localizedDescription)") } }
         }
@@ -105,7 +105,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
 
     /// Keypad tones for a running call (menus of banks and call centres): one digit at a time, spaced so the host can play each.
     func sendDigits(_ digits: String, for uuid: UUID) {
-        guard let callId = book.callId(for: uuid), book.isAnswered(uuid) else { return }
+        guard let callId = book.callId(for: uuid), book.isAnswered(uuid) || book.isOutgoing(uuid) else { return }
         let valid = digits.filter { "0123456789*#".contains($0) }
         guard !valid.isEmpty else { return }
         Task { @MainActor in

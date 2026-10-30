@@ -1,6 +1,7 @@
 package com.cellbridge.audio
 
 import android.util.Log
+import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallStatus
 import com.cellbridge.telecom.CallFeed
@@ -18,7 +19,8 @@ import javax.inject.Singleton
 
 /**
  * Turns "the client will take call X's audio at this UDP address" plus the call's lifecycle into daemon
- * start/stop: audio flows from the moment the call is really answered until it ends.
+ * start/stop: audio flows until the call ends, starting when the call is answered, or at once for an outgoing call: while it dials
+ * the network plays ringback and busy tones to the caller, and they have to reach the iPhone too.
  */
 @Singleton
 class CallAudioBridge @Inject constructor(
@@ -27,6 +29,7 @@ class CallAudioBridge @Inject constructor(
 ) {
     private val peers = ConcurrentHashMap<String, InetSocketAddress>()
     private var job: Job? = null
+    private var scope: CoroutineScope? = null
     private val _bridged = MutableStateFlow<Set<String>>(emptySet())
 
     /** Calls whose audio is flowing to the client right now; the phone's own call screen shows "on the iPhone" for them. */
@@ -35,6 +38,7 @@ class CallAudioBridge @Inject constructor(
     @Synchronized
     fun start(scope: CoroutineScope) {
         job?.cancel()
+        this.scope = scope
         job = scope.launch { feed.events.collect { runCatching { onEvent(it) }.onFailure { Log.e(TAG, "audio bridge", it) } } }
     }
 
@@ -49,6 +53,16 @@ class CallAudioBridge @Inject constructor(
     /** Call before answering, so the answer's `Answered` event finds the peer. */
     fun expect(callId: String, peer: InetSocketAddress) {
         peers[callId] = peer
+        // The call may already be dialing (the `Dialing` event came before the client's peer was known).
+        scope?.launch {
+            if (feed.liveCalls().any { it.id == callId && it.direction == CallDirection.OUTGOING && it.status == CallStatus.DIALING }) relay(callId, peer)
+        }
+    }
+
+    /** Starts the relay for [id] unless it already runs (the answer must not restart what dialing began). */
+    private suspend fun relay(id: String, peer: InetSocketAddress) {
+        if (id in _bridged.value) return
+        if (audio.start(peer)) _bridged.update { it + id } else Log.w(TAG, "audio daemon did not start (id=$id)")
     }
 
     fun forget(callId: String) {
@@ -75,14 +89,12 @@ class CallAudioBridge @Inject constructor(
     private suspend fun onEvent(event: CallEvent) {
         val id = event.call.id
         when (event) {
-            is CallEvent.Answered -> peers[id]?.let {
-                if (audio.start(it)) _bridged.update { set -> set + id } else Log.w(TAG, "audio daemon did not start (id=$id)")
-            }
+            is CallEvent.Answered, is CallEvent.Dialing -> peers[id]?.let { relay(id, it) }
             is CallEvent.Ended -> {
                 _bridged.update { it - id }
                 if (peers.remove(id) != null) audio.stop()
             }
-            is CallEvent.Ringing, is CallEvent.Dialing -> Unit
+            is CallEvent.Ringing -> Unit
         }
     }
 

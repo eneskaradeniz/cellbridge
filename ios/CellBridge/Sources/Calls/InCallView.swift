@@ -72,7 +72,7 @@ struct InCallScreen: View {
                 Spacer()
                 GlassEffectContainer(spacing: 4) { // close glass shapes melt into one another: keep the merge distance below the gaps
                     VStack(spacing: 48) {
-                        if call.isAnswered && !call.isEnded { controls }
+                        if (call.isAnswered || call.isOutgoing) && !call.isEnded { controls } // a call that is still dialing has them too
                         if !call.isEnded { buttons }
                     }
                 }
@@ -146,7 +146,7 @@ struct InCallScreen: View {
                         Text("Audio").font(.footnote)
                     }
                     .accessibilityElement(children: .combine)
-                    if let transfer { toggle("arrow.left.arrow.right", "To Android", on: false, action: transfer) } else { Color.clear.frame(width: 76, height: 76) }
+                    if let transfer, call.isAnswered { toggle("arrow.left.arrow.right", "To Android", on: false, action: transfer) } else { Color.clear.frame(width: 76, height: 76) }
                     Color.clear.frame(width: 76, height: 76)
                 }
             }

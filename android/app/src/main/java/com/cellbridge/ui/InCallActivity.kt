@@ -161,16 +161,18 @@ private fun InCallScreen(
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(28.dp)) {
-                if (keypad && (phase == CallPhase.ACTIVE || phase == CallPhase.HOLDING)) {
+                val inCall = phase != CallPhase.INCOMING // a dialing call has mute, speaker and keypad too, like any phone's
+                if (keypad && inCall) {
                     DialPad(actions.dtmf)
                     Toggle(stringResource(R.string.incall_hide_keypad), false, { keypad = false }, Modifier.fillMaxWidth())
-                } else if (phase == CallPhase.ACTIVE || phase == CallPhase.HOLDING) {
+                } else if (inCall) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Toggle(stringResource(R.string.incall_mute), muted, actions.toggleMute, Modifier.weight(1f))
                         Toggle(stringResource(R.string.incall_speaker), speaker, actions.toggleSpeaker, Modifier.weight(1f))
                         Toggle(stringResource(R.string.incall_keypad), false, { keypad = true }, Modifier.weight(1f))
                     }
                     when {
+                        phase == CallPhase.DIALING -> Unit
                         onIphone -> Toggle(stringResource(R.string.incall_take_here), false, actions.toPhone, Modifier.fillMaxWidth())
                         iphoneThere -> Toggle(stringResource(R.string.incall_to_iphone), false, actions.toIphone, Modifier.fillMaxWidth())
                     }

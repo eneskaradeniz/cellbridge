@@ -41,6 +41,7 @@ class CallAudioBridgeTest {
     private val peer = InetSocketAddress(InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 105, 2)), 40000)
 
     private fun call(status: CallStatus, id: String = "c1") = CallSnapshot(id, "+90555", CallDirection.INCOMING, status)
+    private fun outgoing(status: CallStatus, id: String = "c1") = CallSnapshot(id, "+90555", CallDirection.OUTGOING, status)
 
     @Before fun setUp() = bridge.start(CoroutineScope(Dispatchers.Unconfined + job))
 
@@ -126,5 +127,34 @@ class CallAudioBridgeTest {
         audio.startResult = false
         assertEquals(false, bridge.attach("c1", peer))
         assertEquals(emptySet<String>(), bridge.bridged.value)
+    }
+
+    @Test
+    fun `an outgoing call is relayed while it dials, so ringback and busy tones reach the client, and the answer does not restart it`() = runBlocking {
+        bridge.expect("c1", peer)
+        feed.flow.emit(CallEvent.Dialing(outgoing(CallStatus.DIALING)))
+        assertEquals(listOf(peer), audio.started)
+        assertEquals(setOf("c1"), bridge.bridged.value)
+
+        feed.flow.emit(CallEvent.Answered(outgoing(CallStatus.ACTIVE)))
+        assertEquals(listOf(peer), audio.started) // still the one start
+        assertEquals(0, audio.stops)
+
+        feed.flow.emit(CallEvent.Ended(outgoing(CallStatus.DISCONNECTED), reason = null))
+        assertEquals(1, audio.stops)
+    }
+
+    @Test
+    fun `a peer registered after the call began dialing starts the relay at once`() = runBlocking {
+        feed.live = listOf(outgoing(CallStatus.DIALING))
+        bridge.expect("c1", peer)
+        assertEquals(listOf(peer), audio.started)
+    }
+
+    @Test
+    fun `an incoming call still waits for the answer`() = runBlocking {
+        feed.live = listOf(call(CallStatus.RINGING))
+        bridge.expect("c1", peer)
+        assertEquals(emptyList<InetSocketAddress>(), audio.started)
     }
 }
