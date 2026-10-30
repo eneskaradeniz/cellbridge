@@ -79,7 +79,7 @@ class ServiceAdvertiser @Inject constructor(@ApplicationContext private val cont
         val info = NsdServiceInfo().apply {
             serviceName = "CellBridge"
             serviceType = SERVICE_TYPE
-            setPort(port)
+            setPort(this@ServiceAdvertiser.port) // `port` alone would read the info's own (unset) port
             setAttribute("v", "1")
             setAttribute("id", deviceId.value)
         }
