@@ -138,8 +138,11 @@ final class ControlClient: ObservableObject {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(10))
             if Task.isCancelled { return }
-            let alive = await withCheckedContinuation { continuation in
-                task.sendPing { error in continuation.resume(returning: error == nil) }
+            // A dead connection (the phone left the network without closing it) can leave a ping unanswered for minutes: give it 5 s.
+            let alive = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                let once = Once()
+                task.sendPing { error in if once.take() { continuation.resume(returning: error == nil) } }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 5) { if once.take() { continuation.resume(returning: false) } }
             }
             if !alive {
                 task.cancel(with: .goingAway, reason: nil)
@@ -147,5 +150,19 @@ final class ControlClient: ObservableObject {
             }
             onAlive?()
         }
+    }
+}
+
+/// Lets exactly one of two racing callbacks win.
+private final class Once: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+
+    func take() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if done { return false }
+        done = true
+        return true
     }
 }
