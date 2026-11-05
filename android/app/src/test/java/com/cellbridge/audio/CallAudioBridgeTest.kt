@@ -19,8 +19,8 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 
 class FakeAudio(var available: Boolean = true, var startResult: Boolean = true) : CallAudio {
-    val started = mutableListOf<InetSocketAddress>()
-    var stops = 0
+    val started = java.util.concurrent.CopyOnWriteArrayList<InetSocketAddress>()
+    @Volatile var stops = 0
     override suspend fun isAvailable() = available
     override suspend fun start(peer: InetSocketAddress): Boolean = startResult.also { started += peer }
     override suspend fun stop() { stops++ }
@@ -158,23 +158,36 @@ class CallAudioBridgeTest {
         assertEquals(emptyList<InetSocketAddress>(), audio.started)
     }
 
+    /** The bridge handles events on another thread: wait for what is expected instead of sleeping a fixed time and hoping. */
+    private suspend fun eventually(what: String, check: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (!check()) {
+            check(System.currentTimeMillis() < deadline) { "timed out waiting for $what" }
+            kotlinx.coroutines.delay(5)
+        }
+    }
+
     @Test
     fun `the relay stays up for the grace after the call ended, and a new relay is not cut by the old stop`() = runBlocking {
         val graced = CallAudioBridge(feed, audio).also { it.stopGraceMs = 300 }
         graced.start(CoroutineScope(Dispatchers.Default + job))
+        // The bridge subscribes on another thread, and an event emitted before it does is lost (the shared flow has no replay).
+        eventually("the bridge to subscribe") { feed.flow.subscriptionCount.value >= 2 } // the one from setUp and this one
         graced.expect("c1", peer)
         feed.flow.emit(CallEvent.Answered(call(CallStatus.ACTIVE)))
+        eventually("the relay to start") { audio.started.size == 1 }
         feed.flow.emit(CallEvent.Ended(call(CallStatus.DISCONNECTED), reason = null))
         assertEquals(0, audio.stops) // the end-of-call beep is still on its way
-        kotlinx.coroutines.delay(500)
-        assertEquals(1, audio.stops)
+        eventually("the relay to stop after the grace") { audio.stops == 1 }
 
         graced.expect("c2", peer)
         feed.flow.emit(CallEvent.Answered(call(CallStatus.ACTIVE, id = "c2")))
+        eventually("c2's relay to start") { audio.started.size == 2 }
         feed.flow.emit(CallEvent.Ended(call(CallStatus.DISCONNECTED, id = "c2"), reason = null))
         graced.expect("c3", peer) // a new call starts inside the grace
         feed.flow.emit(CallEvent.Answered(call(CallStatus.ACTIVE, id = "c3")))
-        kotlinx.coroutines.delay(500)
+        eventually("c3's relay to start") { audio.started.size == 3 }
+        kotlinx.coroutines.delay(600) // twice the grace: c2's stop would have fired by now
         assertEquals(1, audio.stops) // c2's late stop did not take c3's relay with it
     }
 }

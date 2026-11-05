@@ -196,14 +196,17 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     func handle(_ message: ServerMessage) {
         switch message {
         case .ring(let callId, let number, let name):
+            book.hostConfirmed(callId: callId)
             ring(callId: callId, number: number, name: name)
             send(.ringAck(callId: callId)) // the phone in the pocket may stop ringing now
         case .tone(let command):
             tones.handle(command)
         case .callList(let live):
+            book.hostConfirmed()
             // An `ended` sent while the socket was down never arrived: end what the host no longer has.
             for callId in book.vanished(from: live) { handle(.ended(callId: callId, reason: nil)) }
         case .ended(let callId, let reason):
+            book.hostConfirmed(callId: callId)
             // reportCall(endedAt:) does not call back into CXEndCallAction, so nothing is sent to the host.
             guard let uuid = book.uuid(forCallId: callId) else { return }
             finish(uuid, by: .host(reason))
@@ -302,6 +305,24 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         }
     }
 
+    /// How long a pushed call may ring without the host confirming it over the connection.
+    var pushConfirmTimeout: Duration = .seconds(30)
+
+    /// The push woke the app, but the iPhone may never reach the phone (another network, the hotspot off): then nothing would ever end
+    /// the call, and an answered one would sit on "connecting". When the wait is over and the host has still said nothing, end it.
+    private func watchPushedCall(callId: String) {
+        book.pushed(callId: callId)
+        Task { @MainActor [weak self, timeout = pushConfirmTimeout] in
+            try? await Task.sleep(for: timeout)
+            guard let self, self.book.isStalePush(callId: callId), let uuid = self.book.uuid(forCallId: callId) else { return }
+            self.log("push: the phone never confirmed the call, ending it")
+            self.book.hostConfirmed(callId: callId)
+            self.book.end(uuid: uuid) // not logged: the phone's call log has the call
+            self.resetCallSettings()
+            self.provider.reportCall(with: uuid, endedAt: Date(), reason: .unanswered)
+        }
+    }
+
     private func ring(callId: String, number: String?, name: String?) {
         let title = name ?? number.flatMap(nameFor) ?? number ?? String(localized: "Unknown caller")
         guard let uuid = book.ring(callId: callId, title: title, number: number ?? "") else { return }
@@ -335,6 +356,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         let uuid = CallBook.incomingUUID(forCallId: pushed.callId)
         let handle = pushed.number.map { CXHandle(type: .phoneNumber, value: $0) } ?? CXHandle(type: .generic, value: "unknown")
         log("push: call ringing (\(registered ? "new" : "already shown"))")
+        if registered { watchPushedCall(callId: pushed.callId) }
         provider.reportNewIncomingCall(with: uuid, update: Self.callUpdate(handle: handle, title: title)) { [weak self] error in
             Task { @MainActor in
                 if let error, registered {

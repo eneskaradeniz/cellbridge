@@ -37,6 +37,22 @@ struct CallBook {
     }
 
     private var entries: [UUID: Entry] = [:]
+    /// Calls shown because of a push, that the host has not spoken about yet (no `ring`, `call_list` or `ended` over the connection).
+    private var unconfirmed: Set<String> = []
+
+    /// A pushed call is on screen but the connection to the host has not told anything about it yet.
+    mutating func pushed(callId: String) { unconfirmed.insert(callId) }
+
+    /// The host spoke: about one call (`ring`, `ended`), or about all of them (`call_list`, sent right after the hello).
+    mutating func hostConfirmed(callId: String? = nil) {
+        if let callId { unconfirmed.remove(callId) } else { unconfirmed.removeAll() }
+    }
+
+    /// A ringing call nobody at the host vouched for, which is worth ending when its wait is over.
+    func isStalePush(callId: String) -> Bool {
+        guard unconfirmed.contains(callId), let uuid = uuid(forCallId: callId) else { return false }
+        return !isAnswered(uuid)
+    }
 
     /// Calls that are ringing or in progress, oldest first.
     var active: [ActiveCall] {

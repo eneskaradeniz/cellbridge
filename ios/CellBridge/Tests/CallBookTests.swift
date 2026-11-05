@@ -3,6 +3,42 @@ import XCTest
 @testable import CellBridge
 
 final class CallBookTests: XCTestCase {
+    func testAPushedCallNobodyConfirmedIsStaleUntilTheHostSpeaks() throws {
+        var book = CallBook()
+        _ = try XCTUnwrap(book.ring(callId: "c1"))
+        book.pushed(callId: "c1")
+        XCTAssertTrue(book.isStalePush(callId: "c1"))
+        book.hostConfirmed(callId: "c1")
+        XCTAssertFalse(book.isStalePush(callId: "c1"))
+    }
+
+    func testTheCallListConfirmsEveryPushedCall() throws {
+        var book = CallBook()
+        _ = try XCTUnwrap(book.ring(callId: "c1"))
+        _ = try XCTUnwrap(book.ring(callId: "c2"))
+        book.pushed(callId: "c1")
+        book.pushed(callId: "c2")
+        book.hostConfirmed()
+        XCTAssertFalse(book.isStalePush(callId: "c1"))
+        XCTAssertFalse(book.isStalePush(callId: "c2"))
+    }
+
+    func testAnAnsweredPushedCallIsNotEndedByTheTimeout() throws {
+        var book = CallBook()
+        let uuid = try XCTUnwrap(book.ring(callId: "c1"))
+        book.pushed(callId: "c1")
+        book.markAnswered(uuid)
+        XCTAssertFalse(book.isStalePush(callId: "c1"))
+    }
+
+    func testACallThatIsGoneIsNotStale() throws {
+        var book = CallBook()
+        _ = try XCTUnwrap(book.ring(callId: "c1"))
+        book.pushed(callId: "c1")
+        _ = book.end(callId: "c1")
+        XCTAssertFalse(book.isStalePush(callId: "c1"))
+    }
+
     func testRepeatedRingForTheSameCallIsIgnored() {
         var book = CallBook()
         XCTAssertNotNil(book.ring(callId: "c1"))
