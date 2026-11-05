@@ -1982,12 +1982,22 @@
         }
       }
     },
-    "Change the recipient": {
+    "Each person gets a separate text.": {
       "localizations": {
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Alıcıyı değiştir"
+            "value": "Herkese ayrı bir mesaj gider."
+          }
+        }
+      }
+    },
+    "Remove": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaldır"
           }
         }
       }
