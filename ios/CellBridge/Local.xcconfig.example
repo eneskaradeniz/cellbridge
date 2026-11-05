@@ -1,3 +1,7 @@
 // Copy to Local.xcconfig (ignored by git) and fill in your own values.
 BUNDLE_ID_PREFIX = com.yourname
 DEVELOPMENT_TEAM = ABCDE12345
+// Optional manual signing with an installed profile:
+// SIGN_STYLE = Manual
+// SIGN_IDENTITY = Apple Development
+// PROFILE_SPECIFIER = Profile Name

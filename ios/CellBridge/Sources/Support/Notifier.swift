@@ -12,10 +12,6 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         UNUserNotificationCenter.current().delegate = self
     }
 
-    func requestPermission() {
-        Task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) }
-    }
-
     /// The number on the app icon.
     func setBadge(_ count: Int) {
         UNUserNotificationCenter.current().setBadgeCount(count) { _ in }

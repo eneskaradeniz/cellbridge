@@ -2,6 +2,7 @@ import SwiftUI
 
 /// What the user needs to know about the link to the phone, in words and a colour.
 enum LinkStatus: Equatable {
+    case unpaired
     case disconnected
     case connecting
     case connected(capabilities: [String])
@@ -9,9 +10,9 @@ enum LinkStatus: Equatable {
     /// Connecting for a while without an answer: wrong address, or not on the phone's network.
     case unreachable
 
-    init(_ state: ControlClient.State, unreachable: Bool = false) {
+    init(_ state: ControlClient.State, unreachable: Bool = false, paired: Bool = true) {
         switch state {
-        case .idle: self = .disconnected
+        case .idle: self = paired ? .disconnected : .unpaired
         case .connecting: self = unreachable ? .unreachable : .connecting
         case .connected(let capabilities): self = .connected(capabilities: capabilities)
         case .rejected: self = .refused
@@ -20,6 +21,7 @@ enum LinkStatus: Equatable {
 
     var title: String {
         switch self {
+        case .unpaired: return String(localized: "Not paired yet")
         case .disconnected: return String(localized: "Not connected")
         case .connecting: return String(localized: "Connecting…")
         case .connected: return String(localized: "Connected")
@@ -30,6 +32,7 @@ enum LinkStatus: Equatable {
 
     var detail: String {
         switch self {
+        case .unpaired: return String(localized: "Scan the QR code shown on the phone")
         case .disconnected: return String(localized: "Tap to connect to the phone")
         case .connecting: return String(localized: "Looking for the phone")
         case .connected(let capabilities):
@@ -44,7 +47,7 @@ enum LinkStatus: Equatable {
         switch self {
         case .connected: return .green
         case .connecting, .unreachable: return .orange
-        case .disconnected, .refused: return .red
+        case .unpaired, .disconnected, .refused: return .red
         }
     }
 }

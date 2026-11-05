@@ -61,7 +61,11 @@ struct PhoneDetailsView: View {
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            unlocked = true // no passcode on this iPhone: nothing to ask for
+            if error?.code == LAError.passcodeNotSet.rawValue {
+                unlocked = true // no passcode on this iPhone: nothing to ask for
+            } else {
+                failed = true // anything else (e.g. biometry locked out and no fallback): stay hidden, offer a retry
+            }
             return
         }
         do {

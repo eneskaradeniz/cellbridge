@@ -1,6 +1,13 @@
 // Build settings shared by every configuration. Put your own values in Local.xcconfig (not committed):
 //   BUNDLE_ID_PREFIX = com.yourname
 //   DEVELOPMENT_TEAM = ABCDE12345
+// Manual signing with an installed profile: SIGN_STYLE = Manual, SIGN_IDENTITY, PROFILE_SPECIFIER (profile name).
 BUNDLE_ID_PREFIX = com.example
 DEVELOPMENT_TEAM =
+SIGN_STYLE = Automatic
+SIGN_IDENTITY = Apple Development
+PROFILE_SPECIFIER =
+// Push (PushKit) needs a team with the Push Notifications capability; the profile's aps-environment must match.
+APS_ENVIRONMENT[config=Debug] = development
+APS_ENVIRONMENT[config=Release] = production
 #include? "Local.xcconfig"

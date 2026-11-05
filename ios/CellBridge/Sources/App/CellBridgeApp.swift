@@ -35,7 +35,19 @@ struct CellBridgeApp: App {
             }
             .onOpenURL { handle($0) }
             .environmentObject(model)
-            .onChange(of: scenePhase) { _, phase in if phase == .active { model.resumeIfNeeded() } }
+            .environmentObject(model.permissions)
+            .sheet(isPresented: $model.showSetup, onDismiss: { model.setupDismissed = true }) {
+                SetupView().environmentObject(model).environmentObject(model.permissions)
+            }
+            .task {
+                await model.permissions.refresh()
+                model.presentSetupIfNeeded()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                model.resumeIfNeeded()
+                Task { await model.permissions.refresh() }
+            }
             #if DEBUG
             .onAppear {
                 if let start = Sample.startTab { model.tab = start }
@@ -48,6 +60,10 @@ struct CellBridgeApp: App {
 
     /// `cellbridge://call?number=…` and `cellbridge://message?number=…`, for Shortcuts, Safari and the Home Screen.
     private func handle(_ url: URL) {
+        if url.scheme == "cellbridge", url.host == "pair" { // the QR code scanned with the system Camera app
+            _ = model.handleScan(url.absoluteString)
+            return
+        }
         guard url.scheme == "cellbridge",
               let number = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "number" })?.value
         else { return }
@@ -58,7 +74,7 @@ struct CellBridgeApp: App {
         }
     }
 
-    private var status: LinkStatus { LinkStatus(model.client.state, unreachable: model.unreachable) }
+    private var status: LinkStatus { LinkStatus(model.client.state, unreachable: model.unreachable, paired: model.isPaired) }
 
     private var isConnected: Bool {
         if case .connected = model.client.state { return true }

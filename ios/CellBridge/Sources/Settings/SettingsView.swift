@@ -5,8 +5,9 @@ struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @State private var scanning = false
     @State private var scanFailed = false
+    @State private var typing = false
 
-    private var status: LinkStatus { LinkStatus(model.client.state, unreachable: model.unreachable) }
+    private var status: LinkStatus { LinkStatus(model.client.state, unreachable: model.unreachable, paired: model.isPaired) }
 
     private static var version: String {
         let info = Bundle.main.infoDictionary
@@ -32,7 +33,11 @@ struct SettingsView: View {
                     .accessibilityElement(children: .combine)
                     switch model.client.state {
                     case .idle, .rejected:
-                        Button(status == .refused ? "Try Again" : "Connect") { model.connect() }.disabled(!model.canConnect)
+                        if model.isPaired {
+                            Button(status == .refused ? "Try Again" : "Connect") { model.connect() }.disabled(!model.canConnect)
+                        } else {
+                            Button { scanning = true } label: { Label("Scan the QR code", systemImage: "qrcode.viewfinder").fontWeight(.semibold) }
+                        }
                     case .connected:
                         Button("Disconnect", role: .destructive) { model.disconnect() }
                     case .connecting:
@@ -50,7 +55,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Button { scanning = true } label: { Label("Scan the QR code", systemImage: "qrcode.viewfinder") }
+                    if model.isPaired { Button { scanning = true } label: { Label("Scan the QR code", systemImage: "qrcode.viewfinder") } }
                     NavigationLink { PhoneDetailsView() } label: { Label("Phone Details", systemImage: "lock") }
                 } header: {
                     Text("Phone")
@@ -58,6 +63,12 @@ struct SettingsView: View {
                     if scanFailed { Text("That is not a CellBridge QR code.").foregroundStyle(.red) } else {
                         Text("Open CellBridge on the Android phone and scan the QR code shown there, once. After that this iPhone finds the phone by itself.")
                     }
+                }
+
+                Section {
+                    ForEach(PermissionKind.allCases) { PermissionRow(kind: $0) }
+                } header: {
+                    Text("Permissions")
                 }
 
                 Section {
@@ -80,22 +91,15 @@ struct SettingsView: View {
                 }
             }
             .sheet(isPresented: $scanning) {
-                NavigationStack {
-                    QRScannerView { text in
+                ScanSheet(
+                    onCode: { text in
                         scanning = false
-                        if let link = PairingLink.parse(text) {
-                            scanFailed = false
-                            model.pair(with: link)
-                        } else {
-                            scanFailed = true
-                        }
-                    }
-                    .ignoresSafeArea()
-                    .navigationTitle("Scan the QR code")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { scanning = false } } }
-                }
+                        scanFailed = !model.handleScan(text)
+                    },
+                    cancel: { scanning = false },
+                    enterByHand: { scanning = false; typing = true })
             }
+            .navigationDestination(isPresented: $typing) { PhoneDetailsView() }
             .navigationTitle("Settings")
             .toolbarTitleDisplayMode(.inlineLarge)
             .dismissibleKeyboard()

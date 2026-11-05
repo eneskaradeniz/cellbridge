@@ -9,6 +9,14 @@ struct MessagesView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
+                if let problem = model.refreshProblem {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .listRowSeparator(.hidden)
+                        .onTapGesture { model.tab = .settings }
+                        .accessibilityAddTraits(.isButton)
+                }
                 ForEach(model.messages.conversations) { conversation in
                 NavigationLink(value: ThreadRoute(key: conversation.key, peer: conversation.peer)) {
                     Row(conversation: conversation, name: model.displayName(for: conversation.peer))

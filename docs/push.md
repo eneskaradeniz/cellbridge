@@ -1,7 +1,9 @@
 # Waking the iPhone app for a call (push)
 
-**Status:** the Android host is done and tested; the iPhone side (PushKit registration and handler) is **not written yet** and cannot be
-tested without a paid Apple Developer account.
+**Status:** the Android host and the iPhone side (PushKit registration in `PushRegistry`, the call in `CallCoordinator.reportPushed`, the
+`push_token` message) are written and unit-tested (the iPhone opens a box sealed by the host's test vector). **Not yet tested end to end with a real push.**
+The iPhone build needs a team with Push Notifications: the `aps-environment` entitlement (`APS_ENVIRONMENT` in `Config.xcconfig`, development for
+Debug, production for Release) must match the provisioning profile; a free personal team cannot build it.
 
 ## Why
 
@@ -40,6 +42,5 @@ says *Key installed, waiting for the iPhone to register*. `tools/install-apns-ke
 
 ## Still to do
 
-- iPhone: PushKit registration, the push handler, the `push_token` message, entitlements (`aps-environment`) through `Local.xcconfig`, tests.
 - An end-to-end test with a real push (fake incoming call on the Android phone with the iPhone app closed).
 - Texts and missed calls as visible notifications while the app is closed (needs a notification service extension to show the sealed text).

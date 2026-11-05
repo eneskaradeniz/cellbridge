@@ -29,6 +29,12 @@ final class AppModel: ObservableObject {
     /// The running model, for App Intents (Shortcuts, Siri), which are created outside the view tree.
     static private(set) weak var current: AppModel?
     private let contactProvider = ContactStoreProvider()
+    let permissions = PermissionCenter()
+    private let push = PushRegistry()
+    /// The first-run sheet (pairing and permissions) is on screen.
+    @Published var showSetup = false
+    /// Why the last pull to refresh had nothing to refresh from; cleared once the phone is reached.
+    @Published private(set) var refreshProblem: String?
 
     let client = ControlClient()
     private(set) var messages: MessageCoordinator!
@@ -114,6 +120,7 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             unreachableTimer?.cancel()
             unreachable = false
+            if case .connected = state { refreshProblem = nil }
             guard state == .connecting else { return }
             unreachableTimer = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(12))
@@ -147,6 +154,17 @@ final class AppModel: ObservableObject {
         NotificationCenter.default.publisher(for: .CNContactStoreDidChange).sink { [weak self] _ in
             self?.refreshContacts()
         }.store(in: &bag)
+        permissions.onContactsChanged = { [weak self] in self?.refreshContacts() }
+        push.onCall = { [weak self] call, done in
+            guard let self else { return done() }
+            calls.reportPushed(call, completion: done)
+            resumeIfNeeded() // the app may have been started by this push: bring the link up so the call can be answered
+        }
+        push.onToken = { [weak self] in
+            if case .connected(let capabilities) = self?.client.state { self?.sendPushToken(offered: capabilities) }
+        }
+        push.start() // at launch, always: iOS only delivers a push to a closed app that registers again as it starts
+        permissions.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
         refreshContacts()
         Self.current = self
         bonjour.preferredId = pairedDeviceId
@@ -278,6 +296,7 @@ final class AppModel: ObservableObject {
         Task {
             _ = await contactProvider.requestAccess()
             refreshContacts()
+            await permissions.refresh()
         }
     }
 
@@ -288,6 +307,31 @@ final class AppModel: ObservableObject {
         contactsAuthorized = contactProvider.isAuthorized
         guard contactsAuthorized else { return }
         Task { contactBook = ContactBook(contacts: await contactProvider.load()) }
+    }
+
+    /// A pairing code is stored: the QR code has been scanned (or the code typed).
+    var isPaired: Bool { !cleanToken.isEmpty }
+
+    /// Takes the text of a scanned QR code; false when it is not a CellBridge pairing code.
+    @discardableResult
+    func handleScan(_ text: String) -> Bool {
+        guard let link = PairingLink.parse(text) else { return false }
+        pair(with: link)
+        return true
+    }
+
+    var setupDismissed: Bool {
+        get { UserDefaults.standard.bool(forKey: "setupDismissed") }
+        set { UserDefaults.standard.set(newValue, forKey: "setupDismissed") }
+    }
+
+    /// Opens the setup sheet at launch while something is still unpaired or unasked, unless the user already sent it away.
+    func presentSetupIfNeeded() {
+        #if DEBUG
+        if Sample.enabled { return }
+        #endif
+        guard !setupDismissed, !isPaired || !permissions.pending.isEmpty else { return }
+        showSetup = true
     }
 
     var canConnect: Bool { !effectiveHost.isEmpty && hostLooksValid && !cleanToken.isEmpty }
@@ -322,9 +366,6 @@ final class AppModel: ObservableObject {
 
     func connect() {
         wantsConnection = true
-        Task { _ = await AVAudioApplication.requestRecordPermission() } // ask now, not in the middle of a call
-        notifier.requestPermission()
-        if canAskForContacts { requestContacts() }
         keepAlive.start()
         client.connect(host: { [weak self] in self?.candidateHosts ?? [] }, token: cleanToken)
     }
@@ -430,13 +471,21 @@ final class AppModel: ObservableObject {
     func refreshHistory() async {
         let before = lastSync
         if case .connected = client.state {} else {
-            if wantsConnection { client.restart() } else if canConnect { connect() }
-            for _ in 0..<60 {
+            guard canConnect else {
+                refreshProblem = String(localized: "Not paired with a phone yet. Scan its QR code in Settings.")
+                return
+            }
+            if wantsConnection { client.restart() } else { connect() }
+            for _ in 0..<30 {
                 if case .connected = client.state { break }
                 try? await Task.sleep(for: .milliseconds(100))
             }
         }
-        guard case .connected(let capabilities) = client.state else { return }
+        guard case .connected(let capabilities) = client.state else {
+            refreshProblem = String(localized: "Could not reach the phone. Join its hotspot or check the address.")
+            return
+        }
+        refreshProblem = nil
         if capabilities.contains("calllog") { requestCallLog() }
         for _ in 0..<50 where lastSync == before { try? await Task.sleep(for: .milliseconds(100)) }
     }
@@ -452,6 +501,7 @@ final class AppModel: ObservableObject {
             markSynced()
         case .helloAck(_, let capabilities):
             markSynced()
+            sendPushToken(offered: capabilities)
             messages.resendPending()
             if capabilities.contains("calllog") { requestCallLog() }
             if capabilities.contains("smshistory"), !UserDefaults.standard.bool(forKey: "smsHistoryDone") {
@@ -472,6 +522,13 @@ final class AppModel: ObservableObject {
         default:
             break
         }
+    }
+
+    /// Tells the phone how to wake this app for a call, when it holds an APNs key (`push`) and Apple has given us a token.
+    private func sendPushToken(offered capabilities: [String]) {
+        guard capabilities.contains("push"), let message = push.message else { return }
+        client.send(message)
+        log("push token sent to the phone")
     }
 
     /// Asks for calls the phone logged that this app has not seen: all of the last 90 days the first time, then newer ones.

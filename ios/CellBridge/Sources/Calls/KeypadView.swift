@@ -4,7 +4,6 @@ import SwiftUI
 struct KeypadView: View {
     @EnvironmentObject var model: AppModel
     @State private var number = ""
-    @State private var choosing = false
 
     private struct Key: Identifiable {
         let digit: String
@@ -55,12 +54,7 @@ struct KeypadView: View {
                         }
                     }
                     HStack(spacing: 24) {
-                        Button { choosing = true } label: {
-                            Image(systemName: "person.crop.circle").font(.system(size: 28)).foregroundStyle(.secondary)
-                                .frame(width: keySize, height: keySize)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Choose from contacts")
+                        Color.clear.frame(width: keySize, height: keySize) // keeps the call button centred
                         Button(action: call) {
                             Image(systemName: "phone.fill").font(.system(size: 30)).foregroundStyle(.white)
                                 .frame(width: keySize, height: keySize)
@@ -89,7 +83,6 @@ struct KeypadView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { keySize = min(84, max(58, ($0 - 190) / 5.6)) }
         .sensoryFeedback(.selection, trigger: number)
         .onChange(of: model.activeCalls.isEmpty) { _, idle in if !idle { number = "" } } // kept until the call really starts, so a refused dial loses nothing
-        .sheet(isPresented: $choosing) { ContactsView(onPick: { number = $0 }) }
     }
 
     private var canCall: Bool { !number.isEmpty || !model.lastDialed.isEmpty }

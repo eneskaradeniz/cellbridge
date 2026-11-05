@@ -1691,6 +1691,256 @@
           }
         }
       }
+    },
+    "Not paired yet": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Henüz eşleşmedi"
+          }
+        }
+      }
+    },
+    "Scan the QR code shown on the phone": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonda görünen QR kodunu tarayın"
+          }
+        }
+      }
+    },
+    "Not paired with a phone yet. Scan its QR code in Settings.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Henüz bir telefonla eşleşilmedi. Ayarlar'dan QR kodunu tarayın."
+          }
+        }
+      }
+    },
+    "Could not reach the phone. Join its hotspot or check the address.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefona ulaşılamadı. Hotspot'una bağlanın ya da adresi kontrol edin."
+          }
+        }
+      }
+    },
+    "Permissions": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "İzinler"
+          }
+        }
+      }
+    },
+    "Camera": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera"
+          }
+        }
+      }
+    },
+    "Microphone": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mikrofon"
+          }
+        }
+      }
+    },
+    "Notifications": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bildirimler"
+          }
+        }
+      }
+    },
+    "Allowed": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "İzin verildi"
+          }
+        }
+      }
+    },
+    "Allow": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "İzin ver"
+          }
+        }
+      }
+    },
+    "Scans the QR code on the phone, once.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefondaki QR kodunu bir kez tarar."
+          }
+        }
+      }
+    },
+    "Shows names instead of numbers. Contacts stay on this iPhone.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numara yerine isim gösterir. Kişiler bu iPhone'da kalır."
+          }
+        }
+      }
+    },
+    "Sends your voice to the call.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sesinizi aramaya iletir."
+          }
+        }
+      }
+    },
+    "Tells you about new texts.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yeni mesajları bildirir."
+          }
+        }
+      }
+    },
+    "Camera Access Is Off": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera erişimi kapalı"
+          }
+        }
+      }
+    },
+    "No Camera": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera yok"
+          }
+        }
+      }
+    },
+    "Allow the camera in iOS Settings to scan the QR code. You can also scan it with the iPhone's Camera app, or type the pairing code by hand.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR kodunu taramak için iOS Ayarlar'dan kameraya izin verin. iPhone'un Kamera uygulamasıyla da tarayabilir ya da eşleşme kodunu elle yazabilirsiniz."
+          }
+        }
+      }
+    },
+    "This iPhone has no camera that can scan. Type the pairing code by hand.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu iPhone'da tarama yapabilen bir kamera yok. Eşleşme kodunu elle yazın."
+          }
+        }
+      }
+    },
+    "Enter the code by hand": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kodu elle gir"
+          }
+        }
+      }
+    },
+    "Pair with the phone": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonla eşleş"
+          }
+        }
+      }
+    },
+    "Paired.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eşleşti."
+          }
+        }
+      }
+    },
+    "Open CellBridge on the Android phone and scan the QR code shown there.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Android telefonda CellBridge'i açın ve orada görünen QR kodunu tarayın."
+          }
+        }
+      }
+    },
+    "Scan": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tara"
+          }
+        }
+      }
+    },
+    "You can change these any time in Settings.": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bunları istediğiniz zaman Ayarlar'dan değiştirebilirsiniz."
+          }
+        }
+      }
+    },
+    "Set Up CellBridge": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CellBridge Kurulumu"
+          }
+        }
+      }
     }
   }
 }

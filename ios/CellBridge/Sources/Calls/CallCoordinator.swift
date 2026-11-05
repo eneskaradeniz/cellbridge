@@ -311,6 +311,36 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         }
     }
 
+    /// A VoIP push woke the app for a call. CallKit must hear about a call for every push, so even an unreadable push is shown and ended
+    /// at once; the connection that follows tells whether the host still has the call ringing (`call_list` ends it if not).
+    func reportPushed(_ pushed: PushSeal.Call?, completion: @escaping () -> Void) {
+        guard let pushed else {
+            log("push could not be read")
+            let uuid = UUID()
+            provider.reportNewIncomingCall(with: uuid, update: Self.callUpdate(handle: CXHandle(type: .generic, value: "unknown"), title: String(localized: "Unknown caller"))) { [weak self] _ in
+                Task { @MainActor in
+                    self?.provider.reportCall(with: uuid, endedAt: Date(), reason: .failed)
+                    completion()
+                }
+            }
+            return
+        }
+        let title = pushed.name ?? pushed.number.flatMap(nameFor) ?? pushed.number ?? String(localized: "Unknown caller")
+        let registered = book.ring(callId: pushed.callId, title: title, number: pushed.number ?? "") != nil
+        let uuid = CallBook.incomingUUID(forCallId: pushed.callId)
+        let handle = pushed.number.map { CXHandle(type: .phoneNumber, value: $0) } ?? CXHandle(type: .generic, value: "unknown")
+        log("push: call ringing (\(registered ? "new" : "already shown"))")
+        provider.reportNewIncomingCall(with: uuid, update: Self.callUpdate(handle: handle, title: title)) { [weak self] error in
+            Task { @MainActor in
+                if let error, registered {
+                    self?.log("callkit refused the pushed call: \(error.localizedDescription)")
+                    _ = self?.book.end(callId: pushed.callId)
+                }
+                completion()
+            }
+        }
+    }
+
     // MARK: CXProviderDelegate
 
     nonisolated func providerDidReset(_ provider: CXProvider) {}

@@ -17,6 +17,7 @@ enum ClientMessage: Equatable {
     case smsSend(clientId: String, to: String, body: String)
     case callLogRequest(after: String?, since: Int64?)
     case smsHistoryRequest(since: Int64?)
+    case pushToken(token: String, env: String, topic: String, key: String)
 
     func encoded() -> String {
         var object: [String: Any]
@@ -53,6 +54,8 @@ enum ClientMessage: Equatable {
         case .smsHistoryRequest(let since):
             object = ["type": "sms_history_request"]
             if let since { object["since"] = since }
+        case .pushToken(let token, let env, let topic, let key):
+            object = ["type": "push_token", "token": token, "env": env, "topic": topic, "key": key]
         }
         let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
         return String(decoding: data, as: UTF8.self)

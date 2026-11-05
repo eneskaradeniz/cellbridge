@@ -19,6 +19,14 @@ struct RecentsView: View {
                 .pickerStyle(.segmented)
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
+                if let problem = model.refreshProblem {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .listRowSeparator(.hidden)
+                        .onTapGesture { model.tab = .settings }
+                        .accessibilityAddTraits(.isButton)
+                }
                 ForEach(shown) { group in
                     let record = group.latest
                     let name = model.displayName(for: record.number, fallback: record.title)

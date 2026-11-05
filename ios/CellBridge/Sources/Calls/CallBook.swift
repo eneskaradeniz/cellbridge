@@ -1,4 +1,5 @@
 import CallKit
+import CryptoKit
 import Foundation
 
 /// A call as the UI shows it.
@@ -49,10 +50,18 @@ struct CallBook {
         entries.values.compactMap(\.callId).filter { !live.contains($0) }
     }
 
+    /// The CallKit id of a ringing host call. Derived from the host's call id, so the push and the connection that follows it
+    /// name the same call and CallKit never rings twice.
+    static func incomingUUID(forCallId callId: String) -> UUID {
+        let hash = Array(SHA256.hash(data: Data("cellbridge-call:\(callId)".utf8)))
+        return UUID(uuid: (hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7],
+                           hash[8], hash[9], hash[10], hash[11], hash[12], hash[13], hash[14], hash[15]))
+    }
+
     /// Registers a ringing call; nil if the host already told us about it (it re-sends rings after a reconnect).
     mutating func ring(callId: String, title: String = "", now: Date = Date(), number: String = "") -> UUID? {
         guard !entries.values.contains(where: { $0.callId == callId }) else { return nil }
-        let uuid = UUID()
+        let uuid = Self.incomingUUID(forCallId: callId)
         entries[uuid] = Entry(callId: callId, number: number, title: title, since: now, outgoing: false)
         return uuid
     }
