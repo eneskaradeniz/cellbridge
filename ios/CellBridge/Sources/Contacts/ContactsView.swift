@@ -92,12 +92,13 @@ struct ContactsView: View {
     }
 
     private func label(_ contact: Contact) -> some View {
-        HStack(spacing: 12) {
-            Avatar(name: contact.name, size: 36)
+        HStack(spacing: ListRow.spacing) {
+            Avatar(name: contact.name, size: ListRow.avatar)
             Text(contact.name).lineLimit(1)
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
+        .avatarRowSeparator()
     }
 
     private func detail(for contact: Contact) -> some View {

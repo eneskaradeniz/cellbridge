@@ -21,6 +21,7 @@ struct MessagesView: View {
                 NavigationLink(value: ThreadRoute(key: conversation.key, peer: conversation.peer)) {
                     Row(conversation: conversation, name: model.displayName(for: conversation.peer))
                 }
+                .avatarRowSeparator()
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) { deleting = conversation } label: { Label("Delete", systemImage: "trash") }
                 }
@@ -87,10 +88,8 @@ struct MessagesView: View {
         let name: String
 
         var body: some View {
-            HStack(spacing: 10) {
-                Circle().fill(conversation.unreadCount > 0 ? Color.accentColor : .clear).frame(width: 10, height: 10)
-                    .accessibilityHidden(true)
-                Avatar(name: name, size: 46)
+            HStack(spacing: ListRow.spacing) {
+                Avatar(name: name, size: ListRow.avatar)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(name).font(.headline).lineLimit(1)
@@ -103,6 +102,12 @@ struct MessagesView: View {
                 }
             }
             .padding(.vertical, 2)
+            // The unread dot lives in the margin to the left of the gutter, so a read and an unread row start at the same place.
+            .overlay(alignment: .leading) {
+                if conversation.unreadCount > 0 {
+                    Circle().fill(Color.accentColor).frame(width: 9, height: 9).offset(x: -13).accessibilityHidden(true)
+                }
+            }
             .accessibilityElement(children: .combine)
             .accessibilityValue(conversation.unreadCount > 0 ? String(localized: "Unread") : "")
         }
@@ -399,8 +404,8 @@ struct NewMessageView: View {
     /// The whole row is the button, not just the words in it.
     private func row(title: Text, subtitle: String?, avatar: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Avatar(name: avatar, size: 44)
+            HStack(spacing: ListRow.spacing) {
+                Avatar(name: avatar, size: ListRow.avatar)
                 VStack(alignment: .leading, spacing: 1) {
                     title.font(.body.weight(.semibold)).lineLimit(1)
                     if let subtitle { Text(subtitle).font(.subheadline).foregroundStyle(.secondary) }
@@ -411,6 +416,7 @@ struct NewMessageView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .avatarRowSeparator()
     }
 
     private var composer: some View {
