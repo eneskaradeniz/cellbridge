@@ -192,8 +192,17 @@ Frame: `u8 type`, `u16 len` (little endian), `len` bytes payload. Audio payloads
 | `0x10` DL frame | daemon -> app | PCM period (only while started with DL) |
 | `0x11` UL frame | app -> daemon | PCM period (only while started with UL) |
 | `0x90` TONE line | daemon -> app | one Telecom log line about a call tone (UTF-8, at most 400 bytes); sent to the authenticated client at any time, also while no relay runs |
-| `0x80` OK | daemon -> app | ack of AUTH / START / STOP |
+| `0x03` HOTSPOT | app -> daemon | `u8 on` (1 or 0): switch the phone's Wi-Fi hotspot on or off (see below). Answered with OK, or ERR once it is known to have failed; an on request takes about 6 s |
+| `0x04` WIFI | app -> daemon | - ; answered with `0x82` |
+| `0x82` WIFI info | daemon -> app | UTF-8 text, one name per line: the Wi-Fi network the phone is connected to (an empty first line if none), then every network saved on the phone |
+| `0x80` OK | daemon -> app | ack of AUTH / START / STOP / HOTSPOT |
 | `0x81` ERR | daemon -> app | UTF-8 reason; the request had no effect |
+
+**Hotspot.** The app uses the daemon to bring the hotspot up when the phone leaves its home Wi-Fi and down again when it returns (an app cannot
+do it itself). The home Wi-Fi is any network saved on the phone; the app asks with WIFI after every Wi-Fi change and decides. The daemon takes
+the hotspot's name, password and band from the Wi-Fi service's own saved hotspot settings (WPA2 only), never from the app, and starts it with
+`cmd wifi start-softap`; the Tethering service then serves addresses and internet exactly as for a hotspot switched on by hand. OFF stops
+whatever hotspot is running.
 
 The daemon follows the `Telecom` log (`logcat`) and forwards the lines of `InCallTonePlayer` and `RingbackPlayer` as `0x90` frames: the app turns them into `tone` messages (control channel). STOP, a closed socket, or SIGTERM switch every mixer route off. The app must hold a `PARTIAL_WAKE_LOCK` while started,
 otherwise the CPU suspends and the DSP feed stalls (see spike-a doc).

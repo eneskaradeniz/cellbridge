@@ -18,16 +18,20 @@
 #include "audio.h"
 #include "stream.h"
 #include "tones.h"
+#include "wifi.h"
 
 enum {
     MSG_AUTH = 0x00,
     MSG_START = 0x01,
     MSG_STOP = 0x02,
+    MSG_HOTSPOT = 0x03,
+    MSG_WIFI = 0x04,
     MSG_DL_FRAME = 0x10,
     MSG_UL_FRAME = 0x11,
     MSG_TONE_LINE = 0x90,
     MSG_OK = 0x80,
     MSG_ERR = 0x81,
+    MSG_WIFI_INFO = 0x82,
 };
 
 enum { START_DL = 1 << 0, START_UL = 1 << 1 };
@@ -257,6 +261,22 @@ static void serve_client(int fd, const struct profile *p, const char *token, uns
             stop_audio(&s);
             send_frame(&s, MSG_OK, NULL, 0);
             break;
+        case MSG_HOTSPOT: {
+            char reason[96] = "";
+            if (len != 1 || payload[0] > 1)
+                send_err(&s, "bad hotspot");
+            else if (wifi_hotspot(payload[0] == 1, reason, sizeof(reason)))
+                send_frame(&s, MSG_OK, NULL, 0);
+            else
+                send_err(&s, reason);
+            break;
+        }
+        case MSG_WIFI: {
+            char info[MAX_PAYLOAD];
+            size_t n = wifi_info(info, sizeof(info));
+            send_frame(&s, MSG_WIFI_INFO, info, (unsigned int)n);
+            break;
+        }
         case MSG_UL_FRAME:
             if (!s.audio || !(s.flags & START_UL) || s.stream)
                 send_err(&s, "uplink not started");
@@ -279,7 +299,8 @@ int server_run(const struct profile *p, const char *token, unsigned short port, 
 {
     signal(SIGPIPE, SIG_IGN);
     mic_recover(p); /* a crash or kill -9 mid-call may have left the phone microphone silenced */
-    int listener = socket(AF_INET, SOCK_STREAM, 0);
+    /* CLOEXEC: the logcat and `cmd` children must not inherit the sockets, or a dead daemon's orphan keeps the port bound. */
+    int listener = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (listener < 0) {
         perror("socket");
         return 1;
@@ -297,7 +318,7 @@ int server_run(const struct profile *p, const char *token, unsigned short port, 
     tones_start(forward_tone_line, NULL);
 
     while (!stop_requested) {
-        int fd = accept(listener, NULL, NULL);
+        int fd = accept4(listener, NULL, NULL, SOCK_CLOEXEC);
         if (fd < 0)
             continue; /* EINTR from a signal re-checks stop_requested */
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));

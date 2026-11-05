@@ -43,13 +43,19 @@ Not Disturb to "alarms only" and puts the previous setting back when nothing rin
 never lost). The phone rings for a second or two until the iPhone confirms. If the phone is ever left silent:
 `adb shell cmd notification set_dnd off`.
 
+**The hotspot.** Away from the home Wi-Fi the iPhone has nothing to join, so the app asks the root daemon (section 4) to switch the phone's
+hotspot on 30 seconds after the Wi-Fi is lost, and off again when a home network is joined. **Home Wi-Fi is any network saved on the phone**: forget
+the ones that are not home (Settings → Wi-Fi). The hotspot uses the name and password already set in Android's hotspot settings (WPA2 only).
+A hotspot you switched on by hand is never switched off by the app; the **Hotspot** switch on the Status screen turns the feature off.
+Needs the daemon from this version (the hotspot messages are in docs/protocol.md).
+
 ## 3. Network prerequisites
 
 - `adb shell settings get global restricted_networking_mode` must print `0`. With `1` (a "restricted networking mode" some
   builds switch on) **every app is cut off from the network, loopback included**: the server logs `Responding at …` and
   listens, yet no request is ever answered. Fix: `adb shell settings put global restricted_networking_mode 0`.
 - The server runs in a foreground service (a notification says so). A background app loses its network when the screen turns off.
-- Switch the **hotspot on** and connect the iPhone to it. After an Android reboot the hotspot has to be switched on again by hand.
+- Away from home the hotspot comes on by itself (section 2); connect the iPhone to it once and it joins by itself afterwards. If the daemon is not running, switch the hotspot on by hand.
 
 ## 4. The root audio daemon (call audio)
 
@@ -126,6 +132,7 @@ and, when done, the same command with the original component, id and user (on th
 | iPhone shows no `sms` | the app is not the default SMS app |
 | The iPhone never sees a call | the `MANAGE_ONGOING_CALLS` appop is missing (section 2) |
 | Both phones keep ringing | no Do Not Disturb access (`allow_dnd`, section 2) |
+| The hotspot does not come on when I leave home | the daemon is not the current build (section 4), the phone is still joined to a saved network, or the **Hotspot** switch is off |
 | The phone stays silent after a call | `adb shell cmd notification set_dnd off` |
 | Status says "No APNs key" / "waiting for the iPhone to register" | install the key (`tools/install-apns-key.sh`, [push.md](push.md)); open the iPhone app once so it registers |
 | Far end hears choppy audio | see the statistics line the iPhone logs at the end of each call (Events, or `events.log`) |

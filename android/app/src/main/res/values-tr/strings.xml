@@ -26,6 +26,9 @@
     <string name="push_key_missing">APNs anahtarı yüklü değil</string>
     <string name="push_token_missing">Anahtar yüklü, iPhone\'un kaydolması bekleniyor</string>
     <string name="push_ready">Hazır</string>
+    <string name="card_hotspot">Hotspot</string>
+    <string name="hotspot_auto">Ev Wi-Fi\'ından uzaktayken aç</string>
+    <string name="hotspot_hint">Ev Wi-Fi\'ı bu telefonda kayıtlı her ağdır: diğerlerini unut. Kendi açtığın hotspot\'a dokunulmaz.</string>
     <string name="card_battery">Pil</string>
     <string name="charging">şarj oluyor</string>
     <string name="card_roles">Roller</string>

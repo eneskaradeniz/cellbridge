@@ -9,3 +9,5 @@ cc -O1 -g -Wall -Wextra -fsanitize=address,undefined -Isrc -o build/mic_state_te
 build/mic_state_test
 cc -O1 -g -Wall -Wextra -fsanitize=address,undefined -Isrc -o build/tones_test tests/tones_test.c src/tones.c -lpthread
 build/tones_test
+cc -O1 -g -Wall -Wextra -fsanitize=address,undefined -Isrc -o build/wifi_test tests/wifi_test.c src/wifi.c
+build/wifi_test

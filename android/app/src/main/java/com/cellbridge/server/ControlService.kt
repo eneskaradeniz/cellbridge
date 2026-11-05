@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.cellbridge.MainActivity
 import com.cellbridge.R
+import com.cellbridge.hotspot.AutoHotspot
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -24,6 +25,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class ControlService : Service() {
     @Inject lateinit var server: ControlServer
+    @Inject lateinit var autoHotspot: AutoHotspot
 
     override fun onCreate() {
         super.onCreate()
@@ -31,6 +33,7 @@ class ControlService : Service() {
             .createNotificationChannel(NotificationChannel(CHANNEL_ID, getString(R.string.notification_channel), NotificationManager.IMPORTANCE_LOW))
         startForeground(NOTIFICATION_ID, notification(R.string.notification_starting), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         server.start()
+        autoHotspot.start()
         val text = if (server.running.value) R.string.notification_running else R.string.notification_failed
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text))
     }

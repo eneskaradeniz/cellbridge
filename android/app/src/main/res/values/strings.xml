@@ -26,6 +26,9 @@
     <string name="push_key_missing">No APNs key installed</string>
     <string name="push_token_missing">Key installed, waiting for the iPhone to register</string>
     <string name="push_ready">Ready</string>
+    <string name="card_hotspot">Hotspot</string>
+    <string name="hotspot_auto">On when away from home Wi-Fi</string>
+    <string name="hotspot_hint">Home Wi-Fi is any network saved on this phone: forget the others. A hotspot you switched on yourself is left alone.</string>
     <string name="card_battery">Battery</string>
     <string name="charging">charging</string>
     <string name="card_roles">Roles</string>

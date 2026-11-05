@@ -25,6 +25,7 @@ and the radio. No internet and no cloud: everything stays on the local network (
 | History: calls and texts the phone saw while the iPhone was away (missed calls, older conversations) are fetched after reconnecting; pull to refresh | working |
 | Pairing: the iPhone finds the phone by itself (Bonjour), pairs once by scanning a QR code (the iPhone's own Camera app should work too, not tried yet); the code is hidden behind Face ID. A first-run sheet and Settings handle the permissions and explain refused ones | working |
 | The phone keeps its stock Phone app; CellBridge's own Android app is a status and pairing screen (calls are watched by a screenless `InCallService`) | working |
+| The phone's hotspot comes on by itself when it leaves its home Wi-Fi and goes off when it returns (root daemon; a switch on the Status screen) | working |
 | The phone's battery and signal on the iPhone, with a warning before it runs out | working |
 | English and Turkish, iOS 26 Liquid Glass design | working |
 | Waking a closed iPhone app for a call (VoIP push through Apple) | working; needs a paid developer account and an APNs key: [docs/push.md](docs/push.md) |
@@ -55,7 +56,7 @@ and the radio. No internet and no cloud: everything stays on the local network (
 - iOS does not let a third-party app take over `tel:` links without the paid *Default Calling App* capability: start calls from CellBridge,
   the **Call with CellBridge** shortcut, or `cellbridge://call?number=...`. Default messaging apps are EU-only.
 - Security codes arrive as CellBridge notifications; the iOS keyboard offers them for one-time-code fields (iOS 26). They are not in Apple's Messages.
-- After an Android reboot the **hotspot must be switched on by hand**, and with a screen lock the phone must be **unlocked once**
+- After an Android reboot the app switches the hotspot on by itself once it runs, if the phone is away from its home Wi-Fi; with a screen lock the phone must be **unlocked once**
   before the app's server starts (Android keeps app data encrypted until then). Removing the screen lock avoids the second one.
 - The installed daemon service lives in `/system` and is **removed by a ROM update**; run the install script again afterwards.
 - One call at a time. The Android phone is quietened (Do Not Disturb, "alarms only") only after the iPhone confirms it is ringing, so it rings for a

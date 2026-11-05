@@ -23,6 +23,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,7 +56,7 @@ private val Bad = Color(0xFFD6453D)
 
 /** The phone's main screen: is the bridge up, where to point the iPhone, is everything it needs in place. */
 @Composable
-fun StatusScreen(status: HostStatus?, pairingCode: String, pairingLink: String, onUnrestrict: () -> Unit, roles: @Composable () -> Unit) {
+fun StatusScreen(status: HostStatus?, pairingCode: String, pairingLink: String, onUnrestrict: () -> Unit, autoHotspot: Boolean, onAutoHotspot: (Boolean) -> Unit, roles: @Composable () -> Unit) {
     run {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
@@ -123,6 +124,14 @@ fun StatusScreen(status: HostStatus?, pairingCode: String, pairingLink: String, 
                     Line(stringResource(R.string.unrestricted_missing), Warn)
                     TextButton(onClick = onUnrestrict) { Text(stringResource(R.string.unrestricted_ask)) }
                 }
+            }
+
+            Section(stringResource(R.string.card_hotspot)) {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                    Text(stringResource(R.string.hotspot_auto), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                    Switch(checked = autoHotspot, onCheckedChange = onAutoHotspot)
+                }
+                Detail(stringResource(R.string.hotspot_hint))
             }
 
             Section(stringResource(R.string.card_roles)) { roles() }

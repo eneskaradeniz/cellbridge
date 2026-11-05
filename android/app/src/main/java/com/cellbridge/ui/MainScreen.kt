@@ -19,11 +19,13 @@ fun MainScreen(
     pairingCode: String,
     pairingLink: String,
     onUnrestrict: () -> Unit,
+    autoHotspot: Boolean,
+    onAutoHotspot: (Boolean) -> Unit,
     roles: @Composable () -> Unit,
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-            StatusScreen(status, pairingCode, pairingLink, onUnrestrict, roles)
+            StatusScreen(status, pairingCode, pairingLink, onUnrestrict, autoHotspot, onAutoHotspot, roles)
         }
     }
 }

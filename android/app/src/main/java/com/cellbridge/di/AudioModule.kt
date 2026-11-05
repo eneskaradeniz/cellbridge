@@ -11,6 +11,8 @@ import com.cellbridge.audio.ToneParser
 import com.cellbridge.audio.VoiceVolumeLock
 import com.cellbridge.audio.LockedCallAudio
 import com.cellbridge.audio.WifiLinkLock
+import com.cellbridge.hotspot.DaemonWifi
+import com.cellbridge.hotspot.WifiDaemon
 import com.cellbridge.server.PairingToken
 import dagger.Module
 import dagger.Provides
@@ -38,6 +40,9 @@ object AudioModule {
             locks,
         )
     }
+
+    @Provides @Singleton
+    fun wifiDaemon(token: PairingToken): WifiDaemon = DaemonWifi(token.value)
 
     private const val TELECOM = "com.android.server.telecom"
 }

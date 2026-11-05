@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var deviceId: com.cellbridge.discovery.DeviceId
     @Inject lateinit var pairingToken: PairingToken
     @Inject lateinit var controlServer: ControlServer
+    @Inject lateinit var autoHotspot: com.cellbridge.hotspot.AutoHotspot
 
     /** Bumped on resume and after a role dialog so the role rows re-read the platform state. */
     private var refresh by mutableIntStateOf(0)
@@ -76,7 +77,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 val link = pairingLink(pairingToken.value, deviceId.value, status?.addresses?.firstOrNull()?.address, CONTROL_PORT)
-                MainScreen(status, pairingToken.value, link, ::askToStayAwake) {
+                val autoHotspotOn by autoHotspot.enabledFlow.collectAsState()
+                MainScreen(status, pairingToken.value, link, ::askToStayAwake, autoHotspotOn, autoHotspot::switchAuto) {
                     RoleRow(AppRole.SMS, R.string.role_sms)
                 }
             }
