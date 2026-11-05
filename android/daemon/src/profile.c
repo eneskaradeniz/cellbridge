@@ -35,6 +35,8 @@ static bool apply(struct profile *p, const char *key, const char *value)
     if (!strcmp(key, "ul_mixer")) return set_str(value, p->ul_mixer);
     if (!strcmp(key, "ul_pcm_device")) return set_uint(value, &p->ul_pcm_device);
     if (!strcmp(key, "ul_period_count")) return set_uint(value, &p->ul_period_count);
+    if (!strcmp(key, "mic_off_ctls")) return set_str(value, p->mic_off_ctls);
+    if (!strcmp(key, "mic_off_value")) return set_str(value, p->mic_off_value);
     return false;
 }
 

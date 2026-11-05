@@ -32,6 +32,7 @@ struct stream {
     uint16_t rx_last_seq;
     pthread_t dl_thread, rx_thread, play_thread;
     bool dl_running, rx_running, play_running;
+    unsigned int keep_ticks; /* downlink periods since the phone microphone was last checked */
     unsigned int dl_sent;
     /* Diagnostics, written by one thread each and read after the joins. */
     double dl_sum_sq, ul_sum_sq;
@@ -131,6 +132,10 @@ static void *dl_loop(void *arg)
         }
         if (s->dump)
             fwrite(packet + STREAM_HEADER_BYTES, 1, s->period_bytes, s->dump);
+        if (++s->keep_ticks >= 50) { /* about once a second */
+            s->keep_ticks = 0;
+            audio_keep_mic_off(s->audio);
+        }
         s->dl_sum_sq += sum_squares((const short *)(packet + STREAM_HEADER_BYTES), s->period_bytes / 2);
         s->dl_samples += s->period_bytes / 2;
         double sent_at = now_ms();

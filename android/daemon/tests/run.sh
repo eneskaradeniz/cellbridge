@@ -5,3 +5,5 @@ cd "$(dirname "$0")/.."
 mkdir -p build
 cc -O1 -g -Wall -Wextra -fsanitize=address,undefined -Isrc -o build/jitter_test tests/jitter_test.c src/jitter.c -lpthread
 build/jitter_test
+cc -O1 -g -Wall -Wextra -fsanitize=address,undefined -Isrc -o build/mic_state_test tests/mic_state_test.c src/mic_state.c
+build/mic_state_test

@@ -1,5 +1,6 @@
 #include "log.h"
 #include "audio.h"
+#include "mic.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +14,7 @@ struct audio {
     struct mixer_ctl *ul_ctl;
     struct pcm *dl;
     struct pcm *ul;
+    struct mic_guard *mic;
 };
 
 static struct mixer_ctl *route_on(struct mixer *m, const char *name)
@@ -72,6 +74,8 @@ struct audio *audio_open(const struct profile *p, bool capture_dl, bool inject_u
         a->ul = a->ul_ctl ? open_pcm(p, p->ul_pcm_device, p->ul_period_count, PCM_OUT | PCM_MMAP) : NULL;
         if (!a->ul)
             goto fail;
+        /* The iPhone speaks now: the phone's own microphone must not add the room to the call. */
+        a->mic = mic_mute(a->mixer, p);
     }
     return a;
 
@@ -84,6 +88,7 @@ void audio_close(struct audio *a)
 {
     if (!a)
         return;
+    mic_restore(a->mic); /* first: the microphone comes back even if closing the PCMs stalls */
     if (a->dl)
         pcm_close(a->dl);
     if (a->ul)
@@ -125,4 +130,9 @@ int audio_write_ul(struct audio *a, const void *buf)
     /* Underrun: re-arm so the next write restarts the stream. */
     pcm_prepare(a->ul);
     return -1;
+}
+
+void audio_keep_mic_off(struct audio *a)
+{
+    mic_keep(a->mic);
 }

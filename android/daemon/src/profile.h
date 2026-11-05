@@ -17,6 +17,9 @@ struct profile {
     char ul_mixer[PROFILE_STR_MAX];
     unsigned int ul_pcm_device;
     unsigned int ul_period_count;
+    /* Optional: comma-separated enum controls that carry the phone's own microphone, and the value that silences them. */
+    char mic_off_ctls[PROFILE_STR_MAX];
+    char mic_off_value[PROFILE_STR_MAX];
 };
 
 /* Returns false and prints the reason to stderr if the file is unreadable or incomplete. */

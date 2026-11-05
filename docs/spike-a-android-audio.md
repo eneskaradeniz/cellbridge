@@ -46,3 +46,11 @@ Reset both controls to 0 after use.
 - VoLTE / VoWiFi calls may use other voice front ends (`VoLTE`, `VoWLAN` in `PRI_RX_Voice Mixer`); only CS voice tested.
 - Mute own mic (`setMicrophoneMute` / `Voice Tx Mute`) while injecting, to avoid mixing room sound into the call.
 - SELinux: tests ran as root via adb; the daemon must run from a Magisk/init context that may open `/dev/snd`.
+
+## Findings 2026-11-05: phone microphone, earpiece, Telecom mute (VoLTE call, platina)
+- **Telecom's `setMuted` (Voice Tx Mute) mutes the injected uplink too**: with the phone muted nothing of the iPhone's voice reaches the far end. Not usable while relaying.
+- **`Voice Tx Device Mute` / `Voice Rx Device Mute` have no effect** on a VoLTE call (tried with the CS, VOICE2, VoLTE and VoWLAN session ids, `[1, 0, vsid]`). `tinymix` cannot write them at all (range `0..-1` is rejected); `mixer_ctl_set_array` (`android/daemon/tools/mixer_set.c`) can, but their value reads back as `-1`.
+- **What works for the microphone:** the capture decimators. During a call `DEC1 MUX=ADC1`, `DEC2 MUX=ADC2` (the others `ZERO`, and all `ZERO` when idle; the audio HAL rewrites them on every call and route change). Setting them to `ZERO` silences the phone's own microphone while the injected iPhone voice still reaches the far end. The daemon does this on `audio_open` (profile `mic_off_ctls`), re-asserts it about once a second, and restores on close.
+- **Crash safety of that:** the previous values are written (and synced) to `/data/local/tmp/cellbridge_mic.state` BEFORE any control is changed; the daemon undoes a leftover state file at start (`mic: undid a leftover mute`). Even without that, the HAL sets the controls again at the next call.
+- **Earpiece:** the relay taps the call before the volume stage (`VOC_REC_DL`), so the call volume can be turned down without the iPhone noticing. The lowest level is `1` (range `[1..15]`, `0` is ignored): a faint sound stays. The app saves the level, lowers it while the relay runs and restores it on every way out (`VoiceVolumeLock`), including the next start of the app after a crash.
+- **Daemon dying mid-call:** init restarts it; `AudioDaemonClient` notices the dropped socket and starts the relay again for the same peer for up to 10 s, then gives up and lets go of the volume and the Wi-Fi lock.

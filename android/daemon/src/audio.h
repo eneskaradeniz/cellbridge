@@ -14,6 +14,9 @@ void audio_close(struct audio *a);
 int audio_read_dl(struct audio *a, void *buf);
 int audio_write_ul(struct audio *a, const void *buf);
 
+/* Re-silences the phone's microphone if the audio HAL switched it back on (call from the streaming loop, about once a second). */
+void audio_keep_mic_off(struct audio *a);
+
 /* Bytes in one period (profile.period_frames * channels * 2). */
 unsigned int audio_period_bytes(const struct audio *a);
 

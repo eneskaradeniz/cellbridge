@@ -1,5 +1,6 @@
 #include "log.h"
 #include "server.h"
+#include "mic.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -255,6 +256,7 @@ static void serve_client(int fd, const struct profile *p, const char *token, uns
 int server_run(const struct profile *p, const char *token, unsigned short port, unsigned short udp_port)
 {
     signal(SIGPIPE, SIG_IGN);
+    mic_recover(p); /* a crash or kill -9 mid-call may have left the phone microphone silenced */
     int listener = socket(AF_INET, SOCK_STREAM, 0);
     if (listener < 0) {
         perror("socket");
