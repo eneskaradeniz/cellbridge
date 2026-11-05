@@ -27,3 +27,4 @@ AuthKey_*
 events.log
 graphify-out/
 .claude/
+build-sim/
