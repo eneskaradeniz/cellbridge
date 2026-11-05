@@ -19,8 +19,6 @@ final class ControlClient: ObservableObject {
     private(set) var connectedHost: String?
     /// Called with the address that answered the hello, so the app can remember it.
     var onReached: ((String) -> Void)?
-    /// Called after every ping the host answered.
-    var onAlive: (() -> Void)?
 
     private let session: URLSession
     private var task: URLSessionWebSocketTask?
@@ -151,7 +149,6 @@ final class ControlClient: ObservableObject {
                 task.cancel(with: .goingAway, reason: nil)
                 return
             }
-            onAlive?()
         }
     }
 }

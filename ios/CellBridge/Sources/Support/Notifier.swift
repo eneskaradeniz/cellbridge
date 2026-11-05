@@ -30,7 +30,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private let linkDownId = "link-down"
 
-    /// The link to the phone has been down for a while. One notification id, so repeats replace each other.
+    /// The phone refuses the pairing code. One notification id, so repeats replace each other.
     func linkDown(title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title
@@ -38,18 +38,6 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.sound = .default
         content.userInfo = ["kind": "link"]
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: linkDownId, content: content, trigger: nil))
-    }
-
-    /// Dead-man's switch: a "link is down" notice that fires by itself unless it is pushed back (on every ping that is
-    /// answered). It still goes off when iOS has killed the app, which can no longer report anything.
-    func scheduleLinkDown(after seconds: TimeInterval, title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        content.userInfo = ["kind": "link"]
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: linkDownId, content: content, trigger: trigger))
     }
 
     /// Back online, or the user disconnected on purpose: no notice pending or left on the lock screen.

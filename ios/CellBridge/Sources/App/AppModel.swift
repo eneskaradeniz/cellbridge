@@ -140,7 +140,6 @@ final class AppModel: ObservableObject {
                 host = ""
             }
         }
-        client.onAlive = { [weak self] in self?.armLinkDownNotice() }
         // A new gateway means the host is somewhere else now (hotspot toggled, Wi-Fi changed): do not wait for a timeout.
         bonjour.$address.removeDuplicates().sink { [weak self] address in
             guard let self else { return }
@@ -196,40 +195,25 @@ final class AppModel: ObservableObject {
         client.restart()
     }
 
-    // MARK: link-down notice
+    // MARK: pairing notice
 
     private var linkDownTimer: Task<Void, Never>?
-    private var linkDownTitle: String { String(localized: "No connection to the phone") }
-    private var linkDownBody: String { String(localized: "Texts will wait, and a call can ring but carry no sound. Check that this iPhone is on the phone's hotspot.") }
 
-    /// Down for 20 s: tell the user, at most once every 10 minutes. Back up, or switched off by the user: take the notice away.
+    /// Calls ring through a push and texts catch up when the link returns, so a link that is merely down is not worth a notification
+    /// (iOS suspends the app all the time; the banner in the app says it). The one thing that does need the user: the phone refuses
+    /// the pairing code. Tell them once, at most every 10 minutes; any other state takes the notice away.
     private func linkStateChanged(_ state: ControlClient.State) {
         linkDownTimer?.cancel()
-        switch state {
-        case .connected:
-            notifier.clearLinkDown()
-            armLinkDownNotice()
-        case .idle:
-            notifier.clearLinkDown()
-        case .connecting, .rejected:
-            guard wantsConnection else { return }
-            let rejected = state != .connecting
-            linkDownTimer = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(20))
-                guard let self, !Task.isCancelled else { return }
-                let last = UserDefaults.standard.object(forKey: "linkDownNoticeAt") as? Date ?? .distantPast
-                guard Date().timeIntervalSince(last) > 600 else { return notifier.clearLinkDown() } // the pending dead-man notice would bypass the cooldown
-                UserDefaults.standard.set(Date(), forKey: "linkDownNoticeAt")
-                notifier.linkDown(title: linkDownTitle, body: rejected
-                    ? String(localized: "The phone did not accept the pairing code. Scan its QR code again.") : linkDownBody)
-            }
+        guard case .rejected = state, wantsConnection else { return notifier.clearLinkDown() }
+        linkDownTimer = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            guard let self, !Task.isCancelled else { return }
+            let last = UserDefaults.standard.object(forKey: "linkDownNoticeAt") as? Date ?? .distantPast
+            guard Date().timeIntervalSince(last) > 600 else { return }
+            UserDefaults.standard.set(Date(), forKey: "linkDownNoticeAt")
+            notifier.linkDown(title: String(localized: "No connection to the phone"),
+                              body: String(localized: "The phone did not accept the pairing code. Scan its QR code again."))
         }
-    }
-
-    /// Pushes the dead-man notice 90 s into the future; called while the link is up.
-    private func armLinkDownNotice() {
-        guard wantsConnection else { return }
-        notifier.scheduleLinkDown(after: 90, title: linkDownTitle, body: linkDownBody)
     }
 
     /// The addresses to try, best first: the phone announcing itself, the Wi-Fi gateway (its hotspot), a typed address
