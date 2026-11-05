@@ -20,8 +20,7 @@ and the radio. No internet and no cloud: everything stays on the local network (
 |---|---|
 | Incoming calls: rings on the iPhone's lock screen (CallKit), answer / decline / hang up, two-way audio; the phone's own ringer goes quiet (Do Not Disturb access) | working |
 | Outgoing calls from the iPhone (keypad, contacts, recents, in-call screen), keypad tones (DTMF) during a call | working |
-| Moving a running call from the iPhone to the phone | working |
-| Moving a call started on the Android phone to the iPhone | host side done; no trigger yet (the phone has no call screen of its own, the iPhone's take-over button is planned) |
+| Moving a running call from the iPhone to the phone, and back: the iPhone shows the calls running on the phone (also ones started in its stock Phone app) with a **Take Over** button | implemented and unit-tested; not yet tried on the devices |
 | SMS: receive (lossless while the iPhone is offline), send (safe to repeat after a dropped connection), long texts, delivery reports ("Delivered"), notifications that open the conversation, security codes offered by the keyboard | working |
 | History: calls and texts the phone saw while the iPhone was away (missed calls, older conversations) are fetched after reconnecting; pull to refresh | working |
 | Pairing: the iPhone finds the phone by itself (Bonjour), pairs once by scanning a QR code (the iPhone's own Camera app should work too, not tried yet); the code is hidden behind Face ID. A first-run sheet and Settings handle the permissions and explain refused ones | working |

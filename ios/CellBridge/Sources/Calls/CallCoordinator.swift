@@ -69,6 +69,11 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         if (reason == .override && onSpeaker != speaker) || (speaker && !onSpeaker) { speaker = onSpeaker }
     }
 
+    /// The iPhone already shows this host call (ringing, dialed from here, or being taken over right now).
+    func knows(callId: String) -> Bool {
+        book.uuid(forCallId: callId) != nil || adopting.values.contains { $0.callId == callId }
+    }
+
     /// Starts an outgoing call through the system, so CallKit and the audio session are set up as for any other call.
     func dial(_ number: String) {
         dialError = nil

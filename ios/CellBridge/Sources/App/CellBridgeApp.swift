@@ -19,8 +19,13 @@ struct CellBridgeApp: App {
                 Tab("Settings", systemImage: "gearshape", value: AppTab.settings) { SettingsView() }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
-            .tabViewBottomAccessory(isEnabled: model.tab != .settings && !isConnected && !model.threadOpen) {
-                ConnectionBanner(status: status) { model.tab = .settings }
+            .tabViewBottomAccessory(isEnabled: showsAccessory) {
+                if let call = model.callsOnPhone.first {
+                    PhoneCallBar(name: model.displayName(for: call.number ?? "", fallback: String(localized: "Unknown caller")),
+                                 since: call.connectedAt) { model.takeOver(call) }
+                } else {
+                    ConnectionBanner(status: status) { model.tab = .settings }
+                }
             }
             .animation(.smooth, value: status)
             .sensoryFeedback(.success, trigger: isConnected) { _, connected in connected }
@@ -75,6 +80,12 @@ struct CellBridgeApp: App {
     }
 
     private var status: LinkStatus { LinkStatus(model.client.state, unreachable: model.unreachable, paired: model.isPaired) }
+
+    /// The link banner while the phone is out of reach, or the phone's running call with a way to take it over.
+    private var showsAccessory: Bool {
+        guard !model.threadOpen else { return false }
+        return !model.callsOnPhone.isEmpty || (model.tab != .settings && !isConnected)
+    }
 
     private var isConnected: Bool {
         if case .connected = model.client.state { return true }

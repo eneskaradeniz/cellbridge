@@ -585,6 +585,67 @@ class ControlServerTest {
         }
     }
 
+    private suspend fun DefaultClientWebSocketSession.hearCallState(): JsonObject {
+        var message = hear()
+        while (message.str("type") != "call_state") message = hear()
+        return message
+    }
+
+    @Test
+    fun `a client that asks is told which calls the phone has`() = withServer { connect ->
+        feed.live = listOf(activeCall.copy(connectedAtMs = 1_700_000_000_000))
+        connect {
+            login()
+            say("""{"type":"call_state_request"}""")
+            val call = hearCallState()["calls"]!!.let { kotlinx.serialization.json.Json.parseToJsonElement(it.toString()) }
+                .let { (it as kotlinx.serialization.json.JsonArray).single().jsonObject }
+            assertEquals("c1", call.str("callId"))
+            assertEquals("in", call.str("direction"))
+            assertEquals("active", call.str("status"))
+            assertEquals("1700000000000", call.str("connectedAt"))
+            assertEquals("false", call.str("onClient"))
+        }
+    }
+
+    @Test
+    fun `a call state follows the calls once asked for`() = withServer { connect ->
+        feed.live = listOf(activeCall)
+        connect {
+            login()
+            say("""{"type":"call_state_request"}""")
+            hearCallState()
+            feed.live = emptyList()
+            feed.flow.emit(CallEvent.Ended(activeCall, null))
+            val calls = hearCallState()["calls"] as kotlinx.serialization.json.JsonArray
+            assertEquals(0, calls.size)
+        }
+    }
+
+    @Test
+    fun `a transfer request for an active call makes the host offer it`() = withServer { connect ->
+        feed.live = listOf(activeCall)
+        connect {
+            login()
+            say("""{"type":"transfer_request","callId":"c1"}""")
+            val offer = hear()
+            assertEquals("transfer_offer", offer.str("type"))
+            assertEquals("c1", offer.str("callId"))
+        }
+    }
+
+    @Test
+    fun `a transfer request for a ringing or unknown call is an error`() = withServer { connect ->
+        feed.live = listOf(incomingRinging)
+        connect {
+            login()
+            assertEquals("ring", hear().str("type")) // the ringing call is replayed after login
+            say("""{"type":"transfer_request","callId":"c1"}""")
+            assertEquals("unknown_call", hear().str("code"))
+            say("""{"type":"transfer_request","callId":"nope"}""")
+            assertEquals("unknown_call", hear().str("code"))
+        }
+    }
+
     @Test
     fun `an offer from the phone reaches the client with the number and when the call connected`() = withServer { connect ->
         feed.live = listOf(activeCall.copy(connectedAtMs = 1_700_000_000_000))

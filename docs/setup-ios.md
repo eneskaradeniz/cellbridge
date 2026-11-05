@@ -55,8 +55,9 @@ where Bonjour does not work. **Forget this phone** starts over.
 - **Keypad / Recents / Contacts**: dial, call back, see missed calls (also those that came while the iPhone was away; pull a list to refresh).
   During a call: mute, keypad tones, speaker / audio route, and **To Android** to move the call to the phone.
 - **Messages**: conversations, sending, delivery status, notifications that open the conversation. Pull to refresh; the line under the title shows when the phone last synced.
-- A call running on the iPhone can be moved to the phone (**To Android**). The other way (a call started on the Android phone, moved to the iPhone) has
-  no trigger yet: the phone has no call screen of its own and the iPhone's take-over button is not built.
+- A call running on the iPhone can be moved to the phone (**To Android**). While a call runs on the phone itself (moved there, or answered or
+  dialed in its stock Phone app) a bar above the tab bar shows who and for how long, with **Take Over** to bring it back to the iPhone. (Implemented and
+  unit-tested; not yet tried on the devices.)
 - **Call with CellBridge** in Shortcuts / Spotlight / Siri, or `cellbridge://call?number=...`.
 - Calls also show on the lock screen like any other call. With the app closed or swiped away a call still rings, through a VoIP push from the
   Android phone (needs the APNs key on the phone and internet on both phones, see [push.md](push.md)). Pull to refresh in Recents or Messages

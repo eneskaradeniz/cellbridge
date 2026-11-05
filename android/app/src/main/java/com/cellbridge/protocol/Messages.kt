@@ -39,6 +39,12 @@ sealed interface ClientMessage {
     @Serializable @SerialName("transfer_accept")
     data class TransferAccept(val callId: String, val udpPort: Int? = null) : ClientMessage
 
+    @Serializable @SerialName("transfer_request")
+    data class TransferRequest(val callId: String) : ClientMessage
+
+    @Serializable @SerialName("call_state_request")
+    data object CallStateRequest : ClientMessage
+
     @Serializable @SerialName("dial")
     data class Dial(val clientId: String, val number: String, val udpPort: Int? = null) : ClientMessage
 
@@ -93,6 +99,9 @@ sealed interface ServerMessage {
     @Serializable @SerialName("transfer_result")
     data class TransferResult(val callId: String, val ok: Boolean) : ServerMessage
 
+    @Serializable @SerialName("call_state")
+    data class CallState(val calls: List<CallStateItem>) : ServerMessage
+
     @Serializable @SerialName("transfer_offer")
     data class TransferOffer(val callId: String, val number: String? = null, val connectedAt: Long? = null) : ServerMessage
 
@@ -111,6 +120,16 @@ sealed interface ServerMessage {
     @Serializable @SerialName("error")
     data class Error(val code: String, val message: String? = null) : ServerMessage
 }
+
+@Serializable
+data class CallStateItem(
+    val callId: String,
+    val number: String? = null,
+    val direction: String,
+    val status: String,
+    val connectedAt: Long? = null,
+    val onClient: Boolean,
+)
 
 @Serializable
 data class CallLogItem(val id: String, val number: String, val name: String? = null, val kind: String, val ts: Long, val duration: Int)

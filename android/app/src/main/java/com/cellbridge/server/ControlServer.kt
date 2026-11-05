@@ -22,6 +22,7 @@ import com.cellbridge.sms.SmsGateway
 import com.cellbridge.telecom.CallDialer
 import com.cellbridge.telecom.DialOutcome
 import com.cellbridge.protocol.CallLogItem
+import com.cellbridge.protocol.CallStateItem
 import com.cellbridge.protocol.ClientMessage
 import com.cellbridge.protocol.SmsHistoryItem
 import com.cellbridge.protocol.PROTOCOL_VERSION
@@ -58,6 +59,9 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -237,6 +241,13 @@ private class Session(
                     send(ServerMessage.TransferOffer(callId, call?.number, call?.connectedAtMs?.takeIf { it > 0 }))
                 }
             }
+            // Calls on the phone itself (its stock Phone app, or handed to it): only for a client that asked (call_state_request).
+            val callStateForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
+                merge(feed.events.map { }, audio.bridged.drop(1).map { }).collect {
+                    acked.await()
+                    if (watchingCalls.get()) send(callState())
+                }
+            }
             val takeBackForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
                 transfers.takeBacks.collect { callId ->
                     acked.await()
@@ -318,6 +329,7 @@ private class Session(
                 presence.left()
                 forwarder.cancel()
                 offerForwarder.cancel()
+                callStateForwarder.cancel()
                 takeBackForwarder.cancel()
                 statusForwarder.cancel()
                 toneForwarder.cancel()
@@ -327,6 +339,21 @@ private class Session(
             }
         }
     }
+
+    private val watchingCalls = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    private fun callState() = ServerMessage.CallState(
+        feed.liveCalls().map { call ->
+            CallStateItem(
+                callId = call.id,
+                number = call.number,
+                direction = if (call.direction == CallDirection.INCOMING) "in" else "out",
+                status = call.status.name.lowercase(),
+                connectedAt = call.connectedAtMs.takeIf { it > 0 },
+                onClient = call.id in audio.bridged.value,
+            )
+        },
+    )
 
     private suspend fun handle(message: ClientMessage?, scope: CoroutineScope) {
         val (callId, accepted) = when (message) {
@@ -341,6 +368,18 @@ private class Session(
             is ClientMessage.Hangup -> message.callId to commands.hangup(message.callId)
             is ClientMessage.TransferToHost -> {
                 send(ServerMessage.TransferResult(message.callId, audio.release(message.callId)))
+                return
+            }
+            is ClientMessage.CallStateRequest -> {
+                watchingCalls.set(true)
+                send(callState())
+                return
+            }
+            is ClientMessage.TransferRequest -> {
+                val call = feed.liveCalls().firstOrNull { it.id == message.callId }
+                val takeable = call != null && (call.status == CallStatus.ACTIVE || call.status == CallStatus.HOLDING)
+                if (!takeable) return send(ServerMessage.Error("unknown_call", message.callId))
+                if (message.callId !in audio.bridged.value) transfers.toIphone(message.callId) // already there: nothing to hand over
                 return
             }
             is ClientMessage.TransferAccept -> {

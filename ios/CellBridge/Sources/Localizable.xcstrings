@@ -1941,6 +1941,26 @@
           }
         }
       }
+    },
+    "On the phone": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonda"
+          }
+        }
+      }
+    },
+    "Take Over": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone'a al"
+          }
+        }
+      }
     }
   }
 }

@@ -31,6 +31,9 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `transfer_result` | host -> iOS | `callId`, `ok` |
 | `transfer_offer` | host -> iOS | `callId`, `number?`, `connectedAt?` (ms since epoch) |
 | `transfer_accept` | iOS -> host | `callId`, `udpPort?` |
+| `transfer_request` | iOS -> host | `callId` |
+| `call_state_request` | iOS -> host | (none) |
+| `call_state` | host -> iOS | `calls`: list of `{callId, number?, direction` (`in`/`out`)`, status` (`ringing`/`dialing`/`active`/`holding`)`, connectedAt?, onClient}` |
 | `ended` | host -> iOS | `callId`, `reason?` |
 | `dial` | iOS -> host | `clientId`, `number`, `udpPort?` |
 | `dial_result` | host -> iOS | `clientId`, `ok`, `callId?`, `error?` |
@@ -93,6 +96,15 @@ ends its own call UI **without** sending `hangup`, and does not log the call (th
 hands a running call to the client (today nothing on the phone triggers it, since the phone has no call screen of its own; the iPhone's take-over button is planned); a connected client puts the active call on its
 screen (as an answered call under `callId`, its timer counting from `connectedAt`) and replies with `transfer_accept` carrying its `udpPort`, which starts the audio relay
 for that call. A client that cannot take the call simply does not reply. `transfer` is advertised with `audio`.
+
+Seeing and taking the phone's calls: a call can also start on the phone itself (answered or dialed in its stock Phone app), or sit there after
+`transfer_to_host`. A client that wants to show those sends `call_state_request` once per connection (like `call_log_request`, so older
+clients never get it); the host answers at once with `call_state`, the phone's live calls, and sends a fresh `call_state` whenever a call
+starts, changes or ends, or its audio moves to or from a client (`onClient` says the client's relay carries it). `connectedAt` is milliseconds
+since epoch and absent until the call connects. The client lists the calls with `onClient` false that it does not know itself, and
+`transfer_request` (`callId`) asks the host to take one over: the host answers with the `transfer_offer` above for an `active` or `holding` call
+that is not already on the client, and with `error` `unknown_call` otherwise. The rest is the `transfer_offer` / `transfer_accept` exchange.
+Asking for a call that is `ringing` or `dialing` is an error: a ringing call already rings on the client (`ring`).
 
 Outgoing calls: `dial` is answered by exactly one `dial_result` with the same `clientId`. On `ok:true` the call exists on the host
 under `callId` (dialing); `answered` follows when the far end picks up (it is also sent for incoming calls once they are

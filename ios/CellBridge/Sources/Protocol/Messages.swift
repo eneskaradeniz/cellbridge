@@ -18,6 +18,8 @@ enum ClientMessage: Equatable {
     case callLogRequest(after: String?, since: Int64?)
     case smsHistoryRequest(since: Int64?)
     case pushToken(token: String, env: String, topic: String, key: String)
+    case callStateRequest
+    case transferRequest(callId: String)
 
     func encoded() -> String {
         var object: [String: Any]
@@ -56,6 +58,10 @@ enum ClientMessage: Equatable {
             if let since { object["since"] = since }
         case .pushToken(let token, let env, let topic, let key):
             object = ["type": "push_token", "token": token, "env": env, "topic": topic, "key": key]
+        case .callStateRequest:
+            object = ["type": "call_state_request"]
+        case .transferRequest(let callId):
+            object = ["type": "transfer_request", "callId": callId]
         }
         let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
         return String(decoding: data, as: UTF8.self)
@@ -85,6 +91,25 @@ struct HostText: Equatable {
     let outgoing: Bool
 }
 
+/// A call the phone has right now (docs/protocol.md `call_state`): on the phone itself, or carried to a client.
+struct PhoneCall: Equatable, Identifiable {
+    enum Status: String { case ringing, dialing, active, holding }
+
+    let callId: String
+    let number: String?
+    let outgoing: Bool
+    let status: Status
+    let connectedAt: Date?
+    /// The client's audio relay carries it.
+    let onClient: Bool
+    var id: String { callId }
+
+    /// The calls this iPhone could take over: connected, still on the phone, and not one it already shows itself.
+    static func takeable(_ calls: [PhoneCall], knows: (String) -> Bool) -> [PhoneCall] {
+        calls.filter { ($0.status == .active || $0.status == .holding) && !$0.onClient && !knows($0.callId) }
+    }
+}
+
 /// What the phone plays during a call that is not in the relayed audio (docs/protocol.md `tone`).
 enum ToneCommand: Equatable {
     case generator(Int)
@@ -107,6 +132,7 @@ enum ServerMessage: Equatable {
     case smsStatus(clientId: String, delivered: Bool)
     case transferResult(callId: String, ok: Bool)
     case transferOffer(callId: String, number: String?, connectedAt: Int64?)
+    case callState(calls: [PhoneCall])
     case callLog(entries: [HostCall])
     case smsHistory(items: [HostText])
     case error(code: String, message: String?)
@@ -167,6 +193,15 @@ enum ServerMessage: Equatable {
             guard let callId = object["callId"] as? String else { return nil }
             return .transferOffer(callId: callId, number: object["number"] as? String,
                                   connectedAt: (object["connectedAt"] as? NSNumber)?.int64Value)
+        case "call_state":
+            let rows = object["calls"] as? [[String: Any]] ?? []
+            return .callState(calls: rows.compactMap { row in
+                guard let callId = row["callId"] as? String, let direction = row["direction"] as? String,
+                      let status = (row["status"] as? String).flatMap(PhoneCall.Status.init(rawValue:)) else { return nil }
+                return PhoneCall(callId: callId, number: row["number"] as? String, outgoing: direction == "out", status: status,
+                                 connectedAt: (row["connectedAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) },
+                                 onClient: row["onClient"] as? Bool ?? false)
+            })
         case "call_log":
             let rows = object["entries"] as? [[String: Any]] ?? []
             return .callLog(entries: rows.compactMap { row in

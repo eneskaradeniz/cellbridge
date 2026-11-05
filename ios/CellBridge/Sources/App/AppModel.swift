@@ -35,6 +35,8 @@ final class AppModel: ObservableObject {
     @Published var showSetup = false
     /// Why the last pull to refresh had nothing to refresh from; cleared once the phone is reached.
     @Published private(set) var refreshProblem: String?
+    /// The calls the phone reports (docs/protocol.md `call_state`); empty while not connected.
+    @Published private(set) var phoneCalls: [PhoneCall] = []
 
     let client = ControlClient()
     private(set) var messages: MessageCoordinator!
@@ -120,7 +122,7 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             unreachableTimer?.cancel()
             unreachable = false
-            if case .connected = state { refreshProblem = nil }
+            if case .connected = state { refreshProblem = nil } else { phoneCalls = [] }
             guard state == .connecting else { return }
             unreachableTimer = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(12))
@@ -502,12 +504,15 @@ final class AppModel: ObservableObject {
         case .helloAck(_, let capabilities):
             markSynced()
             sendPushToken(offered: capabilities)
+            if capabilities.contains("transfer") { client.send(.callStateRequest) }
             messages.resendPending()
             if capabilities.contains("calllog") { requestCallLog() }
             if capabilities.contains("smshistory"), !UserDefaults.standard.bool(forKey: "smsHistoryDone") {
                 let since = Int64((Date().timeIntervalSince1970 - Self.historyDays * 86_400) * 1000)
                 client.send(.smsHistoryRequest(since: since))
             }
+        case .callState(let calls):
+            phoneCalls = calls
         case .callLog(let entries):
             let added = (try? callLog.merge(host: entries)) ?? 0
             if let newest = entries.compactMap({ Int($0.id) }).max() { callLogCursor = max(callLogCursor ?? 0, newest) } else if callLogCursor == nil { callLogCursor = 0 }
@@ -522,6 +527,15 @@ final class AppModel: ObservableObject {
         default:
             break
         }
+    }
+
+    /// Calls that are running on the phone (answered or dialed in its Phone app, or handed to it) and that this iPhone could take over.
+    var callsOnPhone: [PhoneCall] { PhoneCall.takeable(phoneCalls, knows: calls.knows(callId:)) }
+
+    /// "Take over": the phone offers the call back (`transfer_offer`), which the call coordinator answers like any hand-over.
+    func takeOver(_ call: PhoneCall) {
+        log("asking the phone for its call")
+        client.send(.transferRequest(callId: call.callId))
     }
 
     /// Tells the phone how to wake this app for a call, when it holds an APNs key (`push`) and Apple has given us a token.
@@ -631,6 +645,7 @@ final class AppModel: ObservableObject {
         case .smsStatus(let clientId, let delivered): return "sms status \(clientId.prefix(8)) \(delivered ? "delivered" : "not delivered")"
         case .transferResult(let callId, let ok): return "transfer to the phone \(callId.prefix(8)) \(ok ? "ok" : "refused")"
         case .transferOffer(let callId, _, _): return "transfer offer \(callId.prefix(8))"
+        case .callState(let calls): return "phone calls \(calls.count)"
         case .callLog(let entries): return "call log \(entries.count)"
         case .smsHistory(let items): return "text history \(items.count)"
         case .error(let code, _): return "error \(code)"
