@@ -14,3 +14,16 @@ Local.xcconfig
 
 # Apple push keys
 *.p8
+
+# Secrets and device-specific files: never commit these
+*.p12
+*.mobileprovision
+*.pem
+*.jks
+*.keystore
+AuthKey_*
+.env
+.env.*
+events.log
+graphify-out/
+.claude/
