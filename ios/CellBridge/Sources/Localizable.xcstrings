@@ -1662,12 +1662,12 @@
         }
       }
     },
-    "Calls and texts are not reaching this iPhone. Check that it is on the phone's hotspot.": {
+    "Texts will wait, and a call can ring but carry no sound. Check that this iPhone is on the phone's hotspot.": {
       "localizations": {
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aramalar ve mesajlar bu iPhone'a ulaşmıyor. Telefonun hotspot'una bağlı olduğundan emin ol."
+            "value": "Mesajlar bekler, arama çalar ama ses gelmez. Bu iPhone'un telefonun hotspot'una bağlı olduğundan emin ol."
           }
         }
       }

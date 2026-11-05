@@ -200,7 +200,7 @@ final class AppModel: ObservableObject {
 
     private var linkDownTimer: Task<Void, Never>?
     private var linkDownTitle: String { String(localized: "No connection to the phone") }
-    private var linkDownBody: String { String(localized: "Calls and texts are not reaching this iPhone. Check that it is on the phone's hotspot.") }
+    private var linkDownBody: String { String(localized: "Texts will wait, and a call can ring but carry no sound. Check that this iPhone is on the phone's hotspot.") }
 
     /// Down for 20 s: tell the user, at most once every 10 minutes. Back up, or switched off by the user: take the notice away.
     private func linkStateChanged(_ state: ControlClient.State) {
