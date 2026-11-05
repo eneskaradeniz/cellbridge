@@ -25,6 +25,11 @@
     <uses-permission android:name="android.permission.RECEIVE_MMS" />
     <uses-permission android:name="android.permission.RECEIVE_WAP_PUSH" />
 
+    <!-- The names of Telecom's call-tone sound files (resource ids in its log) are read from its resources. -->
+    <queries>
+        <package android:name="com.android.server.telecom" />
+    </queries>
+
     <application
         android:name=".CellBridgeApplication"
         android:allowBackup="false"

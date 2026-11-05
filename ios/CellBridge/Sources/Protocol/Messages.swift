@@ -82,9 +82,17 @@ struct HostText: Equatable {
     let outgoing: Bool
 }
 
+/// What the phone plays during a call that is not in the relayed audio (docs/protocol.md `tone`).
+enum ToneCommand: Equatable {
+    case generator(Int)
+    case media(String)
+    case stop
+}
+
 enum ServerMessage: Equatable {
     case helloAck(version: Int, capabilities: [String])
     case callList(callIds: [String])
+    case tone(ToneCommand)
     case capabilities([String])
     case ring(callId: String, number: String?, name: String?)
     case ended(callId: String, reason: EndReason?)
@@ -112,6 +120,15 @@ enum ServerMessage: Equatable {
         case "call_list":
             guard let callIds = object["callIds"] as? [String] else { return nil }
             return .callList(callIds: callIds)
+        case "tone":
+            switch object["action"] as? String {
+            case "stop": return .tone(.stop)
+            case "start":
+                if object["kind"] as? String == "generator", let id = (object["id"] as? NSNumber)?.intValue { return .tone(.generator(id)) }
+                if object["kind"] as? String == "media", let name = object["name"] as? String { return .tone(.media(name)) }
+                return nil
+            default: return nil
+            }
         case "capabilities":
             guard let list = object["capabilities"] as? [String] else { return nil }
             return .capabilities(list)

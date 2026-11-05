@@ -561,6 +561,7 @@ final class AppModel: ObservableObject {
     private static func describe(_ message: ServerMessage) -> String {
         switch message {
         case .helloAck(_, let capabilities): return "connected, host offers \(capabilities.joined(separator: ", "))"
+        case .tone(let command): return "tone \(command)"
         case .callList(let callIds): return "live calls on the phone: \(callIds.count)"
         case .capabilities(let capabilities): return "host now offers \(capabilities.joined(separator: ", "))"
         case .ring(let callId, _, _): return "ring \(callId.prefix(8))"

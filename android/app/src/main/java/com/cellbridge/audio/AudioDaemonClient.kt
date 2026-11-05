@@ -27,6 +27,7 @@ const val DAEMON_PORT = 8766
  * If the daemon dies mid-call (init restarts it within seconds and it puts the phone microphone back), the socket
  * drops: the relay is started again for the same peer, every [retryEveryMs] for up to [retryWindowMs]. If that does
  * not work, [onLost] is called once so that whatever was held for the audio (call volume, Wi-Fi lock) is let go.
+ * The daemon also sends the Telecom log lines about call tones on this connection; [onToneLine] gets them.
  */
 class AudioDaemonClient(
     private val token: String,
@@ -35,6 +36,7 @@ class AudioDaemonClient(
     private val retryWindowMs: Long = 10_000,
     private val retryEveryMs: Long = 1_000,
     private val onLost: () -> Unit = {},
+    private val onToneLine: (String) -> Unit = {},
 ) : CallAudio {
     private class Session(val socket: Socket) {
         val closing = AtomicBoolean(false)
@@ -99,15 +101,15 @@ class AudioDaemonClient(
         }.getOrDefault(false)
     }
 
-    /** Reads whatever the daemon sends (only the reply to STOP is expected); returns when the socket is gone. */
+    /** Reads whatever the daemon sends (the reply to STOP, tone lines); returns when the socket is gone. */
     private suspend fun watch(s: Session) {
         val input = DataInputStream(s.socket.getInputStream())
         try {
             while (true) {
-                input.readUnsignedByte()
+                val type = input.readUnsignedByte()
                 val length = input.readUnsignedByte() or (input.readUnsignedByte() shl 8)
-                input.readFully(ByteArray(length))
-                s.stopAck.complete(Unit)
+                val payload = ByteArray(length).also(input::readFully)
+                if (type == MSG_TONE_LINE) runCatching { onToneLine(String(payload, Charsets.UTF_8)) } else s.stopAck.complete(Unit)
             }
         } catch (_: IOException) {
             // closed by us (stop) or by a dead daemon
@@ -173,6 +175,7 @@ class AudioDaemonClient(
         const val MSG_AUTH = 0x00
         const val MSG_START = 0x01
         const val MSG_STOP = 0x02
+        const val MSG_TONE_LINE = 0x90
         const val MSG_OK = 0x80
         const val START_DL_UL: Byte = 0x03
     }

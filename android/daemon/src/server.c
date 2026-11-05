@@ -17,6 +17,7 @@
 
 #include "audio.h"
 #include "stream.h"
+#include "tones.h"
 
 enum {
     MSG_AUTH = 0x00,
@@ -24,6 +25,7 @@ enum {
     MSG_STOP = 0x02,
     MSG_DL_FRAME = 0x10,
     MSG_UL_FRAME = 0x11,
+    MSG_TONE_LINE = 0x90,
     MSG_OK = 0x80,
     MSG_ERR = 0x81,
 };
@@ -32,6 +34,11 @@ enum { START_DL = 1 << 0, START_UL = 1 << 1 };
 enum { HEADER_BYTES = 3, MAX_PAYLOAD = 4096 };
 
 static volatile sig_atomic_t stop_requested;
+
+/* The authenticated client, if any: tone lines go to it. The lock is held while a line is sent, so the session cannot
+ * disappear underneath the follower thread. */
+static pthread_mutex_t active_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct session *active_session;
 
 struct session {
     int fd;
@@ -91,6 +98,15 @@ static int send_frame(struct session *s, unsigned char type, const void *payload
     }
     pthread_mutex_unlock(&s->send_lock);
     return rc;
+}
+
+static void forward_tone_line(const char *line, void *ctx)
+{
+    (void)ctx;
+    pthread_mutex_lock(&active_lock);
+    if (active_session)
+        send_frame(active_session, MSG_TONE_LINE, line, (unsigned int)strlen(line));
+    pthread_mutex_unlock(&active_lock);
 }
 
 static int send_err(struct session *s, const char *reason)
@@ -220,6 +236,9 @@ static void serve_client(int fd, const struct profile *p, const char *token, uns
         return;
     }
     send_frame(&s, MSG_OK, NULL, 0);
+    pthread_mutex_lock(&active_lock);
+    active_session = &s;
+    pthread_mutex_unlock(&active_lock);
 
     while (!stop_requested && read_frame(fd, &type, payload, &len) == 0) {
         switch (type) {
@@ -250,6 +269,9 @@ static void serve_client(int fd, const struct profile *p, const char *token, uns
             send_err(&s, "unknown message");
         }
     }
+    pthread_mutex_lock(&active_lock);
+    active_session = NULL;
+    pthread_mutex_unlock(&active_lock);
     stop_audio(&s);
 }
 
@@ -272,6 +294,7 @@ int server_run(const struct profile *p, const char *token, unsigned short port, 
         return 1;
     }
     daemon_log("listening on 127.0.0.1:%u\n", port);
+    tones_start(forward_tone_line, NULL);
 
     while (!stop_requested) {
         int fd = accept(listener, NULL, NULL);

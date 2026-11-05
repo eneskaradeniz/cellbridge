@@ -20,6 +20,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `transfer`, `status`, `conference` (draft)) |
 | `call_list` | host -> iOS | `callIds` (every call that is still live) |
 | `capabilities` | host -> iOS | `capabilities` (the full list again, sent when it changes) |
+| `tone` | host -> iOS | `action` (`start`/`stop`), `kind?` (`generator`/`media`), `id?` (ToneGenerator constant), `name?` (media tone) |
 | `error` | host -> iOS | `code`, `message?` |
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
@@ -68,6 +69,12 @@ list when there is none. A `ended` sent while the socket was down is lost for go
 Capabilities: `hello_ack` lists what the host can do at that moment. The root audio daemon may start a few seconds after the app (boot, a
 restart), so while `audio` is missing the host checks again every 5 s and, when the list changed, sends `capabilities`; the client replaces
 the list it holds. Nothing is sent when the list is the same.
+
+Tones: the phone itself makes the sounds a call has besides the far end's voice (ringback, busy, call waiting, the beep at the end of a call), so they are
+not in the relayed audio. The host forwards what Telecom plays: `tone` `start` with `kind` `generator` and `id` = the Android `ToneGenerator` constant
+(`16` dial, `17` busy, `18` congestion, `19` radio ack, `21` error, `22` call waiting, `23` ringback), or with `kind` `media` and `name` = the sound file
+Telecom plays (`endcall`, `InCallQualityNotification`, `record`). `stop` ends a looping generator tone; a media tone plays to its end and is not
+stopped. A tone the client does not know is ignored. Nothing is sent when Android plays nothing (no coverage), so the client stays silent too.
 
 Ringing: the client answers every `ring` with `ring_ack` (also the repeats after a reconnect) once its own call UI is up. The host then
 silences the phone's ringtone and vibration for that call, so only the iPhone rings; without an ack (no client, a dead socket) the
@@ -171,8 +178,9 @@ Frame: `u8 type`, `u16 len` (little endian), `len` bytes payload. Audio payloads
 | `0x02` STOP | app -> daemon | - (the daemon logs stream statistics to stderr) |
 | `0x10` DL frame | daemon -> app | PCM period (only while started with DL) |
 | `0x11` UL frame | app -> daemon | PCM period (only while started with UL) |
+| `0x90` TONE line | daemon -> app | one Telecom log line about a call tone (UTF-8, at most 400 bytes); sent to the authenticated client at any time, also while no relay runs |
 | `0x80` OK | daemon -> app | ack of AUTH / START / STOP |
 | `0x81` ERR | daemon -> app | UTF-8 reason; the request had no effect |
 
-STOP, a closed socket, or SIGTERM switch every mixer route off. The app must hold a `PARTIAL_WAKE_LOCK` while started,
+The daemon follows the `Telecom` log (`logcat`) and forwards the lines of `InCallTonePlayer` and `RingbackPlayer` as `0x90` frames: the app turns them into `tone` messages (control channel). STOP, a closed socket, or SIGTERM switch every mixer route off. The app must hold a `PARTIAL_WAKE_LOCK` while started,
 otherwise the CPU suspends and the DSP feed stalls (see spike-a doc).

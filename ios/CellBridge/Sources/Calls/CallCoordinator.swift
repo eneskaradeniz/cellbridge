@@ -32,6 +32,9 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     private let onFinished: (CallRecord) -> Void
     private let nameFor: (String) -> String?
 
+    /// Plays the sounds the phone makes itself during a call: ringback, busy, the beep at the end.
+    private let tones = ToneRenderer()
+
     init(audio: AudioBridge, host: @escaping () -> String, hostOffersAudio: @escaping () -> Bool,
          nameFor: @escaping (String) -> String?, send: @escaping (ClientMessage) -> Void,
          onFinished: @escaping (CallRecord) -> Void, log: @escaping (String) -> Void) {
@@ -50,6 +53,8 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         provider = CXProvider(configuration: configuration)
         super.init()
         provider.setDelegate(self, queue: nil)
+        tones.callIsActive = { [weak self] in !(self?.book.active.isEmpty ?? true) }
+        tones.log = { [weak self] in self?.log($0) }
         NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
             let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
             Task { @MainActor in self?.routeChanged(reason: reason) }
@@ -188,6 +193,8 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         case .ring(let callId, let number, let name):
             ring(callId: callId, number: number, name: name)
             send(.ringAck(callId: callId)) // the phone in the pocket may stop ringing now
+        case .tone(let command):
+            tones.handle(command)
         case .callList(let live):
             // An `ended` sent while the socket was down never arrived: end what the host no longer has.
             for callId in book.vanished(from: live) { handle(.ended(callId: callId, reason: nil)) }
@@ -257,6 +264,7 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
 
     /// Writes the call to the history (once) and forgets it.
     private func finish(_ uuid: UUID, by ender: CallRecord.Ender) {
+        tones.stopLoop() // a ringback or busy tone does not outlive its call (the end-of-call beep is not a loop)
         logFinished(uuid, by: ender)
         let shown = book.active.first { $0.id == uuid }
         book.end(uuid: uuid)

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
@@ -27,10 +28,13 @@ class CallAudioBridge @Inject constructor(
     private val feed: CallFeed,
     private val audio: CallAudio,
 ) {
+    /** The phone's beep at the end of a call comes with the end itself: the connection to the daemon stays this long (a busy tone after a call plays for a few seconds and its end must reach the iPhone). */
+    var stopGraceMs: Long = 6_000
     private val peers = ConcurrentHashMap<String, InetSocketAddress>()
     private var job: Job? = null
     private var scope: CoroutineScope? = null
     private val _bridged = MutableStateFlow<Set<String>>(emptySet())
+    @Volatile private var generation = 0
 
     /** Calls whose audio is flowing to the client right now; the phone's own call screen shows "on the iPhone" for them. */
     val bridged: StateFlow<Set<String>> = _bridged.asStateFlow()
@@ -62,7 +66,18 @@ class CallAudioBridge @Inject constructor(
     /** Starts the relay for [id] unless it already runs (the answer must not restart what dialing began). */
     private suspend fun relay(id: String, peer: InetSocketAddress) {
         if (id in _bridged.value) return
+        generation++ // a relay that is about to be stopped after its grace must not take this one with it
         if (audio.start(peer)) _bridged.update { it + id } else Log.w(TAG, "audio daemon did not start (id=$id)")
+    }
+
+    /** Stops the relay unless another one was started in the meantime (that one must not be cut off). */
+    private suspend fun stopAfterGrace() {
+        if (stopGraceMs <= 0) return audio.stop()
+        val mine = ++generation
+        scope?.launch {
+            delay(stopGraceMs)
+            if (generation == mine) audio.stop()
+        } ?: audio.stop()
     }
 
     fun forget(callId: String) {
@@ -81,6 +96,7 @@ class CallAudioBridge @Inject constructor(
     suspend fun attach(callId: String, peer: InetSocketAddress): Boolean {
         if (feed.liveCalls().none { it.id == callId && it.status == CallStatus.ACTIVE }) return false
         peers[callId] = peer
+        generation++
         val started = audio.start(peer)
         if (started) _bridged.update { it + callId } else peers.remove(callId)
         return started
@@ -92,7 +108,7 @@ class CallAudioBridge @Inject constructor(
             is CallEvent.Answered, is CallEvent.Dialing -> peers[id]?.let { relay(id, it) }
             is CallEvent.Ended -> {
                 _bridged.update { it - id }
-                if (peers.remove(id) != null) audio.stop()
+                if (peers.remove(id) != null) stopAfterGrace()
             }
             is CallEvent.Ringing -> Unit
         }

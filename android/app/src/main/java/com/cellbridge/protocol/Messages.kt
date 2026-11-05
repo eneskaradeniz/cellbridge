@@ -69,6 +69,9 @@ sealed interface ServerMessage {
     @Serializable @SerialName("capabilities")
     data class Capabilities(val capabilities: List<String>) : ServerMessage
 
+    @Serializable @SerialName("tone")
+    data class Tone(val action: String, val kind: String? = null, val id: Int? = null, val name: String? = null) : ServerMessage
+
     @Serializable @SerialName("ring")
     data class Ring(val callId: String, val number: String? = null, val name: String? = null) : ServerMessage
 

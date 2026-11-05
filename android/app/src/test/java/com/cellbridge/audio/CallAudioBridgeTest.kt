@@ -36,7 +36,7 @@ class CallAudioBridgeTest {
 
     private val feed = FakeFeed()
     private val audio = FakeAudio()
-    private val bridge = CallAudioBridge(feed, audio)
+    private val bridge = CallAudioBridge(feed, audio).also { it.stopGraceMs = 0 }
     private val job = Job()
     private val peer = InetSocketAddress(InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 105, 2)), 40000)
 
@@ -156,5 +156,25 @@ class CallAudioBridgeTest {
         feed.live = listOf(call(CallStatus.RINGING))
         bridge.expect("c1", peer)
         assertEquals(emptyList<InetSocketAddress>(), audio.started)
+    }
+
+    @Test
+    fun `the relay stays up for the grace after the call ended, and a new relay is not cut by the old stop`() = runBlocking {
+        val graced = CallAudioBridge(feed, audio).also { it.stopGraceMs = 300 }
+        graced.start(CoroutineScope(Dispatchers.Default + job))
+        graced.expect("c1", peer)
+        feed.flow.emit(CallEvent.Answered(call(CallStatus.ACTIVE)))
+        feed.flow.emit(CallEvent.Ended(call(CallStatus.DISCONNECTED), reason = null))
+        assertEquals(0, audio.stops) // the end-of-call beep is still on its way
+        kotlinx.coroutines.delay(500)
+        assertEquals(1, audio.stops)
+
+        graced.expect("c2", peer)
+        feed.flow.emit(CallEvent.Answered(call(CallStatus.ACTIVE, id = "c2")))
+        feed.flow.emit(CallEvent.Ended(call(CallStatus.DISCONNECTED, id = "c2"), reason = null))
+        graced.expect("c3", peer) // a new call starts inside the grace
+        feed.flow.emit(CallEvent.Answered(call(CallStatus.ACTIVE, id = "c3")))
+        kotlinx.coroutines.delay(500)
+        assertEquals(1, audio.stops) // c2's late stop did not take c3's relay with it
     }
 }

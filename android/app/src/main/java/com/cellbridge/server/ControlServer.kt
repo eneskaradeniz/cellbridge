@@ -2,6 +2,8 @@ package com.cellbridge.server
 
 import android.util.Log
 import com.cellbridge.audio.CallAudioBridge
+import com.cellbridge.audio.ToneEvent
+import com.cellbridge.audio.ToneEvents
 import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallStatus
@@ -87,6 +89,7 @@ class ControlServer @Inject constructor(
     private val transfers: TransferController,
     private val advertiser: ServiceAdvertiser,
     private val phoneStatus: PhoneStatusSource,
+    private val tones: ToneEvents,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
     private val _running = MutableStateFlow(false)
@@ -109,7 +112,7 @@ class ControlServer @Inject constructor(
                 CIO,
                 rootConfig = serverConfig {
                     parentCoroutineContext = onFailure
-                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, presence = presence, transfers = transfers, phoneStatus = phoneStatus) }
+                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, presence = presence, transfers = transfers, phoneStatus = phoneStatus, tones = tones) }
                 },
                 configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
             ).also { server ->
@@ -172,6 +175,7 @@ fun Application.controlModule(
     presence: ClientPresence = ClientPresence(),
     transfers: TransferController = TransferController(presence, audio),
     phoneStatus: PhoneStatusSource = NoPhoneStatus,
+    tones: ToneEvents = ToneEvents(),
 ) {
     install(WebSockets) {
         pingPeriod = 10.seconds
@@ -179,7 +183,7 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, capabilitiesRecheck, history, push, presence, transfers, phoneStatus).run() }
+        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, capabilitiesRecheck, history, push, presence, transfers, phoneStatus, tones).run() }
     }
 }
 
@@ -206,6 +210,7 @@ private class Session(
     private val presence: ClientPresence,
     private val transfers: TransferController,
     private val phoneStatus: PhoneStatusSource,
+    private val tones: ToneEvents,
 ) {
     suspend fun run() {
         val hello = ws.incoming.receive().let { (it as? Frame.Text)?.readText() }?.let(::decodeClientMessage)
@@ -236,6 +241,13 @@ private class Session(
                 transfers.takeBacks.collect { callId ->
                     acked.await()
                     send(ServerMessage.TransferResult(callId, ok = true))
+                }
+            }
+            // The sounds the phone itself makes during a call (ringback, busy, the end-of-call beep) are not in the relayed audio.
+            val toneForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
+                tones.events.collect { event ->
+                    acked.await()
+                    send(event.toMessage())
                 }
             }
             val statusForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
@@ -308,6 +320,7 @@ private class Session(
                 offerForwarder.cancel()
                 takeBackForwarder.cancel()
                 statusForwarder.cancel()
+                toneForwarder.cancel()
                 capabilitiesForwarder.cancel()
                 statusSmsForwarder.cancel()
                 smsForwarder.cancel()
@@ -420,4 +433,10 @@ private fun CallEvent.toMessage(): ServerMessage? = when (this) {
     is CallEvent.Ended -> ServerMessage.Ended(call.id, reason = reason?.name?.lowercase())
     is CallEvent.Answered -> ServerMessage.Answered(call.id)
     is CallEvent.Dialing -> null
+}
+
+private fun ToneEvent.toMessage(): ServerMessage.Tone = when (this) {
+    is ToneEvent.Generator -> ServerMessage.Tone("start", kind = "generator", id = id)
+    is ToneEvent.Media -> ServerMessage.Tone("start", kind = "media", name = name)
+    ToneEvent.Stop -> ServerMessage.Tone("stop")
 }

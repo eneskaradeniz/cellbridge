@@ -104,13 +104,14 @@ class ControlServerTest {
 
     private val push = FakePush()
     private val presence = ClientPresence()
+    private val tones = com.cellbridge.audio.ToneEvents()
     private val history = FakeHistory()
     private val dialer = FakeDialer()
     private val feed = FakeFeed()
     private val commands = FakeCommands()
     private val audio = FakeAudio()
     private val sms = FakeSmsGateway()
-    private val bridge = CallAudioBridge(feed, audio).also { it.start(CoroutineScope(Dispatchers.Unconfined + Job())) }
+    private val bridge = CallAudioBridge(feed, audio).also { it.stopGraceMs = 0; it.start(CoroutineScope(Dispatchers.Unconfined + Job())) }
     private val transfers = TransferController(presence, bridge)
     private val incomingRinging = CallSnapshot("c1", "+90555", CallDirection.INCOMING, CallStatus.RINGING)
 
@@ -131,6 +132,7 @@ class ControlServerTest {
                     presence = presence,
                     transfers = transfers,
                     phoneStatus = status,
+                    tones = tones,
                 )
             }
             val client = createClient { install(WebSockets) }
@@ -191,6 +193,19 @@ class ControlServerTest {
             assertEquals("""{"type":"capabilities","capabilities":["calls","audio"]}""", update.toString())
         }
         audio.available = true
+    }
+
+    @Test
+    fun `tone events are forwarded as tone messages`() = withServer { connect ->
+        connect {
+            login()
+            tones.emit(com.cellbridge.audio.ToneEvent.Generator(23))
+            assertEquals("""{"type":"tone","action":"start","kind":"generator","id":23}""", hear().toString())
+            tones.emit(com.cellbridge.audio.ToneEvent.Stop)
+            assertEquals("""{"type":"tone","action":"stop"}""", hear().toString())
+            tones.emit(com.cellbridge.audio.ToneEvent.Media("endcall"))
+            assertEquals("""{"type":"tone","action":"start","kind":"media","name":"endcall"}""", hear().toString())
+        }
     }
 
     @Test

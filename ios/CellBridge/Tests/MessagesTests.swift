@@ -2,6 +2,14 @@ import XCTest
 @testable import CellBridge
 
 final class MessagesTests: XCTestCase {
+    func testDecodesTones() {
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"tone","action":"start","kind":"generator","id":23}"#), .tone(.generator(23)))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"tone","action":"start","kind":"media","name":"endcall"}"#), .tone(.media("endcall")))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"tone","action":"stop"}"#), .tone(.stop))
+        XCTAssertNil(ServerMessage.decode(#"{"type":"tone","action":"start","kind":"generator"}"#)) // no id
+        XCTAssertNil(ServerMessage.decode(#"{"type":"tone","action":"dance"}"#))
+    }
+
     func testDecodesTheCallListAndALaterCapabilityList() {
         XCTAssertEqual(ServerMessage.decode(#"{"type":"call_list","callIds":["a","b"]}"#), .callList(callIds: ["a", "b"]))
         XCTAssertEqual(ServerMessage.decode(#"{"type":"call_list","callIds":[]}"#), .callList(callIds: []))
