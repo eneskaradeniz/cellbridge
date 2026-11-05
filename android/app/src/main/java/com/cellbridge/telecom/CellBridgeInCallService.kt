@@ -8,6 +8,7 @@ import android.telecom.DisconnectCause
 import android.telecom.CallAudioState
 import android.telecom.InCallService
 import android.telecom.TelecomManager
+import android.util.Log
 import android.telecom.VideoProfile
 import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallSnapshot
@@ -27,6 +28,7 @@ class CellBridgeInCallService : InCallService() {
     @Inject lateinit var wakeLock: CallWakeLock
     @Inject lateinit var inCallAudio: InCallAudio
 
+    private val silencer by lazy { RingerSilencer.forContext(this) }
     private val ids = HashMap<Call, String>()
     private val main = Handler(Looper.getMainLooper())
 
@@ -38,6 +40,7 @@ class CellBridgeInCallService : InCallService() {
         super.onCreate()
         // A call can start this process while the server is down (killed in the background): bring it up too.
         ControlService.start(this)
+        silencer.restore() // a crash in the middle of a ringing call may have left Do Not Disturb on
         inCallAudio.control = object : InCallAudioControl {
             override fun setMuted(muted: Boolean) { main.post { this@CellBridgeInCallService.setMuted(muted) } }
 
@@ -65,9 +68,16 @@ class CellBridgeInCallService : InCallService() {
         call.unregisterCallback(callback)
         report(call, Call.STATE_DISCONNECTED) // no-op if already reported
         ids.remove(call)?.let(registry::unregister)
+        restoreRingerIfQuiet()
+    }
+
+    /** The phone may ring again once nothing is ringing. */
+    private fun restoreRingerIfQuiet() {
+        if (calls.none { stateOf(it) == Call.STATE_RINGING }) silencer.restore()
     }
 
     override fun onDestroy() {
+        silencer.restore()
         inCallAudio.control = null
         wakeLock.setHeld(false)
         super.onDestroy()
@@ -78,8 +88,7 @@ class CellBridgeInCallService : InCallService() {
         override fun answer() { main.post { call.answer(VideoProfile.STATE_AUDIO_ONLY) } }
         override fun reject() { main.post { call.reject(false, null) } }
         override fun hangup() { main.post { call.disconnect() } }
-        // The default dialer may silence the ringer; the call keeps ringing for the iPhone, only the phone stops making noise.
-        override fun dtmf(digit: Char) {
+                override fun dtmf(digit: Char) {
             main.post {
                 call.stopDtmfTone() // a digit still sounding from the one before
                 call.playDtmfTone(digit)
@@ -87,7 +96,13 @@ class CellBridgeInCallService : InCallService() {
             }
         }
 
-        override fun silence() { main.post { getSystemService(TelecomManager::class.java)?.silenceRinger() } }
+        // silenceRinger() needs MODIFY_PHONE_STATE, which only the default dialer holds (the stock dialer has the role),
+        // so the ringer is quietened through Do Not Disturb instead; without that access the phone keeps ringing.
+        override fun silence() {
+            main.post {
+                if (!silencer.silence()) Log.w("CellBridgeInCall", "cannot silence the ringer: no Do Not Disturb access")
+            }
+        }
     }
 
     private fun report(call: Call, state: Int) {
@@ -102,6 +117,7 @@ class CellBridgeInCallService : InCallService() {
         val rejected = status == CallStatus.DISCONNECTED && call.details.disconnectCause?.code == DisconnectCause.REJECTED
         repository.onCallUpdate(CallSnapshot(id, number, direction, status, rejected, call.details.connectTimeMillis))
         wakeLock.setHeld(repository.hasLiveCalls)
+        restoreRingerIfQuiet()
     }
 
     @Suppress("DEPRECATION") // Call.Details.getState() needs API 31; minSdk is 29.
