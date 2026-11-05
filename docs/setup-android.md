@@ -20,7 +20,7 @@ The pairing code is hidden until you tap **Show**, which also shows a QR code fo
 
 CellBridge does **not** take the dialer role: the stock Phone app keeps it and keeps showing calls. CellBridge watches them with an
 `InCallService` that has no screen of its own. Four things are set once with `adb` (the first three are runtime permissions that the dialer role
-used to bring along, so on a fresh install they must be given by hand):
+used to bring along; the app asks for them itself, the commands skip the dialog):
 
 ```
 adb shell appops set com.cellbridge MANAGE_ONGOING_CALLS allow          # without it Telecom never binds the screenless InCallService
@@ -29,7 +29,7 @@ adb shell pm grant com.cellbridge android.permission.READ_PHONE_STATE    # signa
 adb shell cmd notification allow_dnd com.cellbridge                      # lets the app quieten the ringer while the iPhone rings
 ```
 
-(`READ_CALL_LOG` is asked when the app opens.) The appop survives reinstalling the app; whether it survives a reboot is not verified. On the
+(The app asks for all three, and for the call log, when it opens, so the `pm grant` lines are only needed for a headless setup.) The appop survives reinstalling the app and a reboot. On the
 reference phone `CALL_PHONE` and `READ_PHONE_STATE` were granted back when CellBridge held the dialer role; the commands above on a fresh
 install are the documented way, not yet re-tried from scratch.
 

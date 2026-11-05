@@ -47,6 +47,10 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    private companion object {
+        val PHONE_PERMISSIONS = listOf(Manifest.permission.READ_CALL_LOG, Manifest.permission.CALL_PHONE, Manifest.permission.READ_PHONE_STATE)
+    }
+
     @Inject lateinit var statusReader: HostStatusReader
     @Inject lateinit var deviceId: com.cellbridge.discovery.DeviceId
     @Inject lateinit var pairingToken: PairingToken
@@ -58,12 +62,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // The service runs either way; without the permission only its notification stays hidden.
-        val notifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-        // This app does not hold the dialer role, so nothing grants it for us: ask, so missed calls can reach the iPhone.
-        val callLog = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
-        if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) callLog.launch(Manifest.permission.READ_CALL_LOG)
+        // One request for everything: the notification (the service runs either way, without it only its notice stays hidden), the call
+        // log (missed calls reach the iPhone), placing the iPhone's calls and the signal strength for its status. The dialer role used to
+        // grant the last three; this app does not hold it.
+        val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
+        val wanted = PHONE_PERMISSIONS + if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) listOf(Manifest.permission.POST_NOTIFICATIONS) else emptyList()
+        val missing = wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isNotEmpty()) permissions.launch(missing.toTypedArray())
         ControlService.start(this)
         enableEdgeToEdge()
         setContent {
