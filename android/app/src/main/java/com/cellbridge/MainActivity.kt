@@ -41,14 +41,12 @@ import androidx.compose.ui.unit.dp
 import com.cellbridge.server.ControlServer
 import com.cellbridge.server.ControlService
 import com.cellbridge.server.PairingToken
-import com.cellbridge.telecom.AppRole
-import com.cellbridge.telecom.DefaultRoles
+import com.cellbridge.sms.SMS_PERMISSIONS
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    @Inject lateinit var roles: DefaultRoles
     @Inject lateinit var statusReader: HostStatusReader
     @Inject lateinit var deviceId: com.cellbridge.discovery.DeviceId
     @Inject lateinit var pairingToken: PairingToken
@@ -79,7 +77,7 @@ class MainActivity : ComponentActivity() {
                 val link = pairingLink(pairingToken.value, deviceId.value, status?.addresses?.firstOrNull()?.address, CONTROL_PORT)
                 val autoHotspotOn by autoHotspot.enabledFlow.collectAsState()
                 MainScreen(status, pairingToken.value, link, ::askToStayAwake, autoHotspotOn, autoHotspot::switchAuto) {
-                    RoleRow(AppRole.SMS, R.string.role_sms)
+                    SmsAccessRow()
                 }
             }
         }
@@ -99,28 +97,20 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun RoleRow(role: AppRole, label: Int) {
-        val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { refresh++ }
-        val state = refresh.let { // re-evaluated whenever [refresh] changes
-            when {
-                !roles.isAvailable(role) -> R.string.role_unavailable
-                roles.isHeld(role) -> R.string.role_granted
-                else -> R.string.role_missing
-            }
-        }
+    private fun SmsAccessRow() {
+        val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh++ }
+        val granted = refresh.let { SMS_PERMISSIONS.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED } } // re-read whenever [refresh] changes
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column {
-                Text(stringResource(label))
-                Text(stringResource(state), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.role_sms))
+                Text(stringResource(if (granted) R.string.role_granted else R.string.role_missing), style = MaterialTheme.typography.bodySmall)
             }
-            if (state == R.string.role_missing) {
-                Button(onClick = { launcher.launch(roles.requestIntent(role)) }) {
-                    Text(stringResource(R.string.role_request))
-                }
+            if (!granted) {
+                Button(onClick = { launcher.launch(SMS_PERMISSIONS) }) { Text(stringResource(R.string.role_request)) }
             }
         }
     }

@@ -7,12 +7,15 @@ import com.cellbridge.sms.PlatformSmsSender
 import com.cellbridge.sms.PrefsLedgerStore
 import com.cellbridge.sms.SmsGateway
 import com.cellbridge.sms.SmsRepository
+import com.cellbridge.sms.SMS_PERMISSIONS
 import com.cellbridge.sms.SmsRole
 import com.cellbridge.sms.SmsSender
 import com.cellbridge.sms.SmsStore
 import com.cellbridge.sms.TelephonySmsStore
-import com.cellbridge.telecom.AppRole
-import com.cellbridge.telecom.DefaultRoles
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -33,6 +36,9 @@ abstract class SmsModule {
     @Binds abstract fun ledgerStore(impl: PrefsLedgerStore): LedgerStore
 
     companion object {
-        @Provides fun role(roles: DefaultRoles): SmsRole = SmsRole { roles.isHeld(AppRole.SMS) }
+        /** The permissions are what the host needs now that the phone's stock Messages app is the default SMS app. */
+        @Provides fun role(@ApplicationContext context: Context): SmsRole = SmsRole {
+            SMS_PERMISSIONS.all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+        }
     }
 }

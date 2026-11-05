@@ -13,7 +13,7 @@ cd android
 ```
 
 The app is a single **Status** screen (is the iPhone connected, the address it can use, whether the call-audio daemon answers, whether the
-iPhone can be woken by a push, the phone's battery, the SMS role). It has no keypad, call log or call screen: calls stay in the phone's stock Phone app.
+iPhone can be woken by a push, the phone's battery, the SMS permissions). It has no keypad, call log or call screen: calls stay in the phone's stock Phone app.
 The pairing code is hidden until you tap **Show**, which also shows a QR code for the iPhone to scan.
 
 ## 2. Roles and permissions
@@ -33,10 +33,13 @@ adb shell cmd notification allow_dnd com.cellbridge                      # lets 
 reference phone `CALL_PHONE` and `READ_PHONE_STATE` were granted back when CellBridge held the dialer role; the commands above on a fresh
 install are the documented way, not yet re-tried from scratch.
 
-**Text messages** still go through CellBridge: tap **Request** next to "Default SMS app" and confirm (or
-`adb shell cmd role add-role-holder --user 0 android.app.role.SMS com.cellbridge`). The phone then has no SMS screen of its own; texts are read on
-the iPhone. Only the default SMS app may write the system SMS database. (Moving texts to the stock Messages app is planned.) To undo, hand the
-role back (`… add-role-holder … com.android.messaging`; package names differ between ROMs).
+**Text messages** stay in the phone's stock Messages app, which keeps the default SMS role (the role is **not** given to CellBridge). CellBridge
+reads the SMS database and sends as a plain app: tap **Request** next to "Text messages" on the Status screen (or
+`adb shell pm grant com.cellbridge android.permission.READ_SMS`, `…SEND_SMS`, `…RECEIVE_SMS`; sideloaded builds installed with `adb install` are not
+restricted). Received texts are stored by Messages and announced by watching the inbox. Only the default SMS app may write the database, so a text
+the iPhone sends is filed in the sent box by the root daemon (`SAVE_SENT`, section 4) and then shows in the Messages thread on the phone as well.
+Without the daemon the iPhone's texts still go out but the phone's Messages app does not show them. If CellBridge held the SMS role before
+(an older version), hand it back: `adb shell cmd role add-role-holder --user 0 android.app.role.SMS com.android.messaging` (package names differ between ROMs).
 
 **The ringer.** `TelecomManager.silenceRinger()` is reserved for the default dialer, so while a call also rings on the iPhone the app sets Do
 Not Disturb to "alarms only" and puts the previous setting back when nothing rings. Without the `allow_dnd` access both phones ring (a call is
@@ -110,7 +113,7 @@ adb shell am broadcast -n com.cellbridge/.debug.FakeCallReceiver -a com.cellbrid
 adb shell telecom set-phone-account-enabled com.cellbridge/com.cellbridge.debug.FakeCallService fake 0
 adb shell am broadcast -n com.cellbridge/.debug.FakeCallReceiver -a com.cellbridge.debug.INCOMING_CALL     # rings
 adb shell am broadcast -n com.cellbridge/.debug.FakeCallReceiver -a com.cellbridge.debug.REMOTE_HANGUP     # caller hangs up
-adb shell am broadcast -n com.cellbridge/.debug.FakeSmsReceiver -a com.cellbridge.debug.INCOMING_SMS --es from +905550000000 --es body hello
+adb root && adb shell content insert --uri content://sms/inbox --bind address:s:+905550000000 --bind body:s:hello --bind date:l:"$(date +%s)000" --bind read:i:0 --bind type:i:1
 ```
 
 For fake **outgoing** calls make the fake account the default outgoing one, and **put the SIM back afterwards**: read the current
@@ -129,7 +132,8 @@ and, when done, the same command with the original component, id and user (on th
 | Server listens but nothing answers; iPhone says "Could not connect" or times out | `restricted_networking_mode` is `1` (above), or the hotspot is off |
 | Works with the screen on, silent with the screen off | the app is not running its foreground service (start the app once; check the notification) |
 | iPhone shows `Connected (calls)` without `audio` | daemon not running or token file unreadable; check `adb shell pidof cellbridge_audiod` |
-| iPhone shows no `sms` | the app is not the default SMS app |
+| iPhone shows no `sms` | the app lacks the SMS permissions (Status screen → Request) |
+| A text sent from the iPhone is missing in the phone's Messages app | the daemon is not the current build (`SAVE_SENT`, section 4) |
 | The iPhone never sees a call | the `MANAGE_ONGOING_CALLS` appop is missing (section 2) |
 | Both phones keep ringing | no Do Not Disturb access (`allow_dnd`, section 2) |
 | The hotspot does not come on when I leave home | the daemon is not the current build (section 4), the phone is still joined to a saved network, or the **Hotspot** switch is off |

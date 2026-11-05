@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.SharedFlow
 interface SmsGateway {
     val incoming: SharedFlow<IncomingSms>
 
-    /** True while this app is the default SMS app, the only state in which texts can be read and written. */
+    /** True while this app may read and send texts (the SMS permissions). */
     fun isAvailable(): Boolean
 
     /** Received texts the client has not acknowledged yet, oldest first. */
@@ -29,11 +29,17 @@ interface SmsGateway {
 
 data class SmsStatus(val clientId: String, val delivered: Boolean)
 
-/** The system SMS database plus the acknowledgement cursor. */
-interface SmsStore {
-    /** Writes a received text to the inbox; null if the provider refused it. */
-    suspend fun saveIncoming(from: String, body: String, timestamp: Long): IncomingSms?
+/** Files a sent text in the system SMS database; only the default SMS app may, so this goes through the root daemon. */
+fun interface SentSmsWriter {
+    suspend fun write(to: String, body: String, timestamp: Long): Boolean
+}
 
+/** The system SMS database (read-only for this app) plus the acknowledgement cursor. */
+interface SmsStore {
+    /** Sets the acknowledgement cursor to the newest text already in the inbox, the first time only: older history is never replayed. */
+    suspend fun prime()
+
+    /** Files a text the client sent in the sent box, so the phone's Messages app shows it. */
     suspend fun saveSent(to: String, body: String, timestamp: Long)
 
     suspend fun unacknowledged(): List<IncomingSms>
@@ -45,6 +51,13 @@ interface SmsStore {
 interface SmsSender {
     suspend fun send(to: String, body: String, tag: String? = null): Boolean
 }
+
+/** What reading and sending texts needs; the stock Messages app holds the default SMS role. */
+val SMS_PERMISSIONS = arrayOf(
+    android.Manifest.permission.READ_SMS,
+    android.Manifest.permission.SEND_SMS,
+    android.Manifest.permission.RECEIVE_SMS,
+)
 
 fun interface SmsRole {
     fun held(): Boolean

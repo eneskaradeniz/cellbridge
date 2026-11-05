@@ -126,10 +126,10 @@ all members. At most 5 members (the carrier limit). Audio stays one stream: the 
 conference, and is silent while every call is held; `udpPort` of a second call is ignored while a relay runs. Open: whether the
 operator mixes the conference on this CS line (needs a measurement with two real calls) and what the downlink daemon does when the active call changes.
 
-SMS delivery is lossless: the host stores every incoming message in the system SMS database first, then sends `sms`. `sms_ack`
+SMS delivery is lossless: the phone's stock Messages app (the default SMS app) stores every incoming message in the system SMS database; the host watches the inbox and sends `sms` for each new row, so whatever the client misses is still in the database. `sms_ack`
 acknowledges that message **and every earlier one** (ids only ever increase and are never reused, even after a text is deleted on the host); after `hello_ack` the host re-sends everything newer than the last
 acknowledged id, so a client that was offline (or crashed before saving) catches up. Clients persist a message before acking it and
-dedupe by `id`. `sms` is advertised in `capabilities` only while the host app is the default SMS app.
+dedupe by `id`. `sms` is advertised in `capabilities` only while the host app may read and send texts (the SMS permissions).
 `sms_send` is idempotent: the host remembers the `clientId` of every text it sent (the last few hundred, across restarts) and answers a repeated
 `clientId` with the earlier result without sending again, so a client that never saw the answer (the connection dropped) simply sends it again
 after reconnecting. `sms_status` reports the operator's delivery report for a sent text (`delivered`, or `failed` when the report says it
@@ -139,7 +139,7 @@ never will be); after `hello_ack` the host repeats the `delivered` ones it remem
 MMS is not supported.
 
 History: everything that happened while the client was away can be fetched, so the iPhone shows what the phone's own logs show.
-`calllog` is advertised while the host may read the phone's call log, `smshistory` while the host app is the default SMS app.
+`calllog` is advertised while the host may read the phone's call log, `smshistory` while the host app may read the phone's texts.
 `call_log_request` is answered by exactly one `call_log`: entries with a host call id greater than `after` and a time not before `since`
 (both optional), the newest 300 at most, oldest first. `kind` is `incoming` (answered), `outgoing`, `missed` or `rejected`; `duration` is
 in seconds (0 for anything that was not connected). Ids only increase; a client remembers the highest one it has seen and asks for
@@ -195,7 +195,8 @@ Frame: `u8 type`, `u16 len` (little endian), `len` bytes payload. Audio payloads
 | `0x03` HOTSPOT | app -> daemon | `u8 on` (1 or 0): switch the phone's Wi-Fi hotspot on or off (see below). Answered with OK, or ERR once it is known to have failed; an on request takes about 6 s |
 | `0x04` WIFI | app -> daemon | - ; answered with `0x82` |
 | `0x82` WIFI info | daemon -> app | UTF-8 text, one name per line: the Wi-Fi network the phone is connected to (an empty first line if none), then every network saved on the phone |
-| `0x80` OK | daemon -> app | ack of AUTH / START / STOP / HOTSPOT |
+| `0x05` SAVE_SENT | app -> daemon | `i64 date` (ms since epoch, LE), UTF-8 `address`, one `\n`, UTF-8 `body`: files a text the iPhone sent in the system SMS database's sent box, so the stock Messages app shows it in the thread (only the default SMS app may write the database; the daemon is root). Answered with OK or ERR. The address must be a plain phone number |
+| `0x80` OK | daemon -> app | ack of AUTH / START / STOP / HOTSPOT / SAVE_SENT |
 | `0x81` ERR | daemon -> app | UTF-8 reason; the request had no effect |
 
 **Hotspot.** The app uses the daemon to bring the hotspot up when the phone leaves its home Wi-Fi and down again when it returns (an app cannot

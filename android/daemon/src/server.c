@@ -17,6 +17,7 @@
 
 #include "audio.h"
 #include "stream.h"
+#include "sms.h"
 #include "tones.h"
 #include "wifi.h"
 
@@ -26,6 +27,7 @@ enum {
     MSG_STOP = 0x02,
     MSG_HOTSPOT = 0x03,
     MSG_WIFI = 0x04,
+    MSG_SAVE_SENT = 0x05,
     MSG_DL_FRAME = 0x10,
     MSG_UL_FRAME = 0x11,
     MSG_TONE_LINE = 0x90,
@@ -266,6 +268,17 @@ static void serve_client(int fd, const struct profile *p, const char *token, uns
             if (len != 1 || payload[0] > 1)
                 send_err(&s, "bad hotspot");
             else if (wifi_hotspot(payload[0] == 1, reason, sizeof(reason)))
+                send_frame(&s, MSG_OK, NULL, 0);
+            else
+                send_err(&s, reason);
+            break;
+        }
+        case MSG_SAVE_SENT: {
+            static struct sent_sms sms;
+            char reason[64] = "";
+            if (!sms_parse_sent(payload, len, &sms))
+                send_err(&s, "bad sent text");
+            else if (sms_save_sent(&sms, reason, sizeof(reason)))
                 send_frame(&s, MSG_OK, NULL, 0);
             else
                 send_err(&s, reason);

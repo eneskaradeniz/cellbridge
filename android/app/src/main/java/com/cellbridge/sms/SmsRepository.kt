@@ -11,12 +11,13 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Receives texts from the SMS_DELIVER receiver, stores them first, then announces them. Storing before announcing
- * is what makes delivery lossless: whatever the client misses is still in the database.
+ * Announces the texts the stock Messages app stores. They are in the database before they are announced, which is what makes
+ * delivery lossless: whatever the client misses is still there.
  */
 @Singleton
 class SmsRepository @Inject constructor(
@@ -44,15 +45,27 @@ class SmsRepository @Inject constructor(
         _statuses.tryEmit(SmsStatus(clientId, delivered))
     }
 
-    /** Returns the job so a broadcast receiver can keep its process alive until the text is stored. */
-    fun onReceived(from: String, body: String, timestamp: Long): Job = scope.launch {
-        runCatching { store.saveIncoming(from, body, timestamp) }
-            .onFailure { Log.e(TAG, "could not store a received text", it) }
-            .getOrNull()
-            ?.let {
-                Log.i(TAG, "Sms id=${it.id}") // never log the number or the text
-                _incoming.emit(it)
+    /** The newest text already announced (or present when the watcher started); only newer ones are announced. */
+    @Volatile private var announced = 0L
+    private val inboxLock = kotlinx.coroutines.sync.Mutex()
+
+    /** Called once when the inbox is first watched: what is already there is replayed at login, not announced as news. */
+    suspend fun primeInbox() = inboxLock.withLock {
+        runCatching { store.prime() }.onFailure { Log.w(TAG, "sms cursor not set", it) }
+        announced = runCatching { store.unacknowledged() }.getOrDefault(emptyList()).maxOfOrNull { it.id } ?: 0L
+    }
+
+    /** The inbox changed (the stock Messages app stored a text): announces every text newer than the last one announced. */
+    fun onInboxChanged(): Job = scope.launch {
+        inboxLock.withLock {
+            runCatching { store.prime() }
+            val fresh = runCatching { store.unacknowledged() }.getOrDefault(emptyList()).filter { it.id > announced }
+            for (sms in fresh) {
+                Log.i(TAG, "Sms id=${sms.id}") // never log the number or the text
+                _incoming.emit(sms)
+                announced = sms.id
             }
+        }
     }
 
     override suspend fun unacknowledged() = store.unacknowledged()

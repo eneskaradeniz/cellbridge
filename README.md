@@ -42,7 +42,7 @@ and the radio. No internet and no cloud: everything stays on the local network (
 
 ## Quick start
 
-1. [docs/setup-android.md](docs/setup-android.md): install the app, give it the SMS role and the few `adb` grants, start the audio daemon.
+1. [docs/setup-android.md](docs/setup-android.md): install the app, give it the SMS permissions and the few `adb` grants, start the audio daemon.
 2. [docs/setup-ios.md](docs/setup-ios.md): build and install the iPhone app, scan the QR code shown on the Android phone.
 
 ## Known limitations
@@ -81,7 +81,7 @@ and the radio. No internet and no cloud: everything stays on the local network (
 
 | Path | What |
 |---|---|
-| `android/app` | Kotlin app: SMS role, screenless `InCallService` next to the stock Phone app, Ktor WebSocket server, SMS and call history, push to APNs, ringer silencing, a status and pairing screen |
+| `android/app` | Kotlin app: SMS read/send, screenless `InCallService` next to the stock Phone app, Ktor WebSocket server, SMS and call history, push to APNs, ringer silencing, a status and pairing screen |
 | `android/daemon` | C daemon (tinyalsa): call-audio capture and injection, UDP streaming, jitter buffer, device profiles, init service |
 | `ios/CellBridge` | Swift app: control client, Bonjour, QR pairing, permissions and setup, CallKit, VoIP push, audio engine, recents, keypad, contacts, messages |
 | `docs/protocol.md` | The single contract between both sides: change it first, then both implementations |

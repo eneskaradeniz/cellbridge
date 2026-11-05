@@ -13,18 +13,13 @@ import org.junit.Test
 
 class SmsRepositoryTest {
     private class FakeStore : SmsStore {
-        var nextId = 7L
-        var refuse = false
         var failSent = false
-        val savedIncoming = mutableListOf<IncomingSms>()
+        var primed = 0
         val savedSent = mutableListOf<Pair<String, String>>()
         val acknowledged = mutableListOf<Long>()
         var pending = emptyList<IncomingSms>()
 
-        override suspend fun saveIncoming(from: String, body: String, timestamp: Long): IncomingSms? {
-            if (refuse) return null
-            return IncomingSms(nextId++, from, body, timestamp).also { savedIncoming += it }
-        }
+        override suspend fun prime() { primed++ }
         override suspend fun saveSent(to: String, body: String, timestamp: Long) {
             check(!failSent) { "db full" }
             savedSent += to to body
@@ -52,20 +47,34 @@ class SmsRepositoryTest {
     private val repository = SmsRepository(store, sender, { role }, SmsLedger(ledgerStore))
 
     @Test
-    fun `a received text is stored first and then announced with its stored id`() = runBlocking {
+    fun `a text the inbox gained is announced with its stored id`() = runBlocking {
+        repository.primeInbox()
+        store.pending = listOf(IncomingSms(7, "+90555", "merhaba", 123L))
         val announced = async(start = CoroutineStart.UNDISPATCHED) { repository.incoming.first() }
-        repository.onReceived("+90555", "merhaba", 123L).join()
+        repository.onInboxChanged().join()
         assertEquals(IncomingSms(7, "+90555", "merhaba", 123L), withTimeout(5_000) { announced.await() })
-        assertEquals(listOf(IncomingSms(7, "+90555", "merhaba", 123L)), store.savedIncoming)
     }
 
     @Test
-    fun `a text the database refuses is not announced`() = runBlocking {
-        store.refuse = true
-        val announced = async(start = CoroutineStart.UNDISPATCHED) { repository.incoming.first() }
-        repository.onReceived("+90555", "merhaba", 1L).join()
-        assertTrue(!announced.isCompleted)
-        announced.cancel()
+    fun `texts already there when watching began are not announced again, a later one is`() = runBlocking {
+        store.pending = listOf(IncomingSms(5, "+90555", "eski", 1L))
+        repository.primeInbox()
+        val seen = mutableListOf<IncomingSms>()
+        val collector = async(start = CoroutineStart.UNDISPATCHED) { repository.incoming.collect { seen += it } }
+        repository.onInboxChanged().join() // a change that brought nothing new (a text was read)
+        store.pending = store.pending + IncomingSms(9, "+90555", "yeni", 2L)
+        repository.onInboxChanged().join()
+        repository.onInboxChanged().join() // the same text is not announced twice
+        kotlinx.coroutines.yield()
+        collector.cancel()
+        assertEquals(listOf(IncomingSms(9, "+90555", "yeni", 2L)), seen)
+    }
+
+    @Test
+    fun `the acknowledgement cursor is primed before the first look`() = runBlocking {
+        repository.primeInbox()
+        repository.onInboxChanged().join()
+        assertTrue(store.primed >= 2)
     }
 
     @Test
@@ -101,7 +110,7 @@ class SmsRepositoryTest {
     }
 
     @Test
-    fun `availability follows the default sms app role`() {
+    fun `availability follows the sms permissions`() {
         assertTrue(repository.isAvailable())
         role = false
         assertTrue(!repository.isAvailable())

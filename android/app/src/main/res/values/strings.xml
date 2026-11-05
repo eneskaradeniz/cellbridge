@@ -1,9 +1,8 @@
 <resources>
     <string name="app_name">CellBridge</string>
-    <string name="role_sms">Default SMS app</string>
+    <string name="role_sms">Text messages (read and send)</string>
     <string name="role_granted">Granted</string>
     <string name="role_missing">Not granted</string>
-    <string name="role_unavailable">Unavailable on this device</string>
     <string name="role_request">Request</string>
     <string name="pairing_token">Pairing token (enter it on the iPhone)</string>
     <string name="server_running">Control server running</string>
@@ -31,7 +30,7 @@
     <string name="hotspot_hint">Home Wi-Fi is any network saved on this phone: forget the others. A hotspot you switched on yourself is left alone.</string>
     <string name="card_battery">Battery</string>
     <string name="charging">charging</string>
-    <string name="card_roles">Roles</string>
+    <string name="card_roles">Permissions</string>
     <string name="card_pairing">Pairing code</string>
     <string name="show_code">Show</string>
     <string name="hide_code">Hide</string>

@@ -1,9 +1,8 @@
 <resources>
     <string name="app_name">CellBridge</string>
-    <string name="role_sms">Varsayılan SMS uygulaması</string>
+    <string name="role_sms">Kısa mesajlar (okuma ve gönderme)</string>
     <string name="role_granted">Verildi</string>
     <string name="role_missing">Verilmedi</string>
-    <string name="role_unavailable">Bu cihazda kullanılamıyor</string>
     <string name="role_request">İste</string>
     <string name="pairing_token">Eşleşme kodu (iPhone\'a girin)</string>
     <string name="server_running">Kontrol sunucusu çalışıyor</string>
@@ -31,7 +30,7 @@
     <string name="hotspot_hint">Ev Wi-Fi\'ı bu telefonda kayıtlı her ağdır: diğerlerini unut. Kendi açtığın hotspot\'a dokunulmaz.</string>
     <string name="card_battery">Pil</string>
     <string name="charging">şarj oluyor</string>
-    <string name="card_roles">Roller</string>
+    <string name="card_roles">İzinler</string>
     <string name="card_pairing">Eşleşme kodu</string>
     <string name="show_code">Göster</string>
     <string name="hide_code">Gizle</string>

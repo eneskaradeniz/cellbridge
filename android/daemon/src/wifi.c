@@ -1,4 +1,5 @@
 #include "wifi.h"
+#include "run.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -131,65 +132,12 @@ static bool read_file(const char *path, char *buf, size_t cap)
     return true;
 }
 
-static long long now_ms(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000;
-}
-
-/* Runs `cmd wifi …` (no shell: the arguments are never interpreted) and collects what it prints. False on a timeout. */
-static bool run_cmd(char *const argv[], char *out, size_t cap, int timeout_ms)
-{
-    int fds[2];
-    if (pipe(fds) != 0)
-        return false;
-    pid_t pid = fork();
-    if (pid < 0) {
-        close(fds[0]);
-        close(fds[1]);
-        return false;
-    }
-    if (pid == 0) {
-        dup2(fds[1], 1);
-        dup2(fds[1], 2);
-        close(fds[0]);
-        close(fds[1]);
-        execvp("cmd", argv);
-        _exit(127);
-    }
-    close(fds[1]);
-    size_t n = 0;
-    bool ok = true;
-    long long deadline = now_ms() + timeout_ms;
-    for (;;) {
-        long long left = deadline - now_ms();
-        struct pollfd p = { .fd = fds[0], .events = POLLIN };
-        if (left <= 0 || poll(&p, 1, (int)left) <= 0) {
-            ok = false;
-            break;
-        }
-        ssize_t r = read(fds[0], out + n, cap - 1 - n);
-        if (r <= 0)
-            break; /* the command closed its output: it is done */
-        n += (size_t)r;
-        if (n >= cap - 1)
-            break;
-    }
-    out[n] = '\0';
-    close(fds[0]);
-    if (!ok)
-        kill(pid, SIGKILL);
-    waitpid(pid, NULL, 0);
-    return ok;
-}
-
 bool wifi_hotspot(bool on, char *reason, size_t reason_cap)
 {
     char out[4096];
     if (!on) {
         char *argv[] = { "cmd", "wifi", "stop-softap", NULL };
-        bool ok = run_cmd(argv, out, sizeof(out), 10000);
+        bool ok = run_command(argv, out, sizeof(out), 10000);
         if (!ok)
             snprintf(reason, reason_cap, "stop timed out");
         return ok;
@@ -202,7 +150,7 @@ bool wifi_hotspot(bool on, char *reason, size_t reason_cap)
     }
     char *band = cfg.band == 1 ? "2" : cfg.band == 2 ? "5" : "any";
     char *argv[] = { "cmd", "wifi", "start-softap", cfg.ssid, "wpa2", cfg.pass, "-b", band, NULL };
-    bool ran = run_cmd(argv, out, sizeof(out), 20000);
+    bool ran = run_command(argv, out, sizeof(out), 20000);
     memset(cfg.pass, 0, sizeof(cfg.pass));
     if (!ran || !strstr(out, "enabled successfully")) {
         snprintf(reason, reason_cap, "hotspot did not start");
@@ -216,7 +164,7 @@ size_t wifi_info(char *out, size_t cap)
     char status[8192];
     char ssid[WIFI_SSID_MAX] = "";
     char *argv[] = { "cmd", "wifi", "status", NULL };
-    if (run_cmd(argv, status, sizeof(status), 5000))
+    if (run_command(argv, status, sizeof(status), 5000))
         wifi_parse_connected(status, ssid, sizeof(ssid));
     size_t n = (size_t)snprintf(out, cap, "%s\n", ssid);
     static char xml[65536];

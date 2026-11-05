@@ -1,6 +1,5 @@
 package com.cellbridge.sms
 
-import android.content.ContentValues
 import android.content.Context
 import android.provider.Telephony
 import com.cellbridge.domain.model.IncomingSms
@@ -11,43 +10,33 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Only the default SMS app may write the system SMS database, so this works while the role is held.
- *
- * A text's id is the strictly increasing arrival stamp we write into its `date` column, not the row id: SQLite
- * reuses row ids after deletions, which would make a new text look like an old, already acknowledged one.
- * The cursor is the stamp of the last text the client acknowledged; it starts just below the first text we store,
- * so history from before the bridge existed is never replayed to the iPhone.
+ * Reads the texts the phone's stock Messages app (the default SMS app) stores. A text's id is its `date` column, the time the
+ * stock app stored it, not the row id: SQLite reuses row ids after deletions, which would make a new text look like an old,
+ * already acknowledged one. The cursor is the id of the last text the client acknowledged; it starts at the newest text present
+ * when the bridge first runs, so history from before is never replayed to the iPhone. Two texts stored in the same millisecond
+ * share an id, and acknowledging one hides the other: accepted, a SIM delivers texts far slower than that.
  */
 @Singleton
-class TelephonySmsStore @Inject constructor(@ApplicationContext context: Context) : SmsStore {
+class TelephonySmsStore @Inject constructor(
+    @ApplicationContext context: Context,
+    private val sentWriter: SentSmsWriter,
+) : SmsStore {
     private val resolver = context.contentResolver
     private val prefs = context.getSharedPreferences("sms", Context.MODE_PRIVATE)
 
-    override suspend fun saveIncoming(from: String, body: String, timestamp: Long): IncomingSms? = withContext(Dispatchers.IO) {
-        val stamp = nextStamp()
-        val values = ContentValues().apply {
-            put(Telephony.Sms.ADDRESS, from)
-            put(Telephony.Sms.BODY, body)
-            put(Telephony.Sms.DATE, stamp)
-            put(Telephony.Sms.DATE_SENT, timestamp)
-            put(Telephony.Sms.READ, 0)
-            put(Telephony.Sms.SEEN, 0)
+    override suspend fun prime() {
+        if (prefs.contains(CURSOR)) return
+        withContext(Dispatchers.IO) {
+            val newest = runCatching {
+                resolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf(Telephony.Sms.DATE), null, null, "${Telephony.Sms.DATE} DESC LIMIT 1")
+                    ?.use { if (it.moveToFirst()) it.getLong(0) else 0L }
+            }.getOrNull() ?: return@withContext // no read permission yet: try again next time
+            synchronized(this@TelephonySmsStore) { if (!prefs.contains(CURSOR)) prefs.edit().putLong(CURSOR, newest).apply() }
         }
-        resolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values) ?: return@withContext null
-        initCursor(below = stamp)
-        IncomingSms(stamp, from, body, timestamp)
     }
 
     override suspend fun saveSent(to: String, body: String, timestamp: Long) {
-        withContext(Dispatchers.IO) {
-            val values = ContentValues().apply {
-                put(Telephony.Sms.ADDRESS, to)
-                put(Telephony.Sms.BODY, body)
-                put(Telephony.Sms.DATE, timestamp)
-                put(Telephony.Sms.READ, 1)
-            }
-            resolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
-        }
+        check(sentWriter.write(to, body, timestamp)) { "the daemon did not file the sent text" }
     }
 
     override suspend fun unacknowledged(): List<IncomingSms> = withContext(Dispatchers.IO) {
@@ -68,22 +57,8 @@ class TelephonySmsStore @Inject constructor(@ApplicationContext context: Context
         if (id > prefs.getLong(CURSOR, Long.MIN_VALUE)) prefs.edit().putLong(CURSOR, id).apply()
     }
 
-    /** Never goes backwards or repeats, even if the clock does. */
-    @Synchronized
-    private fun nextStamp(): Long {
-        val stamp = maxOf(System.currentTimeMillis(), prefs.getLong(LAST_STAMP, 0) + 1)
-        prefs.edit().putLong(LAST_STAMP, stamp).apply()
-        return stamp
-    }
-
-    @Synchronized
-    private fun initCursor(below: Long) {
-        if (!prefs.contains(CURSOR)) prefs.edit().putLong(CURSOR, below - 1).apply()
-    }
-
     private companion object {
         const val CURSOR = "acked_stamp" // not "acked_id": cursors from the row-id scheme must not be reused
-        const val LAST_STAMP = "last_stamp"
         const val REPLAY_LIMIT = 200
     }
 }
