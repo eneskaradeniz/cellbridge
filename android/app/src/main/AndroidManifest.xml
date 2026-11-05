@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- Lets the UI-less InCallService below see and control calls while the stock dialer shows the call screen. -->
+    <uses-permission android:name="android.permission.MANAGE_ONGOING_CALLS" />
     <!-- Signal strength for the status the iPhone shows; granted with the dialer role. -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <!-- Asks to be left out of battery optimisation: with the screen off in a pocket Android would otherwise cut the connection. -->
@@ -92,7 +94,7 @@
             android:permission="android.permission.BIND_INCALL_SERVICE">
             <meta-data
                 android:name="android.telecom.IN_CALL_SERVICE_UI"
-                android:value="true" />
+                android:value="false" />
             <intent-filter>
                 <action android:name="android.telecom.InCallService" />
             </intent-filter>

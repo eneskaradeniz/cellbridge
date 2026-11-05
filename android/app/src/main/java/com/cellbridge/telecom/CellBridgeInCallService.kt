@@ -64,7 +64,6 @@ class CellBridgeInCallService : InCallService() {
         registry.register(id, handleFor(call))
         call.registerCallback(callback)
         report(call, stateOf(call))
-        showCallScreen()
     }
 
     private fun showCallScreen() {
@@ -114,7 +113,6 @@ class CellBridgeInCallService : InCallService() {
         val rejected = status == CallStatus.DISCONNECTED && call.details.disconnectCause?.code == DisconnectCause.REJECTED
         repository.onCallUpdate(CallSnapshot(id, number, direction, status, rejected, call.details.connectTimeMillis))
         wakeLock.setHeld(repository.hasLiveCalls)
-        updateCallNotification(number, call.details.connectTimeMillis)
     }
 
     /** The way back to the call screen after it was left: an ongoing notification for as long as a call lives. */

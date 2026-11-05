@@ -84,7 +84,6 @@ class MainActivity : ComponentActivity() {
                     value = runCatching { history.calls(0, 0, 100).reversed() }.getOrDefault(emptyList())
                 }
                 MainScreen(status, pairingToken.value, link, dialNumber, recents, ::placeCall, ::askToStayAwake) {
-                    RoleRow(AppRole.DIALER, R.string.role_dialer)
                     RoleRow(AppRole.SMS, R.string.role_sms)
                 }
             }
@@ -113,8 +112,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refresh++
-        // A call is running: opening the app (icon, notification) goes to the call screen, the only place to end it.
-        if (feed.liveCalls().isNotEmpty()) startActivity(android.content.Intent(this, com.cellbridge.ui.InCallActivity::class.java))
     }
 
     @Composable

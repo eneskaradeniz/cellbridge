@@ -18,16 +18,21 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 /** A stand-in for cellbridge_audiod that speaks just enough of the loopback protocol. */
-private class FakeDaemon(private val token: String, private val startReply: Int = 0x80) : AutoCloseable {
+private class FakeDaemon(private val token: String, @Volatile var startReply: Int = 0x80) : AutoCloseable {
     val server = ServerSocket(0, 5, InetAddress.getByName("127.0.0.1"))
     val port get() = server.localPort
     val frames = CopyOnWriteArrayList<Pair<Int, List<Byte>>>()
     @Volatile var connections = 0
+    private val sockets = CopyOnWriteArrayList<java.net.Socket>()
+
+    /** Like a daemon that died: every open connection is cut. */
+    fun dropAll() = sockets.forEach { runCatching { it.close() } }
 
     private val acceptor = thread(isDaemon = true) {
         while (!server.isClosed) {
             val socket = runCatching { server.accept() }.getOrNull() ?: break
             connections++
+            sockets += socket
             thread(isDaemon = true) { serve(socket) }
         }
     }
@@ -114,5 +119,87 @@ class AudioDaemonClientTest {
     @Test
     fun `stop without a running relay is harmless`() = runBlocking {
         AudioDaemonClient("TOKEN", daemon().port).stop()
+    }
+
+    private fun fast(daemon: FakeDaemon, onLost: () -> Unit = {}) =
+        AudioDaemonClient("TOKEN", daemon.port, timeoutMs = 500, retryWindowMs = 1_500, retryEveryMs = 50, onLost = onLost)
+
+    private fun awaitTrue(what: String, condition: () -> Boolean) {
+        val until = System.currentTimeMillis() + 10_000
+        while (!condition()) {
+            check(System.currentTimeMillis() < until) { "timed out waiting for: $what" }
+            Thread.sleep(20)
+        }
+    }
+
+    @Test
+    fun `when the daemon drops the connection the relay is started again for the same peer`() = runBlocking {
+        val daemon = daemon()
+        val lost = java.util.concurrent.atomic.AtomicInteger()
+        val client = fast(daemon) { lost.incrementAndGet() }
+        assertTrue(client.start(peer(port = 0x1234)))
+        val startsBefore = daemon.frames.count { it.first == 0x01 }
+
+        daemon.dropAll()
+        awaitTrue("a second START") { daemon.frames.count { it.first == 0x01 } == startsBefore + 1 }
+        assertArrayEquals(byteArrayOf(3, 192.toByte(), 168.toByte(), 105, 2, 0x34, 0x12), daemon.frames.last { it.first == 0x01 }.second.toByteArray())
+        assertEquals(0, lost.get())
+        client.stop()
+    }
+
+    @Test
+    fun `a daemon that needs a few tries is retried until it answers`() = runBlocking {
+        val daemon = daemon()
+        val client = fast(daemon)
+        client.start(peer())
+        daemon.startReply = 0x81 // restarting: refuses
+        daemon.dropAll()
+        Thread.sleep(300)
+        daemon.startReply = 0x80
+        val before = daemon.frames.count { it.first == 0x01 }
+        awaitTrue("a START that is accepted") { daemon.frames.count { it.first == 0x01 } > before }
+        client.stop()
+    }
+
+    @Test
+    fun `when the daemon does not come back onLost is called once`() = runBlocking {
+        val daemon = daemon()
+        val lost = java.util.concurrent.atomic.AtomicInteger()
+        val client = fast(daemon) { lost.incrementAndGet() }
+        client.start(peer())
+        daemon.startReply = 0x81
+        daemon.dropAll()
+        awaitTrue("onLost") { lost.get() == 1 }
+        Thread.sleep(300)
+        assertEquals(1, lost.get())
+    }
+
+    @Test
+    fun `stop while recovering ends the retries without onLost`() = runBlocking {
+        val daemon = daemon()
+        val lost = java.util.concurrent.atomic.AtomicInteger()
+        val client = fast(daemon) { lost.incrementAndGet() }
+        client.start(peer())
+        daemon.startReply = 0x81
+        daemon.dropAll()
+        Thread.sleep(150)
+        client.stop()
+        val connections = daemon.connections
+        Thread.sleep(400)
+        assertEquals(connections, daemon.connections)
+        assertEquals(0, lost.get())
+    }
+
+    @Test
+    fun `a normal stop is not mistaken for a lost daemon`() = runBlocking {
+        val daemon = daemon()
+        val lost = java.util.concurrent.atomic.AtomicInteger()
+        val client = fast(daemon) { lost.incrementAndGet() }
+        client.start(peer())
+        client.stop()
+        val connections = daemon.connections
+        Thread.sleep(400)
+        assertEquals(connections, daemon.connections)
+        assertEquals(0, lost.get())
     }
 }
