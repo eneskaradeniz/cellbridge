@@ -63,6 +63,12 @@ sealed interface ServerMessage {
     @Serializable @SerialName("hello_ack")
     data class HelloAck(val version: Int, val capabilities: List<String>) : ServerMessage
 
+    @Serializable @SerialName("call_list")
+    data class CallList(val callIds: List<String>) : ServerMessage
+
+    @Serializable @SerialName("capabilities")
+    data class Capabilities(val capabilities: List<String>) : ServerMessage
+
     @Serializable @SerialName("ring")
     data class Ring(val callId: String, val number: String? = null, val name: String? = null) : ServerMessage
 

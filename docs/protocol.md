@@ -17,7 +17,9 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | type | dir | fields |
 |---|---|---|
 | `hello` | iOS -> host | `version` (int, currently 1), `token` |
-| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `transfer`, `status`) |
+| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `transfer`, `status`, `conference` (draft)) |
+| `call_list` | host -> iOS | `callIds` (every call that is still live) |
+| `capabilities` | host -> iOS | `capabilities` (the full list again, sent when it changes) |
 | `error` | host -> iOS | `code`, `message?` |
 | `ring` | host -> iOS | `callId`, `number`, `name?` |
 | `answer` / `reject` / `hangup` | iOS -> host | `callId` |
@@ -32,6 +34,11 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `dial` | iOS -> host | `clientId`, `number`, `udpPort?` |
 | `dial_result` | host -> iOS | `clientId`, `ok`, `callId?`, `error?` |
 | `answered` | host -> iOS | `callId` |
+| `hold` / `unhold` | iOS -> host | `callId` |
+| `held` | host -> iOS | `callId`, `held` (bool) |
+| `merge` | iOS -> host | `callId` (either of the two calls) |
+| `merge_result` | host -> iOS | `callId`, `ok`, `error?` |
+| `conference` | host -> iOS | `callId` (the conference), `children` (call ids; empty = dissolved) |
 | `sms` | host -> iOS | `id` (string), `from`, `body`, `ts` (ms since epoch) |
 | `sms_ack` | iOS -> host | `id` |
 | `sms_send` | iOS -> host | `clientId`, `to`, `body` |
@@ -52,6 +59,15 @@ and the host closes the socket. Later errors (`bad_message`, `unknown_call`) lea
 `ended.reason` is `missed` for an incoming call that ended without being answered (the caller gave up), `rejected` when the host
 rejected it on the client's request; it is absent for a call that was answered. After `hello_ack` the host re-sends `ring` for every
 call that is still ringing, so a reconnecting client catches up; clients dedupe by `callId`.
+
+Call list: right after `hello_ack` (before the repeated `ring`s) the host sends `call_list` with the id of every call that is still live, an empty
+list when there is none. A `ended` sent while the socket was down is lost for good, so the client ends every call it still shows under a
+`callId` that is not in the list (as if `ended` without a reason had arrived). Calls without a `callId` yet (a `dial` still waiting for its
+`dial_result`) are left alone.
+
+Capabilities: `hello_ack` lists what the host can do at that moment. The root audio daemon may start a few seconds after the app (boot, a
+restart), so while `audio` is missing the host checks again every 5 s and, when the list changed, sends `capabilities`; the client replaces
+the list it holds. Nothing is sent when the list is the same.
 
 Ringing: the client answers every `ring` with `ring_ack` (also the repeats after a reconnect) once its own call UI is up. The host then
 silences the phone's ringtone and vibration for that call, so only the iPhone rings; without an ack (no client, a dead socket) the
@@ -76,6 +92,19 @@ active, clients may ignore it there) and `ended` when the call is over. `udpPort
 becomes active. `ok:false` carries `error`: `invalid` (not a plain phone number; `*`/`#` codes are refused), `emergency`
 (emergency numbers are never dialed through the bridge), `busy` (an outgoing call is already in progress), `failed`
 (the platform refused or did not start the call in time).
+
+Conference (DRAFT, not implemented; `conference` is advertised in `capabilities` only when the carrier allows holding and merging; a client that
+does not know it never sees these messages): `hold` / `unhold` put a call on hold on the phone or take it off again. The host answers with
+`held` for that call, and sends `held` as well when the user holds a call on the phone itself; a request the platform refuses simply
+produces no `held`. A second call while one is active is either an outgoing `dial` (the host holds the active call first, the platform
+does it anyway; the `busy` refusal then applies only to a call that is still dialing) or an incoming `ring` (call waiting); `answer` on
+the waiting call holds the active one. `merge` joins the held call and the active call into a conference: the host answers
+`merge_result` (`ok:false` carries `error`: `unsupported`, `no_pair` when there are not exactly two mergeable calls, `failed`) and, on success, sends `conference` with a new `callId` and
+its `children`; the child calls stay known under their ids but do not send `ended` when they merge. Whenever a member leaves, `conference` is sent again
+with the remaining `children` (an empty list when it falls apart); a conference ends with `ended` like any call, and `hangup` on it ends
+all members. At most 5 members (the carrier limit). Audio stays one stream: the relay carries whichever call is active, or the
+conference, and is silent while every call is held; `udpPort` of a second call is ignored while a relay runs. Open: whether the
+operator mixes the conference on this CS line (needs a measurement with two real calls) and what the downlink daemon does when the active call changes.
 
 SMS delivery is lossless: the host stores every incoming message in the system SMS database first, then sends `sms`. `sms_ack`
 acknowledges that message **and every earlier one** (ids only ever increase and are never reused, even after a text is deleted on the host); after `hello_ack` the host re-sends everything newer than the last

@@ -7,9 +7,27 @@ final class MessageCoordinatorTests: XCTestCase {
     private var notified: [String] = []
     private var logs: [String] = []
 
+    private var backlogs: [Int] = []
+
     private func coordinator(store: MessageStore = MessageStore(url: nil)) -> MessageCoordinator {
-        MessageCoordinator(store: store, transmit: { self.sent.append($0) },
-                           notify: { id, _, _ in self.notified.append(id) }, log: { self.logs.append($0) })
+        let c = MessageCoordinator(store: store, transmit: { self.sent.append($0) },
+                                   notify: { id, _, _ in self.notified.append(id) }, log: { self.logs.append($0) })
+        c.now = { Date(timeIntervalSince1970: 1_700_000_010) } // 10 s after the sample texts: fresh
+        c.notifyBacklog = { count, _ in self.backlogs.append(count) }
+        return c
+    }
+
+    func testOldTextsBecomeOneNotificationAndAFreshOneStaysSingle() {
+        let c = coordinator()
+        c.now = { Date(timeIntervalSince1970: 1_700_003_600) } // an hour after: the host is replaying
+        c.handle(sms("1")); c.handle(sms("2")); c.handle(sms("3"))
+        XCTAssertEqual(notified, [])
+        c.flushBacklog()
+        XCTAssertEqual(backlogs, [3])
+        XCTAssertEqual(notified, [])
+
+        c.handle(sms("4")); c.flushBacklog() // a lone old text keeps its own notification
+        XCTAssertEqual(notified, ["4"])
     }
 
     private func sms(_ id: String, _ body: String = "selam") -> ServerMessage {

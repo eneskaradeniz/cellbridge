@@ -46,6 +46,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration
 
 class ControlServerTest {
@@ -124,6 +125,7 @@ class ControlServerTest {
                     feed, commands, bridge, sms, dialer, token = "SECRET",
                     capabilities = { listOf("calls") + if (audio.isAvailable()) listOf("audio") else emptyList() },
                     authFailureDelay = Duration.ZERO,
+                    capabilitiesRecheck = 50.milliseconds,
                     history = historySource,
                     push = push,
                     presence = presence,
@@ -143,6 +145,7 @@ class ControlServerTest {
     private suspend fun DefaultClientWebSocketSession.login() {
         say("""{"type":"hello","version":$PROTOCOL_VERSION,"token":"SECRET"}""")
         assertEquals("hello_ack", hear()["type"]?.jsonPrimitive?.content)
+        assertEquals("call_list", hear()["type"]?.jsonPrimitive?.content)
     }
 
     /** The server handles client messages asynchronously; wait until [check] holds (real time, not test time). */
@@ -158,6 +161,36 @@ class ControlServerTest {
             say("""{"type":"hello","version":1,"token":"SECRET"}""")
             assertEquals("""{"type":"hello_ack","version":1,"capabilities":["calls","audio"]}""", hear().toString())
         }
+    }
+
+    @Test
+    fun `call_list names every live call, and is empty when there is none`() = withServer { connect ->
+        connect {
+            say("""{"type":"hello","version":1,"token":"SECRET"}""")
+            hear()
+            assertEquals("""{"type":"call_list","callIds":[]}""", hear().toString())
+        }
+        feed.live = listOf(incomingRinging, CallSnapshot("c2", "+90556", CallDirection.OUTGOING, CallStatus.ACTIVE))
+        connect {
+            say("""{"type":"hello","version":1,"token":"SECRET"}""")
+            hear()
+            assertEquals("""{"type":"call_list","callIds":["c1","c2"]}""", hear().toString())
+            assertEquals("ring", hear().str("type")) // the repeated rings follow the list
+        }
+        feed.live = emptyList()
+    }
+
+    @Test
+    fun `capabilities are sent again when the audio daemon comes up after hello_ack`() = withServer { connect ->
+        audio.available = false
+        connect {
+            login()
+            audio.available = true
+            val update = hear()
+            assertEquals("capabilities", update.str("type"))
+            assertEquals("""{"type":"capabilities","capabilities":["calls","audio"]}""", update.toString())
+        }
+        audio.available = true
     }
 
     @Test

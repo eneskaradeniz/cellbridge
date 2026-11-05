@@ -2,6 +2,13 @@ import XCTest
 @testable import CellBridge
 
 final class MessagesTests: XCTestCase {
+    func testDecodesTheCallListAndALaterCapabilityList() {
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"call_list","callIds":["a","b"]}"#), .callList(callIds: ["a", "b"]))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"call_list","callIds":[]}"#), .callList(callIds: []))
+        XCTAssertNil(ServerMessage.decode(#"{"type":"call_list"}"#))
+        XCTAssertEqual(ServerMessage.decode(#"{"type":"capabilities","capabilities":["calls","audio"]}"#), .capabilities(["calls", "audio"]))
+    }
+
     func testHelloCarriesVersionAndToken() {
         XCTAssertEqual(ClientMessage.hello(token: "ABC23456").encoded(), #"{"token":"ABC23456","type":"hello","version":1}"#)
     }

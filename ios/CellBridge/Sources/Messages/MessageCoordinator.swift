@@ -13,6 +13,12 @@ final class MessageCoordinator: ObservableObject {
     private var ackBlocked = false
     /// The conversation on screen while the app is in front; a text for it is read on arrival and makes no notification.
     var viewingKey: String?
+    /// One notification for a burst of old texts (the host replaying what arrived while the link was down); set by the app.
+    var notifyBacklog: ((_ count: Int, _ senders: [String]) -> Void)?
+    var now: () -> Date = Date.init
+    private static let backlogAge: TimeInterval = 120
+    private var backlog: [(id: String, from: String, body: String)] = []
+    private var backlogFlush: Task<Void, Never>?
 
     init(store: MessageStore, transmit: @escaping (ClientMessage) -> Void,
          notify: @escaping (String, String, String) -> Void, log: @escaping (String) -> Void) {
@@ -111,11 +117,30 @@ final class MessageCoordinator: ObservableObject {
             if isNew && watching { try? store.markRead(key: MessageStore.key(for: from)) }
             refresh()
             if !ackBlocked { transmit(.smsAck(id: id)) } // only once it is on disk
-            if isNew && !watching { notify(id, from, body) }
+            if isNew && !watching {
+                if now().timeIntervalSince(date) > Self.backlogAge, notifyBacklog != nil {
+                    backlog.append((id, from, body))
+                    backlogFlush = backlogFlush ?? Task { [weak self] in
+                        try? await Task.sleep(for: .seconds(2))
+                        self?.flushBacklog()
+                    }
+                } else {
+                    notify(id, from, body)
+                }
+            }
         } catch {
             ackBlocked = true // not acknowledged, so the host re-sends it (and everything after it) next time
             log("could not save text \(id): \(error.localizedDescription)")
         }
+    }
+
+    /// A lone old text is notified as usual; several become one notification naming the senders.
+    func flushBacklog() {
+        backlogFlush = nil
+        let items = backlog
+        backlog = []
+        if items.count == 1, let one = items.first { return notify(one.id, one.from, one.body) }
+        if items.count > 1 { notifyBacklog?(items.count, items.map(\.from)) }
     }
 
     private func refresh() { conversations = store.conversations }

@@ -188,6 +188,9 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
         case .ring(let callId, let number, let name):
             ring(callId: callId, number: number, name: name)
             send(.ringAck(callId: callId)) // the phone in the pocket may stop ringing now
+        case .callList(let live):
+            // An `ended` sent while the socket was down never arrived: end what the host no longer has.
+            for callId in book.vanished(from: live) { handle(.ended(callId: callId, reason: nil)) }
         case .ended(let callId, let reason):
             // reportCall(endedAt:) does not call back into CXEndCallAction, so nothing is sent to the host.
             guard let uuid = book.uuid(forCallId: callId) else { return }

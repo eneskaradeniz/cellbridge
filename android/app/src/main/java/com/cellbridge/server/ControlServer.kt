@@ -153,6 +153,9 @@ class ControlServer @Inject constructor(
     }
 }
 
+/** While `audio` is missing from the capabilities, how often the host looks again (the daemon may still be starting). */
+private val CAPABILITIES_RECHECK = 5.seconds
+
 /** The protocol itself, separate from the engine so tests can run it without sockets. */
 fun Application.controlModule(
     feed: CallFeed,
@@ -163,6 +166,7 @@ fun Application.controlModule(
     token: String,
     capabilities: suspend () -> List<String>,
     authFailureDelay: Duration = 1.seconds,
+    capabilitiesRecheck: Duration = CAPABILITIES_RECHECK,
     history: HistorySource = NoHistory,
     push: PushRegistry = NoPush,
     presence: ClientPresence = ClientPresence(),
@@ -175,7 +179,7 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, history, push, presence, transfers, phoneStatus).run() }
+        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, capabilitiesRecheck, history, push, presence, transfers, phoneStatus).run() }
     }
 }
 
@@ -196,6 +200,7 @@ private class Session(
     private val token: String,
     private val capabilities: suspend () -> List<String>,
     private val authFailureDelay: Duration,
+    private val capabilitiesRecheck: Duration,
     private val history: HistorySource,
     private val push: PushRegistry,
     private val presence: ClientPresence,
@@ -257,7 +262,23 @@ private class Session(
                     send(it.toMessage())
                 }
             }
-            send(ServerMessage.HelloAck(PROTOCOL_VERSION, capabilities()))
+            val offered = capabilities()
+            send(ServerMessage.HelloAck(PROTOCOL_VERSION, offered))
+            // An `ended` sent while the socket was down is gone: the list lets the client end what no longer exists.
+            send(ServerMessage.CallList(feed.liveCalls().map { it.id }))
+            // The audio daemon may come up after the app; tell the client when it does (it keeps the hello_ack list otherwise).
+            val capabilitiesForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
+                acked.await()
+                var current = offered
+                while ("audio" !in current) {
+                    delay(capabilitiesRecheck)
+                    val now = capabilities()
+                    if (now != current) {
+                        current = now
+                        send(ServerMessage.Capabilities(now))
+                    }
+                }
+            }
             feed.liveCalls()
                 .filter { it.direction == CallDirection.INCOMING && it.status == CallStatus.RINGING }
                 .forEach { send(ServerMessage.Ring(it.id, it.number)) }
@@ -287,6 +308,7 @@ private class Session(
                 offerForwarder.cancel()
                 takeBackForwarder.cancel()
                 statusForwarder.cancel()
+                capabilitiesForwarder.cancel()
                 statusSmsForwarder.cancel()
                 smsForwarder.cancel()
             }

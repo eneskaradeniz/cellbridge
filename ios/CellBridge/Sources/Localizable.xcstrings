@@ -1592,6 +1592,16 @@
         }
       }
     },
+    "%lld texts arrived while you were away": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yokluğunuzda %lld mesaj geldi"
+          }
+        }
+      }
+    },
     "The phone's battery is low": {
       "localizations": {
         "tr": {

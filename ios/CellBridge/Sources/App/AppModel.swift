@@ -87,6 +87,13 @@ final class AppModel: ObservableObject {
             },
             log: { [weak self] in self?.log($0) }
         )
+        messages.notifyBacklog = { [weak self] count, senders in
+            guard let self else { return }
+            var names: [String] = []
+            for sender in senders { let name = displayName(for: sender); if !names.contains(name) { names.append(name) } }
+            let shown = names.prefix(3).joined(separator: ", ") + (names.count > 3 ? " +\(names.count - 3)" : "")
+            notifier.notify(id: "backlog", peer: "", kind: "backlog", title: String(localized: "\(count) texts arrived while you were away"), body: shown)
+        }
         client.onLog = { [weak self] in self?.log($0) }
         client.onMessage = { [weak self] message in
             self?.log(Self.describe(message))
@@ -554,6 +561,8 @@ final class AppModel: ObservableObject {
     private static func describe(_ message: ServerMessage) -> String {
         switch message {
         case .helloAck(_, let capabilities): return "connected, host offers \(capabilities.joined(separator: ", "))"
+        case .callList(let callIds): return "live calls on the phone: \(callIds.count)"
+        case .capabilities(let capabilities): return "host now offers \(capabilities.joined(separator: ", "))"
         case .ring(let callId, _, _): return "ring \(callId.prefix(8))"
         case .ended(let callId, let reason): return "ended \(callId.prefix(8)) \(reason?.rawValue ?? "")"
         case .dialResult(let clientId, let ok, _, let error): return "dial \(clientId.prefix(8)) \(ok ? "placed" : "refused: \(error ?? "?")")"

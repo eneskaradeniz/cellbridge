@@ -124,4 +124,14 @@ final class DialErrorTests: XCTestCase {
         XCTAssertEqual(CallCoordinator.message(forDialError: "failed"), CallCoordinator.message(forDialError: nil))
         XCTAssertEqual(CallCoordinator.message(forDialError: "something new"), CallCoordinator.message(forDialError: "failed"))
     }
+
+    func testCallsTheHostNoLongerListsHaveVanished() throws {
+        var book = CallBook()
+        _ = book.ring(callId: "c1")
+        _ = book.ring(callId: "c2")
+        book.startOutgoing(UUID(), title: "Eyüp", number: "+905551112233") // a dial still waiting for its host id
+        XCTAssertEqual(book.vanished(from: ["c2"]), ["c1"])
+        XCTAssertEqual(book.vanished(from: []).sorted(), ["c1", "c2"])
+        XCTAssertEqual(book.vanished(from: ["c1", "c2", "c9"]), [])
+    }
 }

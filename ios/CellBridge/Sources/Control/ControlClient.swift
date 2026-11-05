@@ -123,6 +123,9 @@ final class ControlClient: ObservableObject {
                 return .stop
             }
             state = .connected(capabilities: capabilities)
+        case .capabilities(let capabilities):
+            // The host's list changed after hello_ack (its audio daemon came up late): keep the new one.
+            if case .connected = state { state = .connected(capabilities: capabilities) }
         case .error(let code, _) where ["unauthorized", "unsupported_version", "expected_hello"].contains(code):
             state = .rejected(code: code)
             return .stop

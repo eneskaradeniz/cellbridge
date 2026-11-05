@@ -43,6 +43,12 @@ struct CallBook {
             .map { ActiveCall(id: $0.key, title: $0.value.title, answeredAt: $0.value.answeredAt, isOutgoing: $0.value.outgoing) }
     }
 
+    /// Host ids of the calls shown here that the host no longer lists: they ended while the connection was down.
+    /// Calls without a host id yet (a dial still waiting for its answer) are never among them.
+    func vanished(from live: [String]) -> [String] {
+        entries.values.compactMap(\.callId).filter { !live.contains($0) }
+    }
+
     /// Registers a ringing call; nil if the host already told us about it (it re-sends rings after a reconnect).
     mutating func ring(callId: String, title: String = "", now: Date = Date(), number: String = "") -> UUID? {
         guard !entries.values.contains(where: { $0.callId == callId }) else { return nil }

@@ -84,6 +84,8 @@ struct HostText: Equatable {
 
 enum ServerMessage: Equatable {
     case helloAck(version: Int, capabilities: [String])
+    case callList(callIds: [String])
+    case capabilities([String])
     case ring(callId: String, number: String?, name: String?)
     case ended(callId: String, reason: EndReason?)
     case dialResult(clientId: String, ok: Bool, callId: String?, error: String?)
@@ -107,6 +109,12 @@ enum ServerMessage: Equatable {
         case "hello_ack":
             guard let version = object["version"] as? Int else { return nil }
             return .helloAck(version: version, capabilities: object["capabilities"] as? [String] ?? [])
+        case "call_list":
+            guard let callIds = object["callIds"] as? [String] else { return nil }
+            return .callList(callIds: callIds)
+        case "capabilities":
+            guard let list = object["capabilities"] as? [String] else { return nil }
+            return .capabilities(list)
         case "ring":
             guard let callId = object["callId"] as? String else { return nil }
             return .ring(callId: callId, number: object["number"] as? String, name: object["name"] as? String)
