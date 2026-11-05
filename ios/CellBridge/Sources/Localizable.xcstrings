@@ -1961,6 +1961,36 @@
           }
         }
       }
+    },
+    "To:": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kime:"
+          }
+        }
+      }
+    },
+    "Send to %@": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ numarasına gönder"
+          }
+        }
+      }
+    },
+    "Change the recipient": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alıcıyı değiştir"
+          }
+        }
+      }
     }
   }
 }

@@ -284,56 +284,167 @@ private func counter(for text: String) -> some View {
     }
 }
 
+/// Who a new message goes to: a number, and the contact's name when it is one.
+private struct Recipient: Equatable {
+    let number: String
+    let name: String?
+}
+
+/// New message in the system Messages' layout: a "To:" field that suggests contacts as you type, the chosen person as a name
+/// chip, and the composer at the bottom. One recipient, since a text goes to one number.
 struct NewMessageView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var to: String
+    @State private var recipient: Recipient?
+    @State private var query = ""
     @State private var body_ = ""
     @State private var choosing = false
+    @FocusState private var focus: Field?
+    private enum Field { case to, message }
 
-    init(initialTo: String = "") { _to = State(initialValue: initialTo) }
+    init(initialTo: String = "") {
+        _recipient = State(initialValue: initialTo.isEmpty ? nil : Recipient(number: initialTo, name: nil))
+    }
 
     private var canSend: Bool {
-        !to.isEmpty && !body_.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.canSendSms
+        recipient != nil && !body_.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.canSendSms
+    }
+
+    /// Contacts matching what is typed, one row per number.
+    private var suggestions: [(contact: Contact, number: LabeledNumber)] {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+        return model.contactBook.search(query).flatMap { contact in contact.numbers.map { (contact, $0) } }
+    }
+
+    /// The typed text, if it can be a phone number the contact list did not already offer.
+    private var typedNumber: String? {
+        let text = query.trimmingCharacters(in: .whitespaces)
+        let allowed = text.allSatisfy { $0.isNumber || "+ ()-".contains($0) }
+        return allowed && text.filter(\.isNumber).count >= 3 ? text : nil
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    HStack {
-                        Text("To").foregroundStyle(.secondary)
-                        TextField("Number", text: $to).keyboardType(.phonePad)
-                        Button { choosing = true } label: { Image(systemName: "person.crop.circle") }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Choose from contacts")
-                    }
-                }
-                Section {
-                    TextField("Message", text: $body_, axis: .vertical).lineLimit(4...10)
-                } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        counter(for: body_)
-                        if !model.canSendSms { Text("Connect to the phone to send.") }
-                    }
-                }
+            VStack(spacing: 0) {
+                toField.padding(.horizontal, 16).padding(.top, 8)
+                if recipient == nil { suggestionList } else { Spacer(minLength: 0) }
+                composer
             }
             .navigationTitle("New Message")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $choosing) { ContactsView(onPick: { to = $0 }) }
-            .dismissibleKeyboard()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Send", systemImage: "arrow.up") {
-                        let number = to
-                        model.messages.send(to: number, body: body_)
-                        dismiss()
-                        model.openThread(number) // land in the conversation, like the Messages app
-                    }
-                    .disabled(!canSend)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(role: .close) { dismiss() } } }
+            .sheet(isPresented: $choosing) {
+                ContactsView(onPick: { pick(number: $0) })
+            }
+            .onAppear {
+                if let known = recipient, known.name == nil, let name = model.contactBook.name(for: known.number) {
+                    recipient = Recipient(number: known.number, name: name)
                 }
+                focus = recipient == nil ? .to : .message
             }
         }
+    }
+
+    private var toField: some View {
+        HStack(spacing: 8) {
+            Text("To:").foregroundStyle(.secondary)
+            if let recipient {
+                Button {
+                    query = recipient.name == nil ? recipient.number : ""
+                    self.recipient = nil
+                    focus = .to
+                } label: {
+                    Text(recipient.name ?? recipient.number)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Color.accentColor.opacity(0.22), in: Capsule())
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Change the recipient")
+            } else {
+                TextField("", text: $query)
+                    .keyboardType(.default)
+                    .textContentType(.telephoneNumber)
+                    .autocorrectionDisabled()
+                    .focused($focus, equals: .to)
+                    .submitLabel(.next)
+                    .onSubmit { if let typedNumber { pick(number: typedNumber) } }
+            }
+            Spacer(minLength: 0)
+            Button { choosing = true } label: {
+                Image(systemName: "plus").font(.body.weight(.semibold)).frame(width: 34, height: 34)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Choose from contacts")
+        }
+        .padding(.leading, 16).padding(.trailing, 6).padding(.vertical, 6)
+        .glassEffect(.regular, in: Capsule())
+    }
+
+    private var suggestionList: some View {
+        List {
+            if let typedNumber, !suggestions.contains(where: { MessageStore.key(for: $0.number.value) == MessageStore.key(for: typedNumber) }) {
+                Button { pick(number: typedNumber) } label: {
+                    HStack(spacing: 12) {
+                        Avatar(name: "", size: 44)
+                        Text("Send to \(typedNumber)")
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            ForEach(Array(suggestions.enumerated()), id: \.offset) { _, item in
+                Button { pick(number: item.number.value) } label: {
+                    HStack(spacing: 12) {
+                        Avatar(name: item.contact.name, size: 44)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.contact.name).font(.body.weight(.semibold)).lineLimit(1)
+                            Text(item.number.value).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .listStyle(.plain)
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            counter(for: body_)
+            if !model.canSendSms { Text("Connect to the phone to send.").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20) }
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("Message", text: $body_, axis: .vertical)
+                    .lineLimit(1...6)
+                    .focused($focus, equals: .message)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                if canSend {
+                    Button(action: send) {
+                        Image(systemName: "arrow.up").font(.body.weight(.bold)).frame(width: 38, height: 38)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel("Send")
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+        .padding(.vertical, 8)
+        .animation(.default, value: canSend)
+    }
+
+    private func pick(number: String) {
+        recipient = Recipient(number: number, name: model.contactBook.name(for: number))
+        query = ""
+        focus = .message
+    }
+
+    private func send() {
+        guard let number = recipient?.number else { return }
+        model.messages.send(to: number, body: body_)
+        dismiss()
+        model.openThread(number) // land in the conversation, like the Messages app
     }
 }
