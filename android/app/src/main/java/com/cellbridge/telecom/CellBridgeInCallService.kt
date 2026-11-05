@@ -1,15 +1,7 @@
 package com.cellbridge.telecom
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Intent
-import androidx.core.app.NotificationCompat
-import com.cellbridge.R
 import android.telecom.Call
-import android.util.Log
 import com.cellbridge.server.ControlService
-import com.cellbridge.ui.InCallActivity
 import android.os.Handler
 import android.os.Looper
 import android.telecom.DisconnectCause
@@ -24,7 +16,10 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.util.UUID
 import javax.inject.Inject
 
-/** Bound by Telecom while this app is the default dialer; reports every call to [CallRepository]. */
+/**
+ * Bound by Telecom next to the stock dialer, which keeps the call screen (this service has no UI of its own and needs
+ * MANAGE_ONGOING_CALLS); reports every call to [CallRepository] and carries out the iPhone's commands.
+ */
 @AndroidEntryPoint
 class CellBridgeInCallService : InCallService() {
     @Inject lateinit var repository: CallRepository
@@ -66,16 +61,10 @@ class CellBridgeInCallService : InCallService() {
         report(call, stateOf(call))
     }
 
-    private fun showCallScreen() {
-        runCatching { startActivity(Intent(this, InCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            .onFailure { Log.w(TAG, "call screen not shown: ${it::class.simpleName}") }
-    }
-
     override fun onCallRemoved(call: Call) {
         call.unregisterCallback(callback)
         report(call, Call.STATE_DISCONNECTED) // no-op if already reported
         ids.remove(call)?.let(registry::unregister)
-        if (!repository.hasLiveCalls) getSystemService(NotificationManager::class.java).cancel(CALL_NOTIFICATION_ID)
     }
 
     override fun onDestroy() {
@@ -115,24 +104,6 @@ class CellBridgeInCallService : InCallService() {
         wakeLock.setHeld(repository.hasLiveCalls)
     }
 
-    /** The way back to the call screen after it was left: an ongoing notification for as long as a call lives. */
-    private fun updateCallNotification(number: String?, connectedAtMs: Long) {
-        val manager = getSystemService(NotificationManager::class.java)
-        if (!repository.hasLiveCalls) return manager.cancel(CALL_NOTIFICATION_ID)
-        manager.createNotificationChannel(NotificationChannel(CALL_CHANNEL, getString(R.string.call_channel), NotificationManager.IMPORTANCE_LOW))
-        val open = PendingIntent.getActivity(this, 0, Intent(this, InCallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
-        val notification = NotificationCompat.Builder(this, CALL_CHANNEL)
-            .setSmallIcon(android.R.drawable.sym_action_call)
-            .setContentTitle(number ?: getString(R.string.incall_unknown))
-            .setContentText(getString(R.string.call_notification_text))
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setOngoing(true)
-            .setContentIntent(open)
-            .apply { if (connectedAtMs > 0) setUsesChronometer(true).setWhen(connectedAtMs) }
-            .build()
-        manager.notify(CALL_NOTIFICATION_ID, notification)
-    }
-
     @Suppress("DEPRECATION") // Call.Details.getState() needs API 31; minSdk is 29.
     private fun stateOf(call: Call): Int = call.state
 
@@ -147,9 +118,6 @@ class CellBridgeInCallService : InCallService() {
     }
 
     private companion object {
-        const val TAG = "CellBridge"
-        const val CALL_CHANNEL = "call"
-        const val CALL_NOTIFICATION_ID = 2
         const val DTMF_MS = 150L
     }
 }

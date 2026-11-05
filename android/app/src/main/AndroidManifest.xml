@@ -41,17 +41,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Default dialer role: must handle ACTION_DIAL with and without a tel: URI. -->
-            <intent-filter>
-                <action android:name="android.intent.action.DIAL" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.DIAL" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="tel" />
-            </intent-filter>
-
             <!-- Default SMS role: must handle SENDTO for the messaging schemes. -->
             <intent-filter>
                 <action android:name="android.intent.action.SENDTO" />
@@ -63,12 +52,6 @@
                 <data android:scheme="mmsto" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".ui.InCallActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:launchMode="singleTask" />
 
         <receiver
             android:name=".telecom.BootReceiver"

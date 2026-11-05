@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">CellBridge</string>
-    <string name="role_dialer">Varsayılan telefon uygulaması</string>
     <string name="role_sms">Varsayılan SMS uygulaması</string>
     <string name="role_granted">Verildi</string>
     <string name="role_missing">Verilmedi</string>
@@ -13,21 +12,6 @@
     <string name="notification_starting">Başlıyor…</string>
     <string name="notification_running">Çalışıyor, eşleşme kodu uygulama ekranında</string>
     <string name="notification_failed">Başlatılamadı (8765 numaralı bağlantı noktası kullanımda mı?)</string>
-    <string name="incall_unknown">Bilinmeyen numara</string>
-    <string name="incall_incoming">Gelen arama</string>
-    <string name="incall_dialing">Aranıyor…</string>
-    <string name="incall_active">Görüşmede</string>
-    <string name="incall_holding">Beklemede</string>
-    <string name="incall_answer">Cevapla</string>
-    <string name="incall_reject">Reddet</string>
-    <string name="incall_end">Bitir</string>
-    <string name="incall_mute">Sessiz</string>
-    <string name="incall_speaker">Hoparlör</string>
-    <string name="incall_to_iphone">iPhone\'a aktar</string>
-    <string name="incall_take_here">Bu telefona al</string>
-    <string name="incall_on_iphone">iPhone\'da</string>
-    <string name="call_channel">Aramalar</string>
-    <string name="call_notification_text">Aramaya dönmek için dokunun</string>
     <string name="card_iphone">iPhone</string>
     <string name="iphone_connected">Bağlı</string>
     <string name="iphone_not_connected">Bağlı değil</string>
@@ -49,17 +33,6 @@
     <string name="show_code">Göster</string>
     <string name="hide_code">Gizle</string>
     <string name="pairing_hint">iPhone\'daki CellBridge ile QR kodunu tarayın ya da kodu orada bir kez girin. On saniye sonra yeniden gizlenir.</string>
-    <string name="incall_keypad">Tuş takımı</string>
-    <string name="incall_hide_keypad">Tuş takımını gizle</string>
-    <string name="tab_status">Durum</string>
-    <string name="tab_keypad">Tuş Takımı</string>
-    <string name="tab_recents">Geçmiş</string>
-    <string name="keypad_call">Ara</string>
-    <string name="recents_empty">Henüz arama yok</string>
-    <string name="kind_incoming">Gelen</string>
-    <string name="kind_outgoing">Giden</string>
-    <string name="kind_missed">Cevapsız</string>
-    <string name="kind_rejected">Reddedilen</string>
     <string name="card_unrestricted">Pil optimizasyonu</string>
     <string name="unrestricted_ok">Kısıtlı değil: ekran kapalıyken bağlantı sürer</string>
     <string name="unrestricted_missing">Kısıtlı: cepte ekran kapalıyken Android bağlantıyı kesebilir</string>

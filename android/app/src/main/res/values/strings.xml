@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">CellBridge</string>
-    <string name="role_dialer">Default phone app</string>
     <string name="role_sms">Default SMS app</string>
     <string name="role_granted">Granted</string>
     <string name="role_missing">Not granted</string>
@@ -13,21 +12,6 @@
     <string name="notification_starting">Starting…</string>
     <string name="notification_running">Running — pairing code is on the app screen</string>
     <string name="notification_failed">Could not start (is port 8765 in use?)</string>
-    <string name="incall_unknown">Unknown number</string>
-    <string name="incall_incoming">Incoming call</string>
-    <string name="incall_dialing">Calling…</string>
-    <string name="incall_active">In call</string>
-    <string name="incall_holding">On hold</string>
-    <string name="incall_answer">Answer</string>
-    <string name="incall_reject">Decline</string>
-    <string name="incall_end">End call</string>
-    <string name="incall_mute">Mute</string>
-    <string name="incall_speaker">Speaker</string>
-    <string name="incall_to_iphone">Transfer to iPhone</string>
-    <string name="incall_take_here">Take it on this phone</string>
-    <string name="incall_on_iphone">On the iPhone</string>
-    <string name="call_channel">Calls</string>
-    <string name="call_notification_text">Tap to return to the call</string>
     <string name="card_iphone">iPhone</string>
     <string name="iphone_connected">Connected</string>
     <string name="iphone_not_connected">Not connected</string>
@@ -49,17 +33,6 @@
     <string name="show_code">Show</string>
     <string name="hide_code">Hide</string>
     <string name="pairing_hint">Scan the QR code with the iPhone\'s CellBridge, or enter the code there once. It hides again after ten seconds.</string>
-    <string name="incall_keypad">Keypad</string>
-    <string name="incall_hide_keypad">Hide keypad</string>
-    <string name="tab_status">Status</string>
-    <string name="tab_keypad">Keypad</string>
-    <string name="tab_recents">Recents</string>
-    <string name="keypad_call">Call</string>
-    <string name="recents_empty">No calls yet</string>
-    <string name="kind_incoming">Incoming</string>
-    <string name="kind_outgoing">Outgoing</string>
-    <string name="kind_missed">Missed</string>
-    <string name="kind_rejected">Declined</string>
     <string name="card_unrestricted">Battery optimisation</string>
     <string name="unrestricted_ok">Not restricted: the connection stays up with the screen off</string>
     <string name="unrestricted_missing">Restricted: with the screen off in a pocket Android may cut the connection</string>
