@@ -1,7 +1,7 @@
 import AVFoundation
 
 /// An inaudible looping buffer keeps the app running with the screen locked so the WebSocket stays up
-/// (Spike B: a free-account app survives hours this way). Restarted whenever the system interrupts audio.
+/// (measured: an app survives hours this way). Restarted whenever the system interrupts audio.
 @MainActor
 final class KeepAlive {
     private let engine = AVAudioEngine()

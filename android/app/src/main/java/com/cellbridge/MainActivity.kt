@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
         // The service runs either way; without the permission only its notification stays hidden.
         val notifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-        // The dialer role normally brings this along; ask in case it did not, so missed calls can reach the iPhone.
+        // This app does not hold the dialer role, so nothing grants it for us: ask, so missed calls can reach the iPhone.
         val callLog = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
         if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) callLog.launch(Manifest.permission.READ_CALL_LOG)
         ControlService.start(this)

@@ -12,18 +12,36 @@ cd android
 ./gradlew :app:installDebug
 ```
 
-The app opens on a **Status** tab (is the iPhone connected, the address it can use, whether the call-audio daemon answers, the phone's battery, the
-roles) with two more tabs: **Keypad** and **Recents**. The pairing code is hidden until you tap **Show**, which also shows a QR code for the iPhone to scan.
+The app is a single **Status** screen (is the iPhone connected, the address it can use, whether the call-audio daemon answers, whether the
+iPhone can be woken by a push, the phone's battery, the SMS role). It has no keypad, call log or call screen: calls stay in the phone's stock Phone app.
+The pairing code is hidden until you tap **Show**, which also shows a QR code for the iPhone to scan.
 
-## 2. Give the app the default phone and SMS roles
+## 2. Roles and permissions
 
-Tap **Request** next to "Default phone app" and "Default SMS app" and confirm each system dialog (or use
-`adb shell cmd role add-role-holder --user 0 android.app.role.DIALER com.cellbridge`, same with `…SMS`).
+CellBridge does **not** take the dialer role: the stock Phone app keeps it and keeps showing calls. CellBridge watches them with an
+`InCallService` that has no screen of its own. Four things are set once with `adb` (the first three are runtime permissions that the dialer role
+used to bring along, so on a fresh install they must be given by hand):
 
-Consequences: the phone's own dialer and messaging apps are no longer the defaults. CellBridge has a keypad, a call log and a call screen
-(answer, decline, end, mute, speaker, keypad tones, move to the iPhone) but **no SMS screen**; texts are read on the iPhone. Only the default
-SMS app may write the system SMS database, which is why the SMS role is needed. To undo, hand the roles back
-(`… add-role-holder … com.android.dialer` / `com.android.messaging`; package names differ between ROMs).
+```
+adb shell appops set com.cellbridge MANAGE_ONGOING_CALLS allow          # without it Telecom never binds the screenless InCallService
+adb shell pm grant com.cellbridge android.permission.CALL_PHONE          # place the iPhone's outgoing calls
+adb shell pm grant com.cellbridge android.permission.READ_PHONE_STATE    # signal strength for the iPhone's status
+adb shell cmd notification allow_dnd com.cellbridge                      # lets the app quieten the ringer while the iPhone rings
+```
+
+(`READ_CALL_LOG` is asked when the app opens.) The appop survives reinstalling the app; whether it survives a reboot is not verified. On the
+reference phone `CALL_PHONE` and `READ_PHONE_STATE` were granted back when CellBridge held the dialer role; the commands above on a fresh
+install are the documented way, not yet re-tried from scratch.
+
+**Text messages** still go through CellBridge: tap **Request** next to "Default SMS app" and confirm (or
+`adb shell cmd role add-role-holder --user 0 android.app.role.SMS com.cellbridge`). The phone then has no SMS screen of its own; texts are read on
+the iPhone. Only the default SMS app may write the system SMS database. (Moving texts to the stock Messages app is planned.) To undo, hand the
+role back (`… add-role-holder … com.android.messaging`; package names differ between ROMs).
+
+**The ringer.** `TelecomManager.silenceRinger()` is reserved for the default dialer, so while a call also rings on the iPhone the app sets Do
+Not Disturb to "alarms only" and puts the previous setting back when nothing rings. Without the `allow_dnd` access both phones ring (a call is
+never lost). The phone rings for a second or two until the iPhone confirms. If the phone is ever left silent:
+`adb shell cmd notification set_dnd off`.
 
 ## 3. Network prerequisites
 
@@ -68,8 +86,8 @@ from a `service.sh` module instead (not tested).
 
 ## 5. Check
 
-The iPhone's Settings tab should say `Connected` with Calls · Texts · Voice, and the Android Status tab shows the iPhone as connected. Call the SIM from another
-phone: the iPhone rings and the phone stays silent.
+The iPhone's Settings tab should say `Connected` with Calls · Texts · Voice, and the Android Status screen shows the iPhone as connected. Call the SIM from another
+phone: the iPhone rings and the phone's own ringer goes quiet after a moment (it rings until the iPhone confirms).
 
 ## Limits worth knowing
 
@@ -106,4 +124,8 @@ and, when done, the same command with the original component, id and user (on th
 | Works with the screen on, silent with the screen off | the app is not running its foreground service (start the app once; check the notification) |
 | iPhone shows `Connected (calls)` without `audio` | daemon not running or token file unreadable; check `adb shell pidof cellbridge_audiod` |
 | iPhone shows no `sms` | the app is not the default SMS app |
+| The iPhone never sees a call | the `MANAGE_ONGOING_CALLS` appop is missing (section 2) |
+| Both phones keep ringing | no Do Not Disturb access (`allow_dnd`, section 2) |
+| The phone stays silent after a call | `adb shell cmd notification set_dnd off` |
+| Status says "No APNs key" / "waiting for the iPhone to register" | install the key (`tools/install-apns-key.sh`, [push.md](push.md)); open the iPhone app once so it registers |
 | Far end hears choppy audio | see the statistics line the iPhone logs at the end of each call (Events, or `events.log`) |

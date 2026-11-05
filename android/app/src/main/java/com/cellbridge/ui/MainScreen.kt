@@ -10,8 +10,8 @@ import androidx.compose.ui.Modifier
 import com.cellbridge.status.HostStatus
 
 /**
- * The phone's own app: only how the bridge is doing and how to pair. Calls and texts on this phone belong to the
- * stock Phone and Messages apps; the iPhone drives the hand-overs.
+ * The phone's own app: only how the bridge is doing and how to pair. Calls on this phone belong to the stock Phone app (this
+ * app only watches them); texts still use this app's SMS role until they move to the stock Messages app. The iPhone drives the hand-overs.
  */
 @Composable
 fun MainScreen(

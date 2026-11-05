@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Reads the system call log and SMS database. Both are readable for the default dialer / SMS app. */
+/** Reads the system call log and SMS database. Needs READ_CALL_LOG and the SMS role. */
 @Singleton
 class TelephonyHistory @Inject constructor(@ApplicationContext private val context: Context) : HistorySource {
     private val resolver = context.contentResolver

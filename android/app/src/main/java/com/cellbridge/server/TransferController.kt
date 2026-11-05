@@ -7,7 +7,10 @@ import kotlinx.coroutines.flow.asSharedFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** The phone's call screen moves a call between the phone and the iPhone; the control server tells the client. */
+/**
+ * Moves a call between the phone and the iPhone; the control server tells the client. Nothing on the phone starts [toIphone] any more
+ * (it has no call screen of its own); the iPhone's take-over button is meant to, and is not built yet.
+ */
 @Singleton
 class TransferController @Inject constructor(
     private val presence: ClientPresence,

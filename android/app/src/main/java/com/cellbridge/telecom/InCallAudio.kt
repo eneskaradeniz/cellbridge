@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** What the phone's own call screen can do to the audio of the running call. Set by the InCallService while it is bound. */
+/** What the iPhone can do to the audio of the running call on the phone (mute, speaker). Set by the InCallService while it is bound. */
 interface InCallAudioControl {
     fun setMuted(muted: Boolean)
     fun setSpeaker(on: Boolean)

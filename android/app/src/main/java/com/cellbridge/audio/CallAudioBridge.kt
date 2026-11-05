@@ -36,7 +36,7 @@ class CallAudioBridge @Inject constructor(
     private val _bridged = MutableStateFlow<Set<String>>(emptySet())
     @Volatile private var generation = 0
 
-    /** Calls whose audio is flowing to the client right now; the phone's own call screen shows "on the iPhone" for them. */
+    /** Calls whose audio is flowing to the client right now; the iPhone is the one carrying them. */
     val bridged: StateFlow<Set<String>> = _bridged.asStateFlow()
 
     @Synchronized

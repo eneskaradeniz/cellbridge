@@ -78,7 +78,8 @@ stopped. A tone the client does not know is ignored. Nothing is sent when Androi
 
 Ringing: the client answers every `ring` with `ring_ack` (also the repeats after a reconnect) once its own call UI is up. The host then
 silences the phone's ringtone and vibration for that call, so only the iPhone rings; without an ack (no client, a dead socket) the
-phone keeps ringing and a call is never swallowed. `ring_ack` has no reply.
+phone keeps ringing and a call is never swallowed. `ring_ack` has no reply. (The reference host quietens the ringer through Do Not Disturb, see
+`docs/setup-android.md`; without that access both phones ring.)
 
 Phone status: after `hello_ack` and whenever it changes (checked every 30 s) the host sends `host_status`: battery percentage, whether it
 is charging, the cellular signal bars (0-4) and the operator name. A client shows it and warns before the phone's battery runs out.
@@ -88,8 +89,8 @@ several digits sends them one by one, about 200 ms apart. An unknown call gets `
 
 Transfer: an active call can change hands without hanging up. `transfer_to_host` asks the host to stop the audio relay for the call; the call
 goes on on the phone itself (its own earpiece, microphone and speaker) and the host answers with one `transfer_result`. The client then
-ends its own call UI **without** sending `hangup`, and does not log the call (the phone's call log has it). The other way round, when
-the user presses "transfer to iPhone" on the phone the host sends `transfer_offer`; a connected client puts the active call on its
+ends its own call UI **without** sending `hangup`, and does not log the call (the phone's call log has it). The other way round, `transfer_offer`
+hands a running call to the client (today nothing on the phone triggers it, since the phone has no call screen of its own; the iPhone's take-over button is planned); a connected client puts the active call on its
 screen (as an answered call under `callId`, its timer counting from `connectedAt`) and replies with `transfer_accept` carrying its `udpPort`, which starts the audio relay
 for that call. A client that cannot take the call simply does not reply. `transfer` is advertised with `audio`.
 
