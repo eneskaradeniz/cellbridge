@@ -2001,6 +2001,16 @@
           }
         }
       }
+    },
+    "Add Call": {
+      "localizations": {
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arama Ekle"
+          }
+        }
+      }
     }
   }
 }

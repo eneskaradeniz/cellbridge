@@ -57,21 +57,10 @@ struct InCallScreen: View {
                         .glassEffect(.regular, in: .capsule)
                         .padding(.top, 8)
                 }
-                VStack(spacing: 14) {
-                    Avatar(name: call.title, size: 112)
-                        .shadow(color: .black.opacity(0.3), radius: 20, y: 8)
-                    Text(call.title)
-                        .font(.largeTitle.weight(.semibold))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                        .minimumScaleFactor(0.6)
-                    status.font(.title3).foregroundStyle(.white.opacity(0.7))
-                }
-                .padding(.top, 72)
-                .padding(.horizontal)
+                if ringing { incomingHeader } else { callHeader }
                 Spacer()
                 GlassEffectContainer(spacing: 4) { // close glass shapes melt into one another: keep the merge distance below the gaps
-                    VStack(spacing: 48) {
+                    VStack(spacing: 36) {
                         if (call.isAnswered || call.isOutgoing) && !call.isEnded { controls } // a call that is still dialing has them too
                         if !call.isEnded { buttons }
                     }
@@ -97,6 +86,40 @@ struct InCallScreen: View {
             typed = ""
         }
         .onChange(of: speakerOn) { _, _ in updateProximity() }
+    }
+
+    /// While the phone rings: the caller in the middle, like the system's incoming call screen.
+    private var incomingHeader: some View {
+        VStack(spacing: 14) {
+            Avatar(name: call.title, size: 112)
+                .shadow(color: .black.opacity(0.3), radius: 20, y: 8)
+            Text(call.title)
+                .font(.largeTitle.weight(.semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.6)
+            status.font(.title3).foregroundStyle(.white.opacity(0.7))
+        }
+        .padding(.top, 72)
+        .padding(.horizontal)
+    }
+
+    /// During a call: the name and the time at the top left, as in the Phone app.
+    private var callHeader: some View {
+        HStack(spacing: 14) {
+            Avatar(name: call.title, size: 56)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(call.title)
+                    .font(.title.weight(.semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                status.font(.title3).foregroundStyle(.white.opacity(0.7))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 24)
+        .padding(.horizontal, 24)
+        .accessibilityElement(children: .combine)
     }
 
     private func updateProximity() { UIDevice.current.isProximityMonitoringEnabled = call.isAnswered && !speakerOn }
@@ -131,7 +154,7 @@ struct InCallScreen: View {
         if keypadOpen {
             keypad.transition(.opacity)
         } else {
-            // Three across, like the Phone app: what the bridge cannot do (hold, add call) is simply not there.
+            // Three across and two down, like the Phone app. "Add Call" is the way into conference calls and stays off until the bridge can.
             Grid(horizontalSpacing: 24, verticalSpacing: 18) {
                 GridRow {
                     toggle(muted ? "mic.slash.fill" : "mic.fill", "Mute", on: muted, action: toggleMute)
@@ -139,6 +162,9 @@ struct InCallScreen: View {
                     toggle(speakerOn ? "speaker.wave.3.fill" : "speaker.fill", "Speaker", on: speakerOn, action: toggleSpeaker)
                 }
                 GridRow {
+                    toggle("plus", "Add Call", on: false) {}
+                        .disabled(true)
+                        .opacity(0.4)
                     VStack(spacing: 8) {
                         RoutePicker()
                             .frame(width: 76, height: 76)
@@ -147,7 +173,6 @@ struct InCallScreen: View {
                     }
                     .accessibilityElement(children: .combine)
                     if let transfer, call.isAnswered { toggle("arrow.left.arrow.right", "To Android", on: false, action: transfer) } else { Color.clear.frame(width: 76, height: 76) }
-                    Color.clear.frame(width: 76, height: 76)
                 }
             }
             .transition(.opacity.combined(with: .scale(scale: 0.9)))

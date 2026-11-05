@@ -126,6 +126,8 @@ struct ThreadView: View {
 
     private var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.canSendSms }
 
+    private static let bottom = "bottom"
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -145,13 +147,17 @@ struct ThreadView: View {
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 8)
+                Color.clear.frame(height: 1).id(Self.bottom) // what "the end" means, even while rows further up are not built yet
             }
+            // Open at the newest text and stay there while the content grows (a text sent, the keyboard, a status line appearing).
             .defaultScrollAnchor(.bottom)
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
             .scrollDismissesKeyboard(.interactively)
+            .onAppear { DispatchQueue.main.async { proxy.scrollTo(Self.bottom, anchor: .bottom) } }
             .onChange(of: conversation?.messages.count) { _, _ in
-                guard let last = conversation?.messages.last else { return }
-                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                withAnimation { proxy.scrollTo(Self.bottom, anchor: .bottom) }
             }
+            .onChange(of: conversation?.last.status) { _, _ in proxy.scrollTo(Self.bottom, anchor: .bottom) }
             .onChange(of: conversation?.unreadCount) { _, unread in
                 if (unread ?? 0) > 0, scenePhase == .active { model.messages.markRead(key: route.key) }
             }
