@@ -10,7 +10,9 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "26.1"
-    sources: [Sources]
+    sources:
+      - path: Sources
+        excludes: [Live, Notify]
     entitlements:
       path: Sources/CellBridge.entitlements
       properties:
@@ -29,11 +31,17 @@ targets:
             CFBundleURLSchemes: [cellbridge]
         UILaunchScreen: {}
         UIBackgroundModes: [audio, voip]
+        NSSupportsLiveActivities: true
         NSLocalNetworkUsageDescription: Talks to the CellBridge host on the local network.
         NSContactsUsageDescription: Shows who is calling or texting and lets you pick a number from your contacts. Contacts stay on this phone.
         NSMicrophoneUsageDescription: Sends your voice to the call on the phone you are bridging.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+    dependencies:
+      - target: CellBridgeLive
+        embed: true
+      - target: CellBridgeNotify
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).cellbridge
@@ -41,6 +49,45 @@ targets:
         CODE_SIGN_IDENTITY: $(SIGN_IDENTITY)
         PROVISIONING_PROFILE_SPECIFIER: $(PROFILE_SPECIFIER)
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+  CellBridgeLive:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "26.1"
+    sources: [Sources/Live]
+    info:
+      path: Sources/Live/Info.plist
+      properties:
+        CFBundleDisplayName: CellBridge Live
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).cellbridge.live
+        CODE_SIGN_STYLE: $(SIGN_STYLE)
+        CODE_SIGN_IDENTITY: $(SIGN_IDENTITY)
+        PROVISIONING_PROFILE_SPECIFIER: $(LIVE_PROFILE_SPECIFIER)
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+  CellBridgeNotify:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "26.1"
+    sources: [Sources/Notify]
+    info:
+      path: Sources/Notify/Info.plist
+      properties:
+        CFBundleDisplayName: CellBridge Notify
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).cellbridge.notify
+        CODE_SIGN_STYLE: $(SIGN_STYLE)
+        CODE_SIGN_IDENTITY: $(SIGN_IDENTITY)
+        PROVISIONING_PROFILE_SPECIFIER: $(NOTIFY_PROFILE_SPECIFIER)
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
   CellBridgeTests:

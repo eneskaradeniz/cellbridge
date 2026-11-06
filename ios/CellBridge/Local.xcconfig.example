@@ -5,3 +5,5 @@ DEVELOPMENT_TEAM = ABCDE12345
 // SIGN_STYLE = Manual
 // SIGN_IDENTITY = Apple Development
 // PROFILE_SPECIFIER = Profile Name
+// LIVE_PROFILE_SPECIFIER = Live Extension Profile Name
+// NOTIFY_PROFILE_SPECIFIER = Notify Extension Profile Name

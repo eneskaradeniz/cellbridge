@@ -55,6 +55,8 @@
 	<string>Talks to the CellBridge host on the local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Sends your voice to the call on the phone you are bridging.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

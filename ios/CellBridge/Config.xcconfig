@@ -7,6 +7,9 @@ DEVELOPMENT_TEAM =
 SIGN_STYLE = Automatic
 SIGN_IDENTITY = Apple Development
 PROFILE_SPECIFIER =
+// Extension profiles (Manual signing): names of the installed Live Activity and notification-service profiles.
+LIVE_PROFILE_SPECIFIER =
+NOTIFY_PROFILE_SPECIFIER =
 // Push (PushKit) needs a team with the Push Notifications capability; the profile's aps-environment must match.
 APS_ENVIRONMENT[config=Debug] = development
 APS_ENVIRONMENT[config=Release] = production
