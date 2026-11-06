@@ -48,7 +48,11 @@ class PushNotifier @Inject constructor(
 
     override fun available() = credentials.load() != null
 
-    override fun register(target: PushTarget) = store.save(target)
+    override fun register(target: PushTarget) {
+        // The live token travels in its own message and may have come first: a fresh push_token must not forget it.
+        val kept = store.load()?.liveStartToken
+        store.save(if (target.liveStartToken == null && kept != null) target.withLiveStart(kept) else target)
+    }
 
     /** The iPhone has registered its push token. */
     fun hasToken() = store.load() != null
@@ -117,7 +121,7 @@ class PushNotifier @Inject constructor(
     }
 
     /** One APNs request; null when there is no key to sign it with. A refused provider token is dropped so the next call signs a fresh one. */
-    private suspend fun post(
+    internal suspend fun post(
         target: PushTarget, deviceToken: String, type: String, topic: String, extra: Map<String, String>, expirySeconds: Long, body: ByteArray,
     ): Int? {
         val creds = credentials.load() ?: return null

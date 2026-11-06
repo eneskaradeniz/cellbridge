@@ -19,14 +19,14 @@ final class PhoneCallTests: XCTestCase {
         XCTAssertTrue(calls.isEmpty)
     }
 
-    func testOnlyConnectedCallsStillOnThePhoneAndNotKnownAreTakeable() {
+    func testOnlyActiveCallsStillOnThePhoneAndNotKnownAreTakeable() {
         func call(_ id: String, _ status: PhoneCall.Status, onClient: Bool = false) -> PhoneCall {
             PhoneCall(callId: id, number: nil, outgoing: false, status: status, connectedAt: nil, onClient: onClient)
         }
         let all = [call("ringing", .ringing), call("dialing", .dialing), call("active", .active), call("held", .holding),
                    call("carried", .active, onClient: true), call("mine", .active)]
         let takeable = PhoneCall.takeable(all, knows: { $0 == "mine" })
-        XCTAssertEqual(takeable.map(\.callId), ["active", "held"])
+        XCTAssertEqual(takeable.map(\.callId), ["active"]) // a held call cannot be resumed from here, so it stays on the phone
     }
 
     func testClientMessagesMatchTheProtocol() throws {

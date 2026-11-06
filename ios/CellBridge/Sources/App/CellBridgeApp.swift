@@ -69,12 +69,14 @@ struct CellBridgeApp: App {
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 model.resumeIfNeeded()
+                model.runPendingTakeOver()
                 Task { await model.permissions.refresh() }
             }
             #if DEBUG
             .onAppear {
                 if let start = Sample.startTab { model.tab = start }
                 if let number = Sample.openNumber { model.openThread(number) }
+                if let status = Sample.live { Sample.startLiveActivity(status: status) }
             }
             .overlay { if let call = Sample.activeCall() { InCallScreen(call: call, muted: false, speakerOn: true, toggleMute: {}, toggleSpeaker: {}, end: {}, answer: {}) } }
             #endif
@@ -85,6 +87,12 @@ struct CellBridgeApp: App {
     private func handle(_ url: URL) {
         if url.scheme == "cellbridge", url.host == "pair" { // the QR code scanned with the system Camera app
             _ = model.handleScan(url.absoluteString)
+            return
+        }
+        if url.scheme == "cellbridge", url.host == "takeover" { // the Live Activity's button
+            if let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "call" })?.value, !id.isEmpty {
+                model.takeOver(callId: id)
+            }
             return
         }
         guard url.scheme == "cellbridge",

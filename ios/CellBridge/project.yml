@@ -57,7 +57,7 @@ targets:
     type: app-extension
     platform: iOS
     deploymentTarget: "26.1"
-    sources: [Sources/Live]
+    sources: [Sources/Live, Sources/Shared]
     info:
       path: Sources/Live/Info.plist
       properties:

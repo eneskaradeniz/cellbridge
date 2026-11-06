@@ -110,7 +110,7 @@ class CallAudioBridge @Inject constructor(
                 _bridged.update { it - id }
                 if (peers.remove(id) != null) stopAfterGrace()
             }
-            is CallEvent.Ringing -> Unit
+            is CallEvent.Ringing, is CallEvent.Changed -> Unit
         }
     }
 

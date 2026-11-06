@@ -16,9 +16,13 @@ import javax.inject.Singleton
 class PushTarget(
     val token: String, val sandbox: Boolean, val topic: String, val key: ByteArray,
     val alertToken: String? = null, val alertTopic: String? = null,
+    /** What ActivityKit gave the client for starting a Live Activity by push. */
+    val liveStartToken: String? = null,
 ) {
     /** The text token is gone (Apple said so); calls still work. */
-    fun withoutAlert() = PushTarget(token, sandbox, topic, key)
+    fun withoutAlert() = PushTarget(token, sandbox, topic, key, liveStartToken = liveStartToken)
+
+    fun withLiveStart(token: String?) = PushTarget(this.token, sandbox, topic, key, alertToken, alertTopic, token)
 }
 
 interface PushStore {
@@ -30,7 +34,7 @@ interface PushStore {
 @Serializable
 private class Stored(
     val token: String, val sandbox: Boolean, val topic: String, val key: String,
-    val alertToken: String? = null, val alertTopic: String? = null,
+    val alertToken: String? = null, val alertTopic: String? = null, val liveStartToken: String? = null,
 )
 
 /** One small file in the app's private storage, like the daemon token. */
@@ -41,12 +45,12 @@ class FilePushStore @Inject constructor(@ApplicationContext context: Context) : 
     @Synchronized
     override fun load(): PushTarget? = runCatching {
         val s = Json.decodeFromString<Stored>(file.readText())
-        PushTarget(s.token, s.sandbox, s.topic, Base64.getDecoder().decode(s.key), s.alertToken, s.alertTopic)
+        PushTarget(s.token, s.sandbox, s.topic, Base64.getDecoder().decode(s.key), s.alertToken, s.alertTopic, s.liveStartToken)
     }.getOrNull()
 
     @Synchronized
     override fun save(target: PushTarget) {
-        file.writeText(Json.encodeToString(Stored.serializer(), Stored(target.token, target.sandbox, target.topic, Base64.getEncoder().encodeToString(target.key), target.alertToken, target.alertTopic)))
+        file.writeText(Json.encodeToString(Stored.serializer(), Stored(target.token, target.sandbox, target.topic, Base64.getEncoder().encodeToString(target.key), target.alertToken, target.alertTopic, target.liveStartToken)))
         file.setReadable(false, false)
         file.setReadable(true, true)
         file.setWritable(false, false)

@@ -1,9 +1,11 @@
 #if DEBUG
+import ActivityKit
 import Foundation
 
 /// Debug-only launch switches for looking at the screens without a phone: `-sampleData YES` fills them with made-up
 /// contacts, texts and calls (kept in a temporary folder), `-sampleTab 2` opens a tab, `-sampleThread YES` opens the
-/// first conversation, `-sampleCall ringing|talking|calling` shows the call screen.
+/// first conversation, `-sampleCall ringing|talking|calling` shows the call screen, `-sampleLive active|holding` starts a
+/// Live Activity of a call on the phone from inside the app (to tell a widget problem from a push problem).
 enum Sample {
     private static let defaults = UserDefaults.standard
 
@@ -12,6 +14,19 @@ enum Sample {
     static var opensThread: Bool { defaults.bool(forKey: "sampleThread") }
     static var openNumber: String? { defaults.string(forKey: "sampleOpen") }
     static var call: String? { defaults.string(forKey: "sampleCall") }
+    static var live: String? { defaults.string(forKey: "sampleLive") }
+
+    @MainActor static func startLiveActivity(status: String) {
+        let number = "+905321112233"
+        let sealed = (try? PushSeal.seal(PushSeal.LiveCall(number: number), key: PushKeyStore.key())) ?? ""
+        let state = CallActivityAttributes.ContentState(status: status, connectedAtMs: Int64(Date().timeIntervalSince1970 * 1000) - 75_000, outgoing: true, sealed: sealed, name: nil)
+        do {
+            let activity = try Activity.request(attributes: CallActivityAttributes(callId: "sample"), content: .init(state: state, staleDate: nil))
+            AppModel.current?.adoptLiveActivity(activity) // as the system hands a pushed one to `activityUpdates`
+        } catch {
+            NSLog("sample live activity failed: \(error)")
+        }
+    }
 
     static let contacts: [Contact] = [
         Contact(id: "1", name: "Ayşe Yılmaz", numbers: [LabeledNumber(label: "mobile", value: "+90 532 111 22 33")]),

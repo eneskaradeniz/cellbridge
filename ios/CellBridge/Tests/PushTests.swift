@@ -83,4 +83,40 @@ final class PushTests: XCTestCase {
         XCTAssertEqual(PushKeyStore.key(), first)
         XCTAssertEqual(PushKeyStore.existing(), first)
     }
+
+    // MARK: Live Activity
+
+    func testALiveCallBoxRoundTripsWithAndWithoutANumber() throws {
+        let with = PushSeal.LiveCall(number: "+905551112233")
+        XCTAssertEqual(PushSeal.openLive(try PushSeal.seal(with, key: key), key: key), with)
+        let without = PushSeal.LiveCall(number: nil)
+        XCTAssertEqual(PushSeal.openLive(try PushSeal.seal(without, key: key), key: key), without)
+        XCTAssertNil(PushSeal.openLive(try PushSeal.seal(with, key: key), key: Data(repeating: 9, count: 32)))
+    }
+
+    func testTheHostsContentStateDecodes() throws {
+        // The JSON the Android host puts in `content-state` (LivePushNotifierTest): the two sides must agree on the names and types.
+        let json = Data(#"{"status":"holding","connectedAtMs":1699999000000,"outgoing":true,"sealed":"abc"}"#.utf8)
+        let state = try JSONDecoder().decode(CallActivityAttributes.ContentState.self, from: json)
+        XCTAssertTrue(state.isHolding)
+        XCTAssertEqual(state.connectedAt.timeIntervalSince1970, 1_699_999_000, accuracy: 0.001)
+        XCTAssertTrue(state.outgoing)
+        XCTAssertEqual(state.sealed, "abc")
+        XCTAssertNil(state.name) // the host never sends it; the app adds it
+    }
+
+    func testTheTakeOverLinkCarriesTheCallId() throws {
+        let url = CallActivityAttributes(callId: "c 1&2").takeOverURL
+        let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(url.scheme, "cellbridge")
+        XCTAssertEqual(url.host, "takeover")
+        XCTAssertEqual(items.first { $0.name == "call" }?.value, "c 1&2")
+    }
+
+    func testLiveTokenMessagesMatchTheProtocol() throws {
+        let start = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(ClientMessage.liveStartToken(token: "ab").encoded().utf8)) as? [String: String])
+        XCTAssertEqual(start, ["type": "live_start_token", "token": "ab"])
+        let update = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(ClientMessage.liveUpdateToken(callId: "c1", token: "cd").encoded().utf8)) as? [String: String])
+        XCTAssertEqual(update, ["type": "live_update_token", "callId": "c1", "token": "cd"])
+    }
 }

@@ -12,6 +12,9 @@ import com.cellbridge.domain.model.SendResult
 import com.cellbridge.discovery.ServiceAdvertiser
 import com.cellbridge.history.HistorySource
 import com.cellbridge.history.NoHistory
+import com.cellbridge.push.LivePushNotifier
+import com.cellbridge.push.LiveRegistry
+import com.cellbridge.push.NoLive
 import com.cellbridge.push.NoPush
 import com.cellbridge.push.PushNotifier
 import com.cellbridge.push.PushRegistry
@@ -89,6 +92,7 @@ class ControlServer @Inject constructor(
     private val pairingToken: PairingToken,
     private val history: HistorySource,
     private val push: PushNotifier,
+    private val live: LivePushNotifier,
     private val presence: ClientPresence,
     private val transfers: TransferController,
     private val advertiser: ServiceAdvertiser,
@@ -116,7 +120,7 @@ class ControlServer @Inject constructor(
                 CIO,
                 rootConfig = serverConfig {
                     parentCoroutineContext = onFailure
-                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, presence = presence, transfers = transfers, phoneStatus = phoneStatus, tones = tones) }
+                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, live = live, presence = presence, transfers = transfers, phoneStatus = phoneStatus, tones = tones) }
                 },
                 configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
             ).also { server ->
@@ -125,7 +129,7 @@ class ControlServer @Inject constructor(
             }
         }.onSuccess {
             engine = it
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { audio.start(it); push.start(it) }
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { audio.start(it); push.start(it); live.start(it, audio.bridged) }
             advertiser.start(CONTROL_PORT)
             _running.value = true
         }.onFailure { Log.e(TAG, "control server failed to start", it) }
@@ -149,7 +153,7 @@ class ControlServer @Inject constructor(
         if (audio.isAvailable()) add("audio")
         if (history.callsAvailable()) add("calllog")
         if (sms.isAvailable()) add("smshistory")
-        if (push.available()) add("push")
+        if (push.available()) { add("push"); add("live") }
         if (audio.isAvailable()) add("transfer")
         add("status")
     }
@@ -176,6 +180,7 @@ fun Application.controlModule(
     capabilitiesRecheck: Duration = CAPABILITIES_RECHECK,
     history: HistorySource = NoHistory,
     push: PushRegistry = NoPush,
+    live: LiveRegistry = NoLive,
     presence: ClientPresence = ClientPresence(),
     transfers: TransferController = TransferController(presence, audio),
     phoneStatus: PhoneStatusSource = NoPhoneStatus,
@@ -187,7 +192,7 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, capabilitiesRecheck, history, push, presence, transfers, phoneStatus, tones).run() }
+        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, capabilitiesRecheck, history, push, live, presence, transfers, phoneStatus, tones).run() }
     }
 }
 
@@ -211,6 +216,7 @@ private class Session(
     private val capabilitiesRecheck: Duration,
     private val history: HistorySource,
     private val push: PushRegistry,
+    private val live: LiveRegistry,
     private val presence: ClientPresence,
     private val transfers: TransferController,
     private val phoneStatus: PhoneStatusSource,
@@ -377,7 +383,7 @@ private class Session(
             }
             is ClientMessage.TransferRequest -> {
                 val call = feed.liveCalls().firstOrNull { it.id == message.callId }
-                val takeable = call != null && (call.status == CallStatus.ACTIVE || call.status == CallStatus.HOLDING)
+                val takeable = call != null && call.status == CallStatus.ACTIVE // a held call stays: the client cannot resume it
                 if (!takeable) return send(ServerMessage.Error("unknown_call", message.callId))
                 if (message.callId !in audio.bridged.value) transfers.toIphone(message.callId) // already there: nothing to hand over
                 return
@@ -434,6 +440,16 @@ private class Session(
                 send(ServerMessage.SmsHistory(items.map { SmsHistoryItem(it.id, it.peer, it.body, it.timestamp, if (it.outgoing) "out" else "in") }))
                 return
             }
+            is ClientMessage.LiveStartToken -> {
+                if (!push.available() || message.token.length < 32) return send(ServerMessage.Error("bad_message"))
+                live.startToken(message.token)
+                return
+            }
+            is ClientMessage.LiveUpdateToken -> {
+                if (!push.available() || message.token.length < 32 || message.callId.isBlank()) return send(ServerMessage.Error("bad_message"))
+                live.updateToken(message.callId, message.token)
+                return
+            }
             is ClientMessage.PushToken -> {
                 val key = runCatching { java.util.Base64.getDecoder().decode(message.key) }.getOrNull()
                 if (!push.available() || key?.size != 32 || message.token.length < 32 || message.env !in setOf("sandbox", "production")) {
@@ -477,7 +493,7 @@ private fun CallEvent.toMessage(): ServerMessage? = when (this) {
     is CallEvent.Ringing -> ServerMessage.Ring(call.id, call.number)
     is CallEvent.Ended -> ServerMessage.Ended(call.id, reason = reason?.name?.lowercase())
     is CallEvent.Answered -> ServerMessage.Answered(call.id)
-    is CallEvent.Dialing -> null
+    is CallEvent.Dialing, is CallEvent.Changed -> null
 }
 
 private fun ToneEvent.toMessage(): ServerMessage.Tone = when (this) {

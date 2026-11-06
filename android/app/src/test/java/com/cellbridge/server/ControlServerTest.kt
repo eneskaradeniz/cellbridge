@@ -103,6 +103,13 @@ class ControlServerTest {
     }
 
     private val push = FakePush()
+    private class FakeLive : com.cellbridge.push.LiveRegistry {
+        var start: String? = null
+        val updates = mutableListOf<Pair<String, String>>()
+        override fun startToken(token: String) { start = token }
+        override suspend fun updateToken(callId: String, token: String) { updates += callId to token }
+    }
+    private val live = FakeLive()
     private val presence = ClientPresence()
     private val tones = com.cellbridge.audio.ToneEvents()
     private val history = FakeHistory()
@@ -129,6 +136,7 @@ class ControlServerTest {
                     capabilitiesRecheck = 50.milliseconds,
                     history = historySource,
                     push = push,
+                    live = live,
                     presence = presence,
                     transfers = transfers,
                     phoneStatus = status,
@@ -521,6 +529,22 @@ class ControlServerTest {
     }
 
     @Test
+    fun `live tokens reach the host and bad ones are refused`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"live_start_token","token":"${"ab".repeat(32)}"}""")
+            say("""{"type":"live_update_token","callId":"c1","token":"${"cd".repeat(32)}"}""")
+            eventually { live.updates.isNotEmpty() }
+            assertEquals("ab".repeat(32), live.start)
+            assertEquals(listOf("c1" to "cd".repeat(32)), live.updates)
+            say("""{"type":"live_start_token","token":"short"}""")
+            assertEquals("bad_message", hear().str("code"))
+            say("""{"type":"live_update_token","callId":"","token":"${"cd".repeat(32)}"}""")
+            assertEquals("bad_message", hear().str("code"))
+        }
+    }
+
+    @Test
     fun `a malformed push token is refused and not stored`() = withServer { connect ->
         connect {
             login()
@@ -645,6 +669,16 @@ class ControlServerTest {
             val offer = hear()
             assertEquals("transfer_offer", offer.str("type"))
             assertEquals("c1", offer.str("callId"))
+        }
+    }
+
+    @Test
+    fun `a held call cannot be taken over, because the client cannot resume it`() = withServer { connect ->
+        feed.live = listOf(activeCall.copy(status = CallStatus.HOLDING))
+        connect {
+            login()
+            say("""{"type":"transfer_request","callId":"c1"}""")
+            assertEquals("unknown_call", hear().str("code"))
         }
     }
 

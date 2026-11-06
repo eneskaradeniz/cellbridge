@@ -57,11 +57,11 @@ class CallTrackerTest {
     }
 
     @Test
-    fun `hold and resume after answering produce no event`() {
+    fun `hold and resume after answering are reported as changes, not as a second answer`() {
         tracker.onUpdate(incoming(RINGING))
         tracker.onUpdate(incoming(ACTIVE))
-        assertNull(tracker.onUpdate(incoming(HOLDING)))
-        assertNull(tracker.onUpdate(incoming(ACTIVE)))
+        assertEquals(CallEvent.Changed(incoming(HOLDING)), tracker.onUpdate(incoming(HOLDING)))
+        assertEquals(CallEvent.Changed(incoming(ACTIVE)), tracker.onUpdate(incoming(ACTIVE)))
         assertEquals(CallEvent.Ended(incoming(DISCONNECTED), reason = null), tracker.onUpdate(incoming(DISCONNECTED)))
     }
 

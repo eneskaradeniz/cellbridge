@@ -49,7 +49,7 @@ class CallTracker {
             known.answered = true
             return CallEvent.Answered(call)
         }
-        return null
+        return CallEvent.Changed(call)
     }
 
     private fun endReason(call: CallSnapshot, answered: Boolean): EndReason? = when {

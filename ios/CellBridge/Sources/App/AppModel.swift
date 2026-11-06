@@ -1,7 +1,9 @@
+import ActivityKit
 import AVFoundation
 import Combine
 import Contacts
 import Foundation
+import UIKit
 
 /// Wires the pieces together and owns the settings the user edits on the main screen.
 @MainActor
@@ -31,6 +33,7 @@ final class AppModel: ObservableObject {
     private let contactProvider = ContactStoreProvider()
     let permissions = PermissionCenter()
     private let push = PushRegistry()
+    private let liveTokens = LiveActivityTokens()
     /// The first-run sheet (pairing and permissions) is on screen.
     @Published var showSetup = false
     /// Why the last pull to refresh had nothing to refresh from; cleared once the phone is reached.
@@ -166,6 +169,10 @@ final class AppModel: ObservableObject {
             if case .connected(let capabilities) = self?.client.state { self?.sendPushToken(offered: capabilities) }
         }
         AppDelegate.onAlertToken = { [weak self] in self?.push.onToken?() }
+        liveTokens.send = { [weak self] in self?.client.send($0) }
+        liveTokens.log = { [weak self] in self?.log($0) }
+        liveTokens.displayName = { [weak self] in self?.displayName(for: $0) ?? $0 }
+        liveTokens.start()
         push.start() // at launch, always: iOS only delivers a push to a closed app that registers again as it starts
         permissions.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
         refreshContacts()
@@ -294,7 +301,10 @@ final class AppModel: ObservableObject {
         #endif
         contactsAuthorized = contactProvider.isAuthorized
         guard contactsAuthorized else { return }
-        Task { contactBook = ContactBook(contacts: await contactProvider.load()) }
+        Task {
+            contactBook = ContactBook(contacts: await contactProvider.load())
+            liveTokens.refreshNames()
+        }
     }
 
     /// A pairing code is stored: the QR code has been scanned (or the code typed).
@@ -490,6 +500,7 @@ final class AppModel: ObservableObject {
         case .helloAck(_, let capabilities):
             markSynced()
             sendPushToken(offered: capabilities)
+            if capabilities.contains("live") { liveTokens.resend() }
             if capabilities.contains("transfer") { client.send(.callStateRequest) }
             messages.resendPending()
             if capabilities.contains("calllog") { requestCallLog() }
@@ -499,6 +510,7 @@ final class AppModel: ObservableObject {
             }
         case .callState(let calls):
             phoneCalls = calls
+            runPendingTakeOver()
         case .callLog(let entries):
             let added = (try? callLog.merge(host: entries)) ?? 0
             if let newest = entries.compactMap({ Int($0.id) }).max() { callLogCursor = max(callLogCursor ?? 0, newest) } else if callLogCursor == nil { callLogCursor = 0 }
@@ -517,6 +529,32 @@ final class AppModel: ObservableObject {
 
     /// Calls that are running on the phone (answered or dialed in its Phone app, or handed to it) and that this iPhone could take over.
     var callsOnPhone: [PhoneCall] { PhoneCall.takeable(phoneCalls, knows: calls.knows(callId:)) }
+
+    #if DEBUG
+    func adoptLiveActivity(_ activity: Activity<CallActivityAttributes>) { liveTokens.adopt(activity) }
+    #endif
+
+    /// The Live Activity's button opened the app for this call. The app is only `inactive` for the first moments of a launch, and a call taken
+    /// over then is reported as an incoming one that must be answered; so it waits until the app is in front, and until the phone's calls are known.
+    func takeOver(callId: String) {
+        pendingTakeOver = callId
+        resumeIfNeeded()
+        runPendingTakeOver()
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            if self?.pendingTakeOver == callId { self?.pendingTakeOver = nil } // the call is gone or the phone is out of reach
+        }
+    }
+
+    /// Takes over the call the Live Activity asked for, as soon as the app is in front and the call is known.
+    func runPendingTakeOver() {
+        guard let id = pendingTakeOver, UIApplication.shared.applicationState == .active,
+              let call = callsOnPhone.first(where: { $0.callId == id }) else { return }
+        pendingTakeOver = nil
+        takeOver(call)
+    }
+
+    private var pendingTakeOver: String?
 
     /// "Take over": the phone offers the call back (`transfer_offer`), which the call coordinator answers like any hand-over.
     func takeOver(_ call: PhoneCall) {

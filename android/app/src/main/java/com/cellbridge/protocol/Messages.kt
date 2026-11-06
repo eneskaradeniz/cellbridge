@@ -60,6 +60,12 @@ sealed interface ClientMessage {
     @Serializable @SerialName("sms_history_request")
     data class SmsHistoryRequest(val since: Long? = null) : ClientMessage
 
+    @Serializable @SerialName("live_start_token")
+    data class LiveStartToken(val token: String) : ClientMessage
+
+    @Serializable @SerialName("live_update_token")
+    data class LiveUpdateToken(val callId: String, val token: String) : ClientMessage
+
     @Serializable @SerialName("push_token")
     data class PushToken(
         val token: String, val env: String, val topic: String, val key: String,

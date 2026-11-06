@@ -31,6 +31,9 @@ sealed interface CallEvent {
     data class Dialing(override val call: CallSnapshot) : CallEvent
     data class Answered(override val call: CallSnapshot) : CallEvent
 
+    /** The status of a known call changed in a way no other event says: held, resumed. */
+    data class Changed(override val call: CallSnapshot) : CallEvent
+
     /** [reason] is null for a call that was answered (or an outgoing one). */
     data class Ended(override val call: CallSnapshot, val reason: EndReason?) : CallEvent
 }

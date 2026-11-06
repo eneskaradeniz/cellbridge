@@ -17,7 +17,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | type | dir | fields |
 |---|---|---|
 | `hello` | iOS -> host | `version` (int, currently 1), `token` |
-| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `transfer`, `status`, `conference` (draft)) |
+| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `live`, `transfer`, `status`, `conference` (draft)) |
 | `call_list` | host -> iOS | `callIds` (every call that is still live) |
 | `capabilities` | host -> iOS | `capabilities` (the full list again, sent when it changes) |
 | `tone` | host -> iOS | `action` (`start`/`stop`), `kind?` (`generator`/`media`), `id?` (ToneGenerator constant), `name?` (media tone) |
@@ -52,6 +52,8 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `call_log` | host -> iOS | `entries`: `id`, `number`, `name?`, `kind`, `ts`, `duration` |
 | `sms_history_request` | iOS -> host | `since?` (ms since epoch) |
 | `sms_history` | host -> iOS | `items`: `id`, `peer`, `body`, `ts`, `dir` |
+| `live_start_token` | iOS -> host | `token` (hex) |
+| `live_update_token` | iOS -> host | `callId`, `token` (hex) |
 | `push_token` | iOS -> host | `token` (hex), `env` (`sandbox`/`production`), `topic`, `key` (base64, 32 bytes), `alert_token?` (hex), `alert_topic?` |
 
 `audio` is advertised only when the root audio daemon is reachable; without it the host runs in control-only mode
@@ -102,8 +104,9 @@ Seeing and taking the phone's calls: a call can also start on the phone itself (
 clients never get it); the host answers at once with `call_state`, the phone's live calls, and sends a fresh `call_state` whenever a call
 starts, changes or ends, or its audio moves to or from a client (`onClient` says the client's relay carries it). `connectedAt` is milliseconds
 since epoch and absent until the call connects. The client lists the calls with `onClient` false that it does not know itself, and
-`transfer_request` (`callId`) asks the host to take one over: the host answers with the `transfer_offer` above for an `active` or `holding` call
-that is not already on the client, and with `error` `unknown_call` otherwise. The rest is the `transfer_offer` / `transfer_accept` exchange.
+`transfer_request` (`callId`) asks the host to take one over: the host answers with the `transfer_offer` above for an `active` call
+that is not already on the client, and with `error` `unknown_call` otherwise. A `holding` call cannot be taken over: the client has no way to resume it,
+so it stays on the phone until the phone's user resumes it. The rest is the `transfer_offer` / `transfer_accept` exchange.
 Asking for a call that is `ringing` or `dialing` is an error: a ringing call already rings on the client (`ring`).
 
 Outgoing calls: `dial` is answered by exactly one `dial_result` with the same `clientId`. On `ok:true` the call exists on the host
@@ -172,6 +175,24 @@ same box as for calls (same key and context string) around `{"id":...,"from":...
 Apple therefore sees neither number nor text. The client's notification service extension opens the box and replaces the generic
 "New message" with sender and text; if it cannot, the generic notice stays. The client remembers the ids it has shown this way and
 does not notify them again when the same text is replayed after a reconnect (`sms` / `sms_history` stay lossless; only the notice is skipped).
+
+Live Activity (lock screen and Dynamic Island) for a call that runs on the phone: iOS lets only a push start a Live Activity while the app
+is in the background, so the host does it. `live` is advertised with `push`. The client sends `live_start_token` (the token ActivityKit gives
+for starting an activity by push) after every `hello_ack`, and `live_update_token` (`callId` and the push token of that call's activity) as
+soon as ActivityKit has made one; the host keeps the start token with the push target and the update tokens in memory only. The host shows
+every call that is `active` or `holding` (the Take over button only while `active`), is not relayed to a client (`onClient` false) and is therefore on the phone: it posts `start` when
+the call enters that set, `update` when its status changes and `end` when it leaves (hung up, or taken over by a client). APNs headers:
+`apns-push-type: liveactivity`, `apns-topic: <bundle id>.push-type.liveactivity` (the bundle id is `alert_topic`), priority 10.
+`update` and `end` need the call's update token: until it arrives the host holds them back and sends them when it does (an activity that
+never reports a token ends by itself at its `stale-date`, 4 hours after the start). The body is
+`{"aps": {"timestamp": s, "event": "start"|"update"|"end", "content-state": {...}, "stale-date": s, "dismissal-date": s (end only),
+"attributes-type": "CallActivityAttributes", "attributes": {"callId": ...}, "alert": {"title": "CellBridge", "body": "On the phone", "loc-key": "On the phone"}}}` (the last three only for `start`; ActivityKit drops a start whose alert lacks a title or a body). `content-state` is
+`{"status": "active"|"holding", "connectedAtMs": ms, "outgoing": bool, "sealed": "<sealed>"}` where `sealed` is the usual box around
+`{"number": ...}` (absent for a private caller); only the status and the connect time, which the timer needs, travel in clear. iOS gives the process that draws a
+Live Activity no Keychain, so the widget cannot open the box: the app can (the system wakes it for a push-started activity), and writes the
+caller's contact name, or the number, into the state's `name`; a later push replaces the state without `name`, so the app adds it again
+whenever it runs and sees an update. Until then the card says only "On the phone". The activity's "Take over" button opens `cellbridge://takeover?call=<callId>`;
+the app answers with `transfer_request` once it is connected.
 
 Keep-alive: WebSocket ping every 10 s; client reconnects after 2 s.
 

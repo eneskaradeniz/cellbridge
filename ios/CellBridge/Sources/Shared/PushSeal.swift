@@ -18,6 +18,11 @@ enum PushSeal {
         let date: Date
     }
 
+    /// The caller of a call shown in a Live Activity; the number is absent for a private caller.
+    struct LiveCall: Equatable {
+        let number: String?
+    }
+
     private static let context = Data("cellbridge-push-v1".utf8)
 
     private static func plain(_ sealed: String, key: Data) -> [String: Any]? {
@@ -42,6 +47,12 @@ enum PushSeal {
         return Text(id: id, from: from, body: body, date: Date(timeIntervalSince1970: millis / 1000))
     }
 
+    /// Nil when the box is damaged or was sealed under another key.
+    static func openLive(_ sealed: String, key: Data) -> LiveCall? {
+        guard let object = plain(sealed, key: key) else { return nil }
+        return LiveCall(number: (object["number"] as? String).flatMap { $0.isEmpty ? nil : $0 })
+    }
+
     /// Only the tests seal (the host does it in production).
     static func seal(_ call: Call, key: Data, nonce: AES.GCM.Nonce = AES.GCM.Nonce()) throws -> String {
         var object: [String: Any] = ["callId": call.callId]
@@ -52,6 +63,10 @@ enum PushSeal {
 
     static func seal(_ text: Text, key: Data, nonce: AES.GCM.Nonce = AES.GCM.Nonce()) throws -> String {
         try seal(["id": text.id, "from": text.from, "body": text.body, "ts": Int64(text.date.timeIntervalSince1970 * 1000)], key: key, nonce: nonce)
+    }
+
+    static func seal(_ call: LiveCall, key: Data, nonce: AES.GCM.Nonce = AES.GCM.Nonce()) throws -> String {
+        try seal(call.number.map { ["number": $0] } ?? [:], key: key, nonce: nonce)
     }
 
     private static func seal(_ object: [String: Any], key: Data, nonce: AES.GCM.Nonce) throws -> String {

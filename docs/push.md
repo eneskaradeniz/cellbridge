@@ -47,6 +47,12 @@ See docs/protocol.md ("Waking the client for a text"). The host sends an ordinar
 `CellBridgeNotify` notification service extension opens it with the key in the shared Keychain group and shows sender and text.
 Both phones need an internet connection at that moment. The iPhone has no SIM, so it must be on some Wi-Fi.
 
+## Live Activity for calls on the phone
+
+See docs/protocol.md ("Live Activity"). The host starts, updates and ends a Live Activity by `liveactivity` push for calls that run on
+the phone itself (stock Phone app, or handed back to it); the `CellBridgeLive` extension draws it with a "Take over" button.
+Needs *Live Activities* enabled for CellBridge in iOS Settings, and both phones online at that moment.
+
 ## Still to do
 
 - Missed calls as visible notifications while the app is closed.
