@@ -1,5 +1,6 @@
 import ActivityKit
 import Foundation
+import UIKit
 
 /// Tells the host the tokens it needs to run the Live Activity of a call on the phone (docs/protocol.md "Live Activity"): the one for
 /// starting an activity by push, which only a push may do while the app is in the background, and, per activity, the one for updating it.
@@ -10,6 +11,10 @@ final class LiveActivityTokens {
     var log: ((String) -> Void)?
     /// The name to show for a number (contact name, else the number as the app prints it).
     var displayName: ((String) -> String)?
+    /// Brings the link to the host up (the app is woken for a push-started activity with the link down).
+    var wake: (() -> Void)?
+    var isConnected: (() -> Bool)?
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var startToken: String?
     private var updateTokens: [String: String] = [:]
     private var observed = Set<String>()
@@ -34,6 +39,37 @@ final class LiveActivityTokens {
     func resend() {
         sendStartToken()
         for (callId, token) in updateTokens { send?(.liveUpdateToken(callId: callId, token: token)) }
+        if !updateTokens.isEmpty { releaseBackgroundTime() }
+    }
+
+    /// The host can end the activity only once it has this call's update token, and the token exists only after the system has woken the app
+    /// for a push-started activity: so the app asks for a little time in the background to bring the link up and hand the token over.
+    private func holdBackgroundTime() {
+        guard backgroundTask == .invalid else { return }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "live-activity-token") { [weak self] in self?.releaseBackgroundTime() }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(25))
+            self?.releaseBackgroundTime()
+        }
+    }
+
+    private func releaseBackgroundTime() {
+        guard backgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTask)
+        backgroundTask = .invalid
+    }
+
+    /// The host lists the calls on the phone: an activity for any other call has no reason to stay (its end push may never have gotten through).
+    func endStale(liveCallIds: Set<String>) {
+        for activity in activities.values {
+            let id = activity.attributes.callId
+            #if DEBUG
+            if id == "sample" { continue }
+            #endif
+            guard !liveCallIds.contains(id) else { continue }
+            log?("live activity for call \(id) outlived its call: ending it")
+            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        }
     }
 
     private func sendStartToken() {
@@ -46,6 +82,10 @@ final class LiveActivityTokens {
     private func observe(_ activity: Activity<CallActivityAttributes>) {
         guard observed.insert(activity.id).inserted else { return }
         activities[activity.id] = activity
+        if UIApplication.shared.applicationState != .active {
+            holdBackgroundTime()
+            wake?()
+        }
         let callId = activity.attributes.callId
         log?("live activity for call \(callId) is on screen")
         Task { [weak self] in
@@ -53,6 +93,7 @@ final class LiveActivityTokens {
                 let token = Self.hex(data)
                 self?.updateTokens[callId] = token
                 self?.send?(.liveUpdateToken(callId: callId, token: token))
+                if self?.isConnected?() == true { self?.releaseBackgroundTime() }
             }
         }
         // A push-started activity carries the number sealed: this process can open it, the widget cannot. A later push (hold, resume)

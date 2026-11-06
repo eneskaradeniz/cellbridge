@@ -135,7 +135,8 @@ class LivePushNotifier @Inject constructor(
         }
         val body = JsonObject(mapOf("aps" to aps)).toString().toByteArray()
         val status = apns.post(target, deviceToken, "liveactivity", topic, emptyMap(), 60, body)
-        Log.i(TAG, "live $event for call ${call.id}: HTTP $status") // never log a token, the number or the key
+        // Never log a token, the number or the key. How long ago Telecom says the call connected tells whether the timer is right.
+        Log.i(TAG, "live $event for call ${call.id}: HTTP $status, connected ${if (call.connectedAtMs > 0) (now - call.connectedAtMs) / 1000 else -1} s ago")
         return status
     }
 

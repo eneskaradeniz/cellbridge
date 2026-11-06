@@ -171,6 +171,8 @@ final class AppModel: ObservableObject {
         AppDelegate.onAlertToken = { [weak self] in self?.push.onToken?() }
         liveTokens.send = { [weak self] in self?.client.send($0) }
         liveTokens.log = { [weak self] in self?.log($0) }
+        liveTokens.wake = { [weak self] in self?.resumeIfNeeded() }
+        liveTokens.isConnected = { [weak self] in if case .connected = self?.client.state { return true } else { return false } }
         liveTokens.displayName = { [weak self] in self?.displayName(for: $0) ?? $0 }
         liveTokens.start()
         push.start() // at launch, always: iOS only delivers a push to a closed app that registers again as it starts
@@ -510,6 +512,7 @@ final class AppModel: ObservableObject {
             }
         case .callState(let calls):
             phoneCalls = calls
+            liveTokens.endStale(liveCallIds: Set(calls.filter { ($0.status == .active || $0.status == .holding) && !$0.onClient }.map(\.callId)))
             runPendingTakeOver()
         case .callLog(let entries):
             let added = (try? callLog.merge(host: entries)) ?? 0
