@@ -9,7 +9,9 @@ final class AudioBridge {
     private let keepAlive: KeepAlive
     private let log: (String) -> Void
 
-    var muted = false { didSet { pipeline?.muted = muted } }
+    var muted = false { didSet { pipeline?.muted = muted || held } }
+    /// The call is on hold at the network: nothing the microphone hears is worth sending, whatever the Mute button says.
+    var held = false { didSet { pipeline?.muted = muted || held } }
 
     /// Voice-chat audio comes out of the earpiece by default; this switches to the loudspeaker.
     var speaker = false { didSet { applyOutputRoute() } }
@@ -31,7 +33,7 @@ final class AudioBridge {
                 voiceProcessing: Self.storedVoiceProcessing,
                 sentDumpName: UserDefaults.standard.bool(forKey: "recordAudio") ? "tx_capture" : nil
             )
-            pipeline.muted = muted
+            pipeline.muted = muted || held
             self.pipeline = pipeline
             return pipeline.localPort
         } catch {
@@ -67,6 +69,7 @@ final class AudioBridge {
     /// The call (or its audio session) is over.
     func sessionEnded() {
         speaker = false // the next call starts on the earpiece again
+        held = false
         endPipeline()
         keepAlive.start()
     }

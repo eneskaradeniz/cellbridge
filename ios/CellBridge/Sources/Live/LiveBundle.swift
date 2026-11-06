@@ -27,7 +27,7 @@ struct CallLiveActivity: Widget {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(who.title).font(.title3.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.6)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        if !context.state.isHolding { TakeOver(url: context.attributes.takeOverURL, height: 36) }
+                        TakeOver(url: context.attributes.takeOverURL, height: 36)
                     }
                 }
             } compactLeading: {
@@ -118,8 +118,7 @@ private struct LockScreenView: View {
                 Spacer(minLength: 8)
                 Elapsed(state: state).font(.title2.weight(.medium).monospacedDigit()).frame(minWidth: 70, alignment: .trailing)
             }
-            // A held call stays on the phone: the iPhone could not resume it.
-            if !state.isHolding { TakeOver(url: attributes.takeOverURL) }
+            TakeOver(url: attributes.takeOverURL)
         }
     }
 }

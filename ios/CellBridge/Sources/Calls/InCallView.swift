@@ -13,6 +13,8 @@ struct InCallView: View {
                 call: call, waiting: model.waitingCall, linkLost: !model.canDial, muted: model.muted, speakerOn: model.speakerOn,
                 toggleMute: model.toggleMute, toggleSpeaker: model.toggleSpeaker,
                 sendDigit: { model.sendDigits($0, call: call.id) },
+                held: model.isHeld(call.id),
+                hold: model.canHold ? { model.toggleHold(call.id) } : nil,
                 transfer: model.canTransfer ? { model.transferToPhone(call.id) } : nil,
                 end: { model.endCall(call.id) }, answer: { model.answerCall(call.id) })
                 .onAppear { last = call }
@@ -36,6 +38,10 @@ struct InCallScreen: View {
     let toggleSpeaker: () -> Void
     /// One keypad tone into the call; nil outside a real call (previews).
     var sendDigit: ((String) -> Void)?
+    /// The phone has the call on hold (the microphone is not sent meanwhile).
+    var held = false
+    /// Puts the call on hold or takes it off; nil when the host cannot.
+    var hold: (() -> Void)?
     /// Moves the call to the phone itself; nil when the host cannot.
     var transfer: (() -> Void)?
     @State private var keypadOpen = false
@@ -139,6 +145,8 @@ struct InCallScreen: View {
             Text("Call ended")
         } else if linkLost && call.isAnswered {
             Text("Connection lost").foregroundStyle(.orange)
+        } else if held && call.isAnswered {
+            Text("On Hold").foregroundStyle(.orange)
         } else if let answeredAt = call.answeredAt {
             Text(answeredAt, style: .timer).monospacedDigit()
                 .accessibilityLabel("Call duration")
@@ -154,7 +162,7 @@ struct InCallScreen: View {
         if keypadOpen {
             keypad.transition(.opacity)
         } else {
-            // Three across and two down, like the Phone app. "Add Call" is the way into conference calls and stays off until the bridge can.
+            // Three across and two down, like the Phone app, and a third row for what only this bridge has. "Add Call" is the way into conference calls and stays off until the bridge can.
             Grid(horizontalSpacing: 24, verticalSpacing: 18) {
                 GridRow {
                     toggle(muted ? "mic.slash.fill" : "mic.fill", "Mute", on: muted, action: toggleMute)
@@ -173,6 +181,13 @@ struct InCallScreen: View {
                     }
                     .accessibilityElement(children: .combine)
                     if let transfer, call.isAnswered { toggle("arrow.left.arrow.right", "To Android", on: false, action: transfer) } else { Color.clear.frame(width: 76, height: 76) }
+                }
+                if let hold, call.isAnswered {
+                    GridRow {
+                        toggle("pause.fill", held ? "Resume" : "Hold", on: held, action: hold)
+                        Color.clear.frame(width: 76, height: 76)
+                        Color.clear.frame(width: 76, height: 76)
+                    }
                 }
             }
             .transition(.opacity.combined(with: .scale(scale: 0.9)))

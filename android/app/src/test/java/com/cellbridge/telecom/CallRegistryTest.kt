@@ -13,6 +13,8 @@ class CallRegistryTest {
         override fun hangup() { actions += "hangup" }
         override fun silence() { actions += "silence" }
         override fun dtmf(digit: Char) { actions += "dtmf:$digit" }
+        override fun hold() { actions += "hold" }
+        override fun unhold() { actions += "unhold" }
     }
 
     private val registry = CallRegistry()
@@ -25,7 +27,9 @@ class CallRegistryTest {
         assertTrue(registry.hangup("c1"))
         assertTrue(registry.silence("c1"))
         assertTrue(registry.dtmf("c1", '7'))
-        assertEquals(listOf("answer", "reject", "hangup", "silence", "dtmf:7"), handle.actions)
+        assertTrue(registry.hold("c1"))
+        assertTrue(registry.unhold("c1"))
+        assertEquals(listOf("answer", "reject", "hangup", "silence", "dtmf:7", "hold", "unhold"), handle.actions)
     }
 
     @Test

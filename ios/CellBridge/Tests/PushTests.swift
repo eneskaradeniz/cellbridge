@@ -113,6 +113,13 @@ final class PushTests: XCTestCase {
         XCTAssertEqual(items.first { $0.name == "call" }?.value, "c 1&2")
     }
 
+    func testHoldMessagesMatchTheProtocol() throws {
+        for (message, type) in [(ClientMessage.hold(callId: "c1"), "hold"), (ClientMessage.unhold(callId: "c1"), "unhold")] {
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(message.encoded().utf8)) as? [String: String])
+            XCTAssertEqual(object, ["type": type, "callId": "c1"])
+        }
+    }
+
     func testLiveTokenMessagesMatchTheProtocol() throws {
         let start = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(ClientMessage.liveStartToken(token: "ab").encoded().utf8)) as? [String: String])
         XCTAssertEqual(start, ["type": "live_start_token", "token": "ab"])

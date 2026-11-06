@@ -155,6 +155,7 @@ class ControlServer @Inject constructor(
         if (sms.isAvailable()) add("smshistory")
         if (push.available()) { add("push"); add("live") }
         if (audio.isAvailable()) add("transfer")
+        add("hold")
         add("status")
     }
 
@@ -383,7 +384,7 @@ private class Session(
             }
             is ClientMessage.TransferRequest -> {
                 val call = feed.liveCalls().firstOrNull { it.id == message.callId }
-                val takeable = call != null && call.status == CallStatus.ACTIVE // a held call stays: the client cannot resume it
+                val takeable = call != null && (call.status == CallStatus.ACTIVE || call.status == CallStatus.HOLDING)
                 if (!takeable) return send(ServerMessage.Error("unknown_call", message.callId))
                 if (message.callId !in audio.bridged.value) transfers.toIphone(message.callId) // already there: nothing to hand over
                 return
@@ -397,6 +398,8 @@ private class Session(
                 if (message.digit.length != 1 || message.digit[0] !in "0123456789*#") return send(ServerMessage.Error("bad_message"))
                 message.callId to commands.dtmf(message.callId, message.digit[0])
             }
+            is ClientMessage.Hold -> message.callId to commands.hold(message.callId)
+            is ClientMessage.Unhold -> message.callId to commands.unhold(message.callId)
             is ClientMessage.RingAck -> {
                 // The iPhone is ringing: the phone in the pocket can stop. Without this ack it keeps ringing, so a dead
                 // connection never swallows a call.

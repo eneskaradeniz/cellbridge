@@ -15,6 +15,10 @@ interface CallHandle {
 
     /** Plays one keypad tone (0-9, *, #) into the call. */
     fun dtmf(digit: Char)
+
+    /** Puts the call on hold at the network (the other party hears the hold tone) and takes it off again. */
+    fun hold()
+    fun unhold()
 }
 
 /** Client commands addressed by call id; each returns false when no such call is live. */
@@ -24,6 +28,8 @@ interface CallCommands {
     fun hangup(callId: String): Boolean
     fun silence(callId: String): Boolean
     fun dtmf(callId: String, digit: Char): Boolean
+    fun hold(callId: String): Boolean
+    fun unhold(callId: String): Boolean
 }
 
 /** Maps call ids to the live telecom calls so control-server commands can reach them. */
@@ -48,4 +54,8 @@ class CallRegistry @Inject constructor() : CallCommands {
     override fun silence(callId: String) = handles[callId]?.silence() != null
 
     override fun dtmf(callId: String, digit: Char) = handles[callId]?.dtmf(digit) != null
+
+    override fun hold(callId: String) = handles[callId]?.hold() != null
+
+    override fun unhold(callId: String) = handles[callId]?.unhold() != null
 }

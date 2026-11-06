@@ -88,6 +88,9 @@ class CellBridgeInCallService : InCallService() {
         override fun answer() { main.post { call.answer(VideoProfile.STATE_AUDIO_ONLY) } }
         override fun reject() { main.post { call.reject(false, null) } }
         override fun hangup() { main.post { call.disconnect() } }
+        /** CAPABILITY_HOLD: the call can currently be put on hold or taken off it. */
+        override fun hold() { main.post { if (call.details.can(Call.Details.CAPABILITY_HOLD)) call.hold() } }
+        override fun unhold() { main.post { if (call.details.can(Call.Details.CAPABILITY_HOLD)) call.unhold() } }
                 override fun dtmf(digit: Char) {
             main.post {
                 call.stopDtmfTone() // a digit still sounding from the one before

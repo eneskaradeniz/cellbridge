@@ -66,6 +66,8 @@ class ControlServerTest {
         override fun hangup(callId: String) = callId == "c1".also { calls += "hangup:$callId" }
         override fun silence(callId: String) = callId == "c1".also { calls += "silence:$callId" }
         override fun dtmf(callId: String, digit: Char) = callId == "c1".also { calls += "dtmf:$callId:$digit" }
+        override fun hold(callId: String) = callId == "c1".also { calls += "hold:$callId" }
+        override fun unhold(callId: String) = callId == "c1".also { calls += "unhold:$callId" }
     }
 
     private class FakeDialer : CallDialer {
@@ -673,12 +675,24 @@ class ControlServerTest {
     }
 
     @Test
-    fun `a held call cannot be taken over, because the client cannot resume it`() = withServer { connect ->
+    fun `a held call can be taken over, the client resumes it`() = withServer { connect ->
         feed.live = listOf(activeCall.copy(status = CallStatus.HOLDING))
         connect {
             login()
             say("""{"type":"transfer_request","callId":"c1"}""")
+            assertEquals("transfer_offer", hear().str("type"))
+        }
+    }
+
+    @Test
+    fun `hold and unhold reach the call, and an unknown call is an error`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"hold","callId":"c1"}""")
+            say("""{"type":"unhold","callId":"c1"}""")
+            say("""{"type":"hold","callId":"nope"}""")
             assertEquals("unknown_call", hear().str("code"))
+            assertEquals(listOf("hold:c1", "unhold:c1", "hold:nope"), commands.calls) // the fake records every ask; it refuses the unknown one
         }
     }
 

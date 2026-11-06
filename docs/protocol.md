@@ -17,7 +17,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | type | dir | fields |
 |---|---|---|
 | `hello` | iOS -> host | `version` (int, currently 1), `token` |
-| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `live`, `transfer`, `status`, `conference` (draft)) |
+| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `live`, `hold`, `transfer`, `status`, `conference` (draft)) |
 | `call_list` | host -> iOS | `callIds` (every call that is still live) |
 | `capabilities` | host -> iOS | `capabilities` (the full list again, sent when it changes) |
 | `tone` | host -> iOS | `action` (`start`/`stop`), `kind?` (`generator`/`media`), `id?` (ToneGenerator constant), `name?` (media tone) |
@@ -52,6 +52,8 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `call_log` | host -> iOS | `entries`: `id`, `number`, `name?`, `kind`, `ts`, `duration` |
 | `sms_history_request` | iOS -> host | `since?` (ms since epoch) |
 | `sms_history` | host -> iOS | `items`: `id`, `peer`, `body`, `ts`, `dir` |
+| `hold` | iOS -> host | `callId` |
+| `unhold` | iOS -> host | `callId` |
 | `live_start_token` | iOS -> host | `token` (hex) |
 | `live_update_token` | iOS -> host | `callId`, `token` (hex) |
 | `push_token` | iOS -> host | `token` (hex), `env` (`sandbox`/`production`), `topic`, `key` (base64, 32 bytes), `alert_token?` (hex), `alert_topic?` |
@@ -105,8 +107,7 @@ clients never get it); the host answers at once with `call_state`, the phone's l
 starts, changes or ends, or its audio moves to or from a client (`onClient` says the client's relay carries it). `connectedAt` is milliseconds
 since epoch and absent until the call connects. The client lists the calls with `onClient` false that it does not know itself, and
 `transfer_request` (`callId`) asks the host to take one over: the host answers with the `transfer_offer` above for an `active` call
-that is not already on the client, and with `error` `unknown_call` otherwise. A `holding` call cannot be taken over: the client has no way to resume it,
-so it stays on the phone until the phone's user resumes it. The rest is the `transfer_offer` / `transfer_accept` exchange.
+that is not already on the client, and with `error` `unknown_call` otherwise. A `holding` call can be taken over too: the client then shows it held and offers to resume it. The rest is the `transfer_offer` / `transfer_accept` exchange.
 Asking for a call that is `ringing` or `dialing` is an error: a ringing call already rings on the client (`ring`).
 
 Outgoing calls: `dial` is answered by exactly one `dial_result` with the same `clientId`. On `ok:true` the call exists on the host
@@ -115,6 +116,11 @@ active, clients may ignore it there) and `ended` when the call is over. `udpPort
 becomes active. `ok:false` carries `error`: `invalid` (not a plain phone number; `*`/`#` codes are refused), `emergency`
 (emergency numbers are never dialed through the bridge), `busy` (an outgoing call is already in progress), `failed`
 (the platform refused or did not start the call in time).
+
+Hold: `hold` puts a call on hold at the network (the other party hears the hold tone) and `unhold` takes it off again; `hold` is advertised
+in `capabilities`. The host asks Telecom, which acts only if the carrier allows it for that call; the result is the call's `status` in `call_state` (`holding`
+or `active`, `onClient` unchanged), which the client watches, so a hold from the phone's own screen shows on the client as well. Asking about a
+call that is not live is `unknown_call`. A held call stays relayed: the client simply stops sending its microphone while it is held.
 
 Conference (DRAFT, not implemented; `conference` is advertised in `capabilities` only when the carrier allows holding and merging; a client that
 does not know it never sees these messages): `hold` / `unhold` put a call on hold on the phone or take it off again. The host answers with
@@ -180,7 +186,7 @@ Live Activity (lock screen and Dynamic Island) for a call that runs on the phone
 is in the background, so the host does it. `live` is advertised with `push`. The client sends `live_start_token` (the token ActivityKit gives
 for starting an activity by push) after every `hello_ack`, and `live_update_token` (`callId` and the push token of that call's activity) as
 soon as ActivityKit has made one; the host keeps the start token with the push target and the update tokens in memory only. The host shows
-every call that is `active` or `holding` (the Take over button only while `active`), is not relayed to a client (`onClient` false) and is therefore on the phone: it posts `start` when
+every call that is `active` or `holding` is not relayed to a client (`onClient` false) and is therefore on the phone: it posts `start` when
 the call enters that set, `update` when its status changes and `end` when it leaves (hung up, or taken over by a client). APNs headers:
 `apns-push-type: liveactivity`, `apns-topic: <bundle id>.push-type.liveactivity` (the bundle id is `alert_topic`), priority 10.
 `update` and `end` need the call's update token: until it arrives the host holds them back and sends them when it does (an activity that

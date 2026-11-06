@@ -126,7 +126,7 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             unreachableTimer?.cancel()
             unreachable = false
-            if case .connected = state { refreshProblem = nil } else { phoneCalls = [] }
+            if case .connected = state { refreshProblem = nil } else { phoneCalls = []; calls.updateHeld([]) }
             guard state == .connecting else { return }
             unreachableTimer = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(12))
@@ -416,6 +416,16 @@ final class AppModel: ObservableObject {
 
     func transferToPhone(_ id: UUID) { calls.transferToHost(id) }
 
+    /// The host can put calls on hold.
+    var canHold: Bool {
+        if case .connected(let capabilities) = client.state { return capabilities.contains("hold") }
+        return false
+    }
+
+    func isHeld(_ id: UUID) -> Bool { calls.isHeld(id) }
+
+    func toggleHold(_ id: UUID) { calls.setHold(id, on: !calls.isHeld(id)) }
+
     func sendDigits(_ digits: String, call id: UUID) { calls.sendDigits(digits, for: id) }
 
     /// What the call screen shows: the running call, else the one that just ended.
@@ -512,6 +522,7 @@ final class AppModel: ObservableObject {
             }
         case .callState(let calls):
             phoneCalls = calls
+            self.calls.updateHeld(Set(calls.filter { $0.status == .holding && $0.onClient }.map(\.callId)))
             liveTokens.endStale(liveCallIds: Set(calls.filter { ($0.status == .active || $0.status == .holding) && !$0.onClient }.map(\.callId)))
             runPendingTakeOver()
         case .callLog(let entries):

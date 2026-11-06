@@ -22,6 +22,9 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     /// Loudspeaker on/off for the current call.
     @Published var speaker = false { didSet { audio.speaker = speaker } }
 
+    /// Host ids of the calls the phone reports as held while this app carries their audio (`call_state`).
+    @Published private(set) var heldCallIds: Set<String> = []
+
     /// Microphone muted for the current call (set through the system so CallKit's own UI stays in step).
     @Published private(set) var muted = false
     private let audio: AudioBridge
@@ -90,6 +93,21 @@ final class CallCoordinator: NSObject, ObservableObject, CXProviderDelegate {
     func clearDialError() { dialError = nil }
 
     func reportDialError(_ text: String) { dialError = text }
+
+    func isHeld(_ uuid: UUID) -> Bool { book.callId(for: uuid).map(heldCallIds.contains) ?? false }
+
+    /// The phone's calls were listed: which of ours are held. Also silences the microphone of the call on screen while it is.
+    func updateHeld(_ ids: Set<String>) {
+        guard ids != heldCallIds else { return }
+        heldCallIds = ids
+        audio.held = book.active.first(where: { $0.isAnswered || $0.isOutgoing }).map { isHeld($0.id) } ?? false
+    }
+
+    /// Puts the call on hold at the network, or takes it off: the host asks Telecom and `call_state` confirms (the screen follows that).
+    func setHold(_ uuid: UUID, on: Bool) {
+        guard let callId = book.callId(for: uuid), book.isAnswered(uuid) else { return }
+        send(on ? .hold(callId: callId) : .unhold(callId: callId))
+    }
 
     func setMuted(_ muted: Bool) {
         guard let uuid = book.active.first(where: { $0.isAnswered || $0.isOutgoing })?.id else { return }

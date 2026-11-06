@@ -17,6 +17,8 @@ enum ClientMessage: Equatable {
     case smsSend(clientId: String, to: String, body: String)
     case callLogRequest(after: String?, since: Int64?)
     case smsHistoryRequest(since: Int64?)
+    case hold(callId: String)
+    case unhold(callId: String)
     case liveStartToken(token: String)
     case liveUpdateToken(callId: String, token: String)
     case pushToken(token: String, env: String, topic: String, key: String, alertToken: String?, alertTopic: String?)
@@ -58,6 +60,10 @@ enum ClientMessage: Equatable {
         case .smsHistoryRequest(let since):
             object = ["type": "sms_history_request"]
             if let since { object["since"] = since }
+        case .hold(let callId):
+            object = ["type": "hold", "callId": callId]
+        case .unhold(let callId):
+            object = ["type": "unhold", "callId": callId]
         case .liveStartToken(let token):
             object = ["type": "live_start_token", "token": token]
         case .liveUpdateToken(let callId, let token):
@@ -111,9 +117,9 @@ struct PhoneCall: Equatable, Identifiable {
     let onClient: Bool
     var id: String { callId }
 
-    /// The calls this iPhone could take over: active (not held), still on the phone, and not one it already shows itself.
+    /// The calls this iPhone could take over: connected (active or held), still on the phone, and not one it already shows itself.
     static func takeable(_ calls: [PhoneCall], knows: (String) -> Bool) -> [PhoneCall] {
-        calls.filter { $0.status == .active && !$0.onClient && !knows($0.callId) }
+        calls.filter { ($0.status == .active || $0.status == .holding) && !$0.onClient && !knows($0.callId) }
     }
 }
 
