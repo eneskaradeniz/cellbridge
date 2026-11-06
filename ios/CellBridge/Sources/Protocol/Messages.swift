@@ -17,7 +17,7 @@ enum ClientMessage: Equatable {
     case smsSend(clientId: String, to: String, body: String)
     case callLogRequest(after: String?, since: Int64?)
     case smsHistoryRequest(since: Int64?)
-    case pushToken(token: String, env: String, topic: String, key: String)
+    case pushToken(token: String, env: String, topic: String, key: String, alertToken: String?, alertTopic: String?)
     case callStateRequest
     case transferRequest(callId: String)
 
@@ -56,8 +56,9 @@ enum ClientMessage: Equatable {
         case .smsHistoryRequest(let since):
             object = ["type": "sms_history_request"]
             if let since { object["since"] = since }
-        case .pushToken(let token, let env, let topic, let key):
+        case .pushToken(let token, let env, let topic, let key, let alertToken, let alertTopic):
             object = ["type": "push_token", "token": token, "env": env, "topic": topic, "key": key]
+            if let alertToken, let alertTopic { object["alert_token"] = alertToken; object["alert_topic"] = alertTopic }
         case .callStateRequest:
             object = ["type": "call_state_request"]
         case .transferRequest(let callId):

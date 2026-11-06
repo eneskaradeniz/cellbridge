@@ -15,6 +15,8 @@ final class MessageCoordinator: ObservableObject {
     var viewingKey: String?
     /// One notification for a burst of old texts (the host replaying what arrived while the link was down); set by the app.
     var notifyBacklog: ((_ count: Int, _ senders: [String]) -> Void)?
+    /// True for a text a push already announced (the notification extension), so it is stored but not announced again.
+    var alreadyAnnounced: ((_ id: String) -> Bool)?
     var now: () -> Date = Date.init
     private static let backlogAge: TimeInterval = 120
     private var backlog: [(id: String, from: String, body: String)] = []
@@ -117,7 +119,7 @@ final class MessageCoordinator: ObservableObject {
             if isNew && watching { try? store.markRead(key: MessageStore.key(for: from)) }
             refresh()
             if !ackBlocked { transmit(.smsAck(id: id)) } // only once it is on disk
-            if isNew && !watching {
+            if isNew && !watching && !(alreadyAnnounced?(id) ?? false) {
                 if now().timeIntervalSince(date) > Self.backlogAge, notifyBacklog != nil {
                     backlog.append((id, from, body))
                     backlogFlush = backlogFlush ?? Task { [weak self] in

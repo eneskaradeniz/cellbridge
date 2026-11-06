@@ -95,6 +95,7 @@ final class AppModel: ObservableObject {
             },
             log: { [weak self] in self?.log($0) }
         )
+        messages.alreadyAnnounced = { PushedTexts.contains($0) }
         messages.notifyBacklog = { [weak self] count, senders in
             guard let self else { return }
             var names: [String] = []
@@ -164,6 +165,7 @@ final class AppModel: ObservableObject {
         push.onToken = { [weak self] in
             if case .connected(let capabilities) = self?.client.state { self?.sendPushToken(offered: capabilities) }
         }
+        AppDelegate.onAlertToken = { [weak self] in self?.push.onToken?() }
         push.start() // at launch, always: iOS only delivers a push to a closed app that registers again as it starts
         permissions.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
         refreshContacts()

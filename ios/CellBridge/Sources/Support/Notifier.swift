@@ -52,6 +52,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let content = response.notification.request.content
         if content.userInfo["kind"] != nil { return completionHandlerOnMain(completionHandler) } // a battery warning and the like: nothing to open
+        // A text push the extension could not open still carries the sealed box and no sender: the title is only "New message".
+        if content.userInfo["cb"] != nil && content.userInfo["peer"] == nil { return completionHandlerOnMain(completionHandler) }
         // Notifications posted before `peer` was stored carry the sender's number as their title.
         let peer = content.userInfo["peer"] as? String ?? (content.title.isEmpty ? nil : content.title)
         DispatchQueue.main.async {

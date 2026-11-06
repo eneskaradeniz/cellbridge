@@ -439,7 +439,13 @@ private class Session(
                 if (!push.available() || key?.size != 32 || message.token.length < 32 || message.env !in setOf("sandbox", "production")) {
                     return send(ServerMessage.Error("bad_message"))
                 }
-                push.register(PushTarget(message.token, message.env == "sandbox", message.topic, key))
+                val alertOk = message.alertToken != null && message.alertToken.length >= 32 && !message.alertTopic.isNullOrBlank()
+                push.register(
+                    PushTarget(
+                        message.token, message.env == "sandbox", message.topic, key,
+                        alertToken = message.alertToken.takeIf { alertOk }, alertTopic = message.alertTopic.takeIf { alertOk },
+                    ),
+                )
                 return
             }
             is ClientMessage.Hello, null -> return send(ServerMessage.Error("bad_message"))

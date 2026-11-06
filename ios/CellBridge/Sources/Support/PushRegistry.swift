@@ -1,61 +1,5 @@
-import CryptoKit
 import Foundation
 import PushKit
-import Security
-
-/// The sealed box the host puts in a VoIP push (docs/protocol.md): base64(nonce 12 + AES-256-GCM ciphertext + tag), context-bound.
-enum PushSeal {
-    struct Call: Equatable {
-        let callId: String
-        let number: String?
-        let name: String?
-    }
-
-    private static let context = Data("cellbridge-push-v1".utf8)
-
-    /// Nil when the box is damaged, was sealed under another key, or does not carry a call id.
-    static func open(_ sealed: String, key: Data) -> Call? {
-        guard key.count == 32, let bytes = Data(base64Encoded: sealed),
-              let box = try? AES.GCM.SealedBox(combined: bytes),
-              let plain = try? AES.GCM.open(box, using: SymmetricKey(data: key), authenticating: context),
-              let object = try? JSONSerialization.jsonObject(with: plain) as? [String: Any],
-              let callId = object["callId"] as? String, !callId.isEmpty else { return nil }
-        func text(_ name: String) -> String? { (object[name] as? String).flatMap { $0.isEmpty ? nil : $0 } }
-        return Call(callId: callId, number: text("number"), name: text("name"))
-    }
-
-    /// Only the tests seal (the host does it in production).
-    static func seal(_ call: Call, key: Data, nonce: AES.GCM.Nonce = AES.GCM.Nonce()) throws -> String {
-        var object: [String: Any] = ["callId": call.callId]
-        if let number = call.number { object["number"] = number }
-        if let name = call.name { object["name"] = name }
-        let plain = try JSONSerialization.data(withJSONObject: object)
-        return try AES.GCM.seal(plain, using: SymmetricKey(data: key), nonce: nonce, authenticating: context).combined!.base64EncodedString()
-    }
-}
-
-/// The 32 random bytes shared with the host so only the two phones can read what a push carries. Created once, kept in the Keychain.
-enum PushKeyStore {
-    private static let query: [String: Any] = [
-        kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: Bundle.main.bundleIdentifier ?? "cellbridge",
-        kSecAttrAccount as String: "push-key",
-    ]
-
-    static func key() -> Data {
-        var request = query
-        request[kSecReturnData as String] = true
-        var result: AnyObject?
-        if SecItemCopyMatching(request as CFDictionary, &result) == errSecSuccess, let data = result as? Data, data.count == 32 { return data }
-        let fresh = Data((0..<32).map { _ in UInt8.random(in: .min ... .max) })
-        SecItemDelete(query as CFDictionary)
-        var item = query
-        item[kSecValueData as String] = fresh
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock // a push can arrive while the phone is locked
-        SecItemAdd(item as CFDictionary, nil)
-        return fresh
-    }
-}
 
 /// Registers for VoIP pushes (so a closed app can ring) and hands each push's call to the call coordinator.
 /// Must be started at launch: iOS delivers a push to a closed app only if the app registers again as it starts.
@@ -71,6 +15,17 @@ final class PushRegistry: NSObject, PKPushRegistryDelegate {
 
     private(set) var token: String? = UserDefaults.standard.string(forKey: PushRegistry.tokenKey)
 
+    // The ordinary notification token, for texts: Apple issues it to the app delegate (`AppDelegate`), not to PushKit.
+    nonisolated private static let alertTokenKey = "alertPushToken"
+    var alertToken: String? { UserDefaults.standard.string(forKey: Self.alertTokenKey) }
+
+    /// The app delegate got a notification token: kept even if it arrives before the model exists. True when it differs from the one held.
+    nonisolated static func store(alertToken hex: String) -> Bool {
+        guard UserDefaults.standard.string(forKey: alertTokenKey) != hex else { return false }
+        UserDefaults.standard.set(hex, forKey: alertTokenKey)
+        return true
+    }
+
     func start() {
         registry.delegate = self
         registry.desiredPushTypes = [.voIP]
@@ -84,7 +39,9 @@ final class PushRegistry: NSObject, PKPushRegistryDelegate {
         #else
         let env = "production"
         #endif
-        return .pushToken(token: token, env: env, topic: (Bundle.main.bundleIdentifier ?? "") + ".voip", key: PushKeyStore.key().base64EncodedString())
+        let bundleId = Bundle.main.bundleIdentifier ?? ""
+        return .pushToken(token: token, env: env, topic: bundleId + ".voip", key: PushKeyStore.key().base64EncodedString(),
+                          alertToken: alertToken, alertTopic: alertToken == nil ? nil : bundleId)
     }
 
     nonisolated func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {

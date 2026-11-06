@@ -506,6 +506,21 @@ class ControlServerTest {
     }
 
     @Test
+    fun `the text token travels with the push token and is optional`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"push_token","token":"${"ab".repeat(32)}","env":"sandbox","topic":"com.example.app.voip","key":"$goodKey","alert_token":"${"cd".repeat(32)}","alert_topic":"com.example.app"}""")
+            eventually { push.registered != null }
+            assertEquals("cd".repeat(32), push.registered!!.alertToken)
+            assertEquals("com.example.app", push.registered!!.alertTopic)
+            push.registered = null
+            say("""{"type":"push_token","token":"${"ab".repeat(32)}","env":"sandbox","topic":"com.example.app.voip","key":"$goodKey","alert_token":"short","alert_topic":"x"}""")
+            eventually { push.registered != null }
+            assertNull(push.registered!!.alertToken) // a bad text token costs only text pushes
+        }
+    }
+
+    @Test
     fun `a malformed push token is refused and not stored`() = withServer { connect ->
         connect {
             login()

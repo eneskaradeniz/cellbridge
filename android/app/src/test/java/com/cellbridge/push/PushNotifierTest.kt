@@ -4,7 +4,9 @@ import com.cellbridge.domain.model.CallDirection
 import com.cellbridge.domain.model.CallEvent
 import com.cellbridge.domain.model.CallSnapshot
 import com.cellbridge.domain.model.CallStatus
+import com.cellbridge.domain.model.IncomingSms
 import com.cellbridge.server.ClientPresence
+import com.cellbridge.sms.FakeSmsGateway
 import com.cellbridge.telecom.CallFeed
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -50,11 +52,13 @@ class PushNotifierTest {
     private val store = FakeStore(PushTarget("a".repeat(64), sandbox = true, topic = "com.example.app.voip", key = key))
     private val transport = FakeTransport()
     private val presence = ClientPresence()
+    private val smsGateway = FakeSmsGateway()
+    private val text = IncomingSms(7, "+905551112233", "Secret hello", 1_700_000_000_000)
     private val ringing = CallSnapshot("c1", "+905551112233", CallDirection.INCOMING, CallStatus.RINGING)
     private val ecKey = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair().private
     private var credentials: ApnsCredentials? = ApnsCredentials("KID", "TEAM", ecKey)
 
-    private fun notifier() = PushNotifier(feed, store, { credentials }, transport, presence).also { it.nowMs = { 1_700_000_000_000 } }
+    private fun notifier() = PushNotifier(feed, store, { credentials }, transport, presence, smsGateway).also { it.nowMs = { 1_700_000_000_000 } }
 
     @Test fun `with no client connected the push goes out at once`() = runTest {
         notifier().onRinging("c1", "+905551112233")
@@ -124,6 +128,67 @@ class PushNotifierTest {
         n.onRinging("c1", null)
         n.onRinging("c2", null)
         assertEquals(transport.posts[0].headers["authorization"], transport.posts[1].headers["authorization"])
+    }
+
+    private fun withAlert() { store.target = PushTarget("a".repeat(64), true, "com.example.app.voip", key, alertToken = "c".repeat(64), alertTopic = "com.example.app") }
+
+    @Test fun `a text with no client connected goes out at once as a sealed alert`() = runTest {
+        withAlert()
+        notifier().onSms(text)
+        val post = transport.posts.single()
+        assertEquals("/3/device/${"c".repeat(64)}", post.path)
+        assertEquals("alert", post.headers["apns-push-type"])
+        assertEquals("com.example.app", post.headers["apns-topic"])
+        assertEquals("sms-7", post.headers["apns-collapse-id"])
+        assertEquals("1700086400", post.headers["apns-expiration"])
+        val body = post.body.decodeToString()
+        assertTrue(body.contains(""""mutable-content":1"""))
+        assertTrue(body.contains("NEW_MESSAGE"))
+        assertTrue("neither number nor text may travel in clear", !body.contains("905551112233") && !body.contains("Secret"))
+        val sealed = Regex(""""cb":"([^"]+)"""").find(body)!!.groupValues[1]
+        val plain = PushCrypto.open(key, sealed)!!.decodeToString()
+        assertTrue(plain.contains(""""id":"7"""") && plain.contains("Secret hello") && plain.contains("+905551112233"))
+    }
+
+    @Test fun `a long text is cut so the payload stays small`() = runTest {
+        withAlert()
+        notifier().onSms(text.copy(body = "ü".repeat(5_000)))
+        assertTrue(transport.posts.single().body.size < 3_500)
+    }
+
+    @Test fun `with a client connected an acknowledged text is not pushed`() = runTest {
+        withAlert()
+        presence.joined()
+        smsGateway.pending = emptyList() // the client stored it and acknowledged
+        val job = launch { notifier().onSms(text) }
+        advanceTimeBy(11_000)
+        job.join()
+        assertTrue(transport.posts.isEmpty())
+    }
+
+    @Test fun `with a client connected a text it never acknowledged is pushed after the wait`() = runTest {
+        withAlert()
+        presence.joined()
+        smsGateway.pending = listOf(text)
+        val job = launch { notifier().onSms(text) }
+        advanceTimeBy(9_900)
+        assertTrue(transport.posts.isEmpty())
+        advanceTimeBy(200)
+        job.join()
+        assertEquals(1, transport.posts.size)
+    }
+
+    @Test fun `no text push without the alert token`() = runTest {
+        notifier().onSms(text) // the default target has only the PushKit token
+        assertTrue(transport.posts.isEmpty())
+    }
+
+    @Test fun `a gone alert token is forgotten but calls keep working`() = runTest {
+        withAlert()
+        transport.status = 410
+        notifier().onSms(text)
+        assertNull(store.target!!.alertToken)
+        assertEquals("a".repeat(64), store.target!!.token)
     }
 
     private fun TestScope.launchNotifier() = launch { notifier().onRinging("c1", "+905551112233") }

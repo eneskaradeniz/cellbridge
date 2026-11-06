@@ -41,6 +41,12 @@ says *Key installed, waiting for the iPhone to register*. `tools/install-apns-ke
   push it receives (iOS ends apps that do not); it uses a call id derived from the host's call id so a push for a call it already knows is harmless, then connects and
   ends the call again if the host does not list it as ringing.
 
+## Texts while the app is closed
+
+See docs/protocol.md ("Waking the client for a text"). The host sends an ordinary alert push, sealed like the call push; the
+`CellBridgeNotify` notification service extension opens it with the key in the shared Keychain group and shows sender and text.
+Both phones need an internet connection at that moment. The iPhone has no SIM, so it must be on some Wi-Fi.
+
 ## Still to do
 
-- Texts and missed calls as visible notifications while the app is closed (needs a notification service extension to show the sealed text).
+- Missed calls as visible notifications while the app is closed.

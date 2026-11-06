@@ -17,6 +17,7 @@ targets:
       path: Sources/CellBridge.entitlements
       properties:
         aps-environment: $(APS_ENVIRONMENT)
+        keychain-access-groups: ["$(AppIdentifierPrefix)$(BUNDLE_ID_PREFIX).cellbridge.shared"]
     info:
       path: Sources/Info.plist
       properties:
@@ -32,6 +33,7 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes: [audio, voip]
         NSSupportsLiveActivities: true
+        CBKeychainGroup: $(AppIdentifierPrefix)$(BUNDLE_ID_PREFIX).cellbridge.shared
         NSLocalNetworkUsageDescription: Talks to the CellBridge host on the local network.
         NSContactsUsageDescription: Shows who is calling or texting and lets you pick a number from your contacts. Contacts stay on this phone.
         NSMicrophoneUsageDescription: Sends your voice to the call on the phone you are bridging.
@@ -74,11 +76,16 @@ targets:
     type: app-extension
     platform: iOS
     deploymentTarget: "26.1"
-    sources: [Sources/Notify]
+    sources: [Sources/Notify, Sources/Shared]
+    entitlements:
+      path: Sources/Notify/Notify.entitlements
+      properties:
+        keychain-access-groups: ["$(AppIdentifierPrefix)$(BUNDLE_ID_PREFIX).cellbridge.shared"]
     info:
       path: Sources/Notify/Info.plist
       properties:
         CFBundleDisplayName: CellBridge Notify
+        CBKeychainGroup: $(AppIdentifierPrefix)$(BUNDLE_ID_PREFIX).cellbridge.shared
         NSExtension:
           NSExtensionPointIdentifier: com.apple.usernotifications.service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService

@@ -2,6 +2,13 @@
   "sourceLanguage": "en",
   "version": "1.0",
   "strings": {
+    "NEW_MESSAGE": {
+      "comment": "Title of a text's push when the notification extension could not open it",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "New message" } },
+        "tr": { "stringUnit": { "state": "translated", "value": "Yeni mesaj" } }
+      }
+    },
     "Recents": {
       "localizations": {
         "tr": {

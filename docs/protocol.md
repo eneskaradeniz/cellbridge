@@ -52,7 +52,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `call_log` | host -> iOS | `entries`: `id`, `number`, `name?`, `kind`, `ts`, `duration` |
 | `sms_history_request` | iOS -> host | `since?` (ms since epoch) |
 | `sms_history` | host -> iOS | `items`: `id`, `peer`, `body`, `ts`, `dir` |
-| `push_token` | iOS -> host | `token` (hex), `env` (`sandbox`/`production`), `topic`, `key` (base64, 32 bytes) |
+| `push_token` | iOS -> host | `token` (hex), `env` (`sandbox`/`production`), `topic`, `key` (base64, 32 bytes), `alert_token?` (hex), `alert_topic?` |
 
 `audio` is advertised only when the root audio daemon is reachable; without it the host runs in control-only mode
 (calls and SMS work, call audio stays on the phone) and the client must not open the audio channel.
@@ -160,6 +160,18 @@ The push body is `{"cb": "<sealed>"}` where `sealed` is base64(`nonce` (12 bytes
 `{"callId":...,"number":...,"name":...}` under `key`, with the string `cellbridge-push-v1` as additional data. The client must
 report a call to CallKit for every push it receives (iOS terminates apps that do not), using a call UUID derived from `callId` so a
 push for a call it already knows is harmless; it then connects, and ends the call again if the host does not list it as ringing.
+
+Waking the client for a text: a VoIP push may only start a call, so a text uses a second, ordinary (alert) push. The client adds
+`alert_token` (the token of its normal remote-notification registration, not the PushKit one) and `alert_topic` (the bundle id,
+without `.voip`) to `push_token`; `env` and `key` apply to both. A host that gets `push_token` without them never sends text pushes.
+When a text arrives and no client is connected, the host posts at once; when one is connected it waits 10 s and posts only if the
+text has not been acknowledged (`sms_ack`) by then (the socket may be dead or the app suspended). The push is `apns-push-type: alert`,
+priority 10, `apns-collapse-id` = `sms-<id>`, expiry one day, and its body is
+`{"aps": {"alert": {"title-loc-key": "NEW_MESSAGE"}, "mutable-content": 1, "sound": "default"}, "cb": "<sealed>"}`, where `sealed` is the
+same box as for calls (same key and context string) around `{"id":...,"from":...,"body":...,"ts":...}`; `body` is cut to 500 characters.
+Apple therefore sees neither number nor text. The client's notification service extension opens the box and replaces the generic
+"New message" with sender and text; if it cannot, the generic notice stays. The client remembers the ids it has shown this way and
+does not notify them again when the same text is replayed after a reconnect (`sms` / `sms_history` stay lossless; only the notice is skipped).
 
 Keep-alive: WebSocket ping every 10 s; client reconnects after 2 s.
 

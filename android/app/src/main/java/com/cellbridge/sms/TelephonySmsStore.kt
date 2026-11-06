@@ -46,7 +46,7 @@ class TelephonySmsStore @Inject constructor(
         resolver.query(Telephony.Sms.Inbox.CONTENT_URI, columns, "${Telephony.Sms.DATE} > ?", arrayOf(cursor.toString()), "${Telephony.Sms.DATE} ASC")
             ?.use {
                 while (it.moveToNext() && result.size < REPLAY_LIMIT) {
-                    result += IncomingSms(it.getLong(0), it.getString(1).orEmpty(), it.getString(2).orEmpty(), it.getLong(3))
+                    result += IncomingSms(it.getLong(0), it.getString(1).orEmpty(), it.getString(2).orEmpty(), it.getLong(3).takeIf { sent -> sent > 0 } ?: it.getLong(0)) // some texts carry no sent time
                 }
             }
         result

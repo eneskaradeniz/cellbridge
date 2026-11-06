@@ -4,8 +4,26 @@ enum AppTab: Int, Hashable {
     case recents, contacts, keypad, messages, settings
 }
 
+/// Apple hands the notification token (the one text pushes go to) to the app delegate.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    /// Set by the model once it exists: called when the notification token changed.
+    @MainActor static var onAlertToken: (() -> Void)?
+
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        application.registerForRemoteNotifications() // every launch, as Apple asks: the token can change
+        return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        guard PushRegistry.store(alertToken: hex) else { return }
+        DispatchQueue.main.async { MainActor.assumeIsolated { Self.onAlertToken?() } }
+    }
+}
+
 @main
 struct CellBridgeApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 

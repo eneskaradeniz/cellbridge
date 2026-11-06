@@ -38,8 +38,49 @@ final class PushTests: XCTestCase {
     }
 
     func testPushTokenMessageMatchesTheProtocol() throws {
-        let text = ClientMessage.pushToken(token: "ab12", env: "sandbox", topic: "com.x.cellbridge.voip", key: "S0VZ").encoded()
+        let text = ClientMessage.pushToken(token: "ab12", env: "sandbox", topic: "com.x.cellbridge.voip", key: "S0VZ", alertToken: nil, alertTopic: nil).encoded()
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: String])
         XCTAssertEqual(object, ["type": "push_token", "token": "ab12", "env": "sandbox", "topic": "com.x.cellbridge.voip", "key": "S0VZ"])
+    }
+
+    func testPushTokenMessageCarriesTheTextTokenWhenThereIsOne() throws {
+        let text = ClientMessage.pushToken(token: "ab12", env: "sandbox", topic: "com.x.cellbridge.voip", key: "S0VZ",
+                                           alertToken: "cd34", alertTopic: "com.x.cellbridge").encoded()
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: String])
+        XCTAssertEqual(object["alert_token"], "cd34")
+        XCTAssertEqual(object["alert_topic"], "com.x.cellbridge")
+    }
+
+    func testATextRoundTripsAndKeepsItsTimeToTheMillisecond() throws {
+        let text = PushSeal.Text(id: "1793", from: "+905551112233", body: "Merhaba, nasılsın? 👋", date: Date(timeIntervalSince1970: 1_700_000_000.123))
+        let opened = try XCTUnwrap(PushSeal.openText(try PushSeal.seal(text, key: key), key: key))
+        XCTAssertEqual(opened.id, "1793")
+        XCTAssertEqual(opened.from, "+905551112233")
+        XCTAssertEqual(opened.body, "Merhaba, nasılsın? 👋")
+        XCTAssertEqual(opened.date.timeIntervalSince1970, 1_700_000_000.123, accuracy: 0.001)
+    }
+
+    func testATextBoxIsNotACallAndTheOtherWayRound() throws {
+        let text = PushSeal.Text(id: "1", from: "+90555", body: "x", date: Date())
+        XCTAssertNil(PushSeal.open(try PushSeal.seal(text, key: key), key: key))
+        XCTAssertNil(PushSeal.openText(hostBox, key: key))
+        XCTAssertNil(PushSeal.openText(try PushSeal.seal(text, key: key), key: Data(repeating: 9, count: 32)))
+    }
+
+    func testPushedTextsAreRememberedAndOnlyTheNewestKept() {
+        let id = "test-\(UUID().uuidString)"
+        XCTAssertFalse(PushedTexts.contains(id))
+        PushedTexts.insert(id)
+        XCTAssertTrue(PushedTexts.contains(id))
+        for n in 0..<210 { PushedTexts.insert("filler-\(n)") }
+        XCTAssertFalse(PushedTexts.contains(id)) // pushed out by the 200 newer ones
+        XCTAssertTrue(PushedTexts.contains("filler-209"))
+    }
+
+    func testTheKeyIsCreatedOnceAndStaysTheSame() {
+        let first = PushKeyStore.key()
+        XCTAssertEqual(first.count, 32)
+        XCTAssertEqual(PushKeyStore.key(), first)
+        XCTAssertEqual(PushKeyStore.existing(), first)
     }
 }
