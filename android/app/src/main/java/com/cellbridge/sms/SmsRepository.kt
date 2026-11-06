@@ -3,6 +3,9 @@ package com.cellbridge.sms
 import android.util.Log
 import com.cellbridge.domain.model.IncomingSms
 import com.cellbridge.domain.model.SendResult
+import com.cellbridge.spam.NoSpam
+import com.cellbridge.spam.SpamDesk
+import com.cellbridge.spam.SpamFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,6 +28,7 @@ class SmsRepository @Inject constructor(
     private val sender: SmsSender,
     private val role: SmsRole,
     private val ledger: SmsLedger,
+    private val spam: SpamDesk = NoSpam,
 ) : SmsGateway {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _incoming = MutableSharedFlow<IncomingSms>(extraBufferCapacity = 16)
@@ -62,13 +66,18 @@ class SmsRepository @Inject constructor(
             val fresh = runCatching { store.unacknowledged() }.getOrDefault(emptyList()).filter { it.id > announced }
             for (sms in fresh) {
                 Log.i(TAG, "Sms id=${sms.id}") // never log the number or the text
-                _incoming.emit(sms)
+                if (!spam.screenSms(sms.from, sms.body, sms.timestamp)) _incoming.emit(sms)
                 announced = sms.id
             }
         }
     }
 
-    override suspend fun unacknowledged() = store.unacknowledged()
+    override suspend fun unacknowledged() = store.unacknowledged().filterNot { spam.isSpamSms(it.from, it.body) }
+
+    override suspend fun release(number: String) {
+        val key = SpamFilter.key(number) ?: return
+        store.unacknowledged().filter { SpamFilter.key(it.from) == key && !spam.isSpamSms(it.from, it.body) }.forEach { _incoming.emit(it) }
+    }
 
     override suspend fun acknowledge(id: Long) = store.acknowledge(id)
 

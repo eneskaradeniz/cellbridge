@@ -72,6 +72,21 @@ sealed interface ClientMessage {
     @Serializable @SerialName("live_update_token")
     data class LiveUpdateToken(val callId: String, val token: String) : ClientMessage
 
+    @Serializable @SerialName("contacts_sync")
+    data class ContactsSync(val keys: List<String>) : ClientMessage
+
+    @Serializable @SerialName("spam_report")
+    data class SpamReport(val number: String, val body: String? = null) : ClientMessage
+
+    @Serializable @SerialName("spam_not")
+    data class SpamNot(val number: String) : ClientMessage
+
+    @Serializable @SerialName("spam_settings")
+    data class SpamSettings(val strict: Boolean) : ClientMessage
+
+    @Serializable @SerialName("spam_list_request")
+    data object SpamListRequest : ClientMessage
+
     @Serializable @SerialName("push_token")
     data class PushToken(
         val token: String, val env: String, val topic: String, val key: String,
@@ -133,6 +148,12 @@ sealed interface ServerMessage {
     @Serializable @SerialName("sms_history")
     data class SmsHistory(val items: List<SmsHistoryItem>) : ServerMessage
 
+    @Serializable @SerialName("spam_list")
+    data class SpamList(val items: List<SpamItem>, val strict: Boolean, val screening: Boolean) : ServerMessage
+
+    @Serializable @SerialName("spam_blocked")
+    data class SpamBlocked(val item: SpamItem) : ServerMessage
+
     @Serializable @SerialName("error")
     data class Error(val code: String, val message: String? = null) : ServerMessage
 }
@@ -146,6 +167,9 @@ data class CallStateItem(
     val connectedAt: Long? = null,
     val onClient: Boolean,
 )
+
+@Serializable
+data class SpamItem(val id: String, val kind: String, val number: String, val body: String? = null, val ts: Long, val reason: String)
 
 @Serializable
 data class CallLogItem(val id: String, val number: String, val name: String? = null, val kind: String, val ts: Long, val duration: Int)

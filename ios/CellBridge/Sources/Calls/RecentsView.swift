@@ -53,6 +53,9 @@ struct RecentsView: View {
                                 Button { model.dial(record.number) } label: { Label("Call", systemImage: "phone") }
                                 Button { model.openThread(record.number) } label: { Label("Message", systemImage: "message") }
                                 Button { UIPasteboard.general.string = record.number } label: { Label("Copy Number", systemImage: "doc.on.doc") }
+                                if model.spam.supported {
+                                    Button(role: .destructive) { model.spam.report(number: record.number) } label: { Label("Report Spam", systemImage: "hand.raised") }
+                                }
                             }
                             Button(role: .destructive) { model.deleteRecents(group.ids) } label: { Label("Delete", systemImage: "trash") }
                         }

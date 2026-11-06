@@ -5,6 +5,7 @@ import com.cellbridge.domain.model.SendResult
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -53,6 +54,27 @@ class SmsRepositoryTest {
         val announced = async(start = CoroutineStart.UNDISPATCHED) { repository.incoming.first() }
         repository.onInboxChanged().join()
         assertEquals(IncomingSms(7, "+90555", "merhaba", 123L), withTimeout(5_000) { announced.await() })
+    }
+
+    @Test
+    fun `a spam text is not announced, is left out of the replay, and comes back once released`() = runBlocking {
+        val desk = com.cellbridge.spam.SpamGuard(object : com.cellbridge.spam.SpamStore {
+            override fun load() = com.cellbridge.spam.SpamState()
+            override fun save(state: com.cellbridge.spam.SpamState) = Unit
+        }, { true })
+        val spamRepository = SmsRepository(store, sender, { role }, SmsLedger(ledgerStore), desk)
+        spamRepository.primeInbox()
+        store.pending = listOf(IncomingSms(9, "5551112233", "Canlı bahis fırsatı", 1L))
+        val seen = mutableListOf<IncomingSms>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) { spamRepository.incoming.collect { seen += it } }
+        spamRepository.onInboxChanged().join()
+        assertEquals(emptyList<IncomingSms>(), seen)
+        assertEquals(emptyList<IncomingSms>(), spamRepository.unacknowledged())
+        desk.notSpam("5551112233")
+        spamRepository.release("5551112233")
+        withTimeout(5_000) { while (seen.isEmpty()) kotlinx.coroutines.delay(10) }
+        assertEquals(9L, seen.single().id)
+        collector.cancel()
     }
 
     @Test

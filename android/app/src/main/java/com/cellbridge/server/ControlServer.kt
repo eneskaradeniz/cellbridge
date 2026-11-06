@@ -22,12 +22,16 @@ import com.cellbridge.status.NoPhoneStatus
 import com.cellbridge.status.PhoneStatusSource
 import com.cellbridge.push.PushTarget
 import com.cellbridge.sms.SmsGateway
+import com.cellbridge.spam.NoSpam
+import com.cellbridge.spam.SpamDesk
+import com.cellbridge.spam.SpamEntry
 import com.cellbridge.telecom.CallDialer
 import com.cellbridge.telecom.DialOutcome
 import com.cellbridge.protocol.CallLogItem
 import com.cellbridge.protocol.CallStateItem
 import com.cellbridge.protocol.ClientMessage
 import com.cellbridge.protocol.SmsHistoryItem
+import com.cellbridge.protocol.SpamItem
 import com.cellbridge.protocol.PROTOCOL_VERSION
 import com.cellbridge.protocol.ServerMessage
 import com.cellbridge.protocol.decodeClientMessage
@@ -98,6 +102,7 @@ class ControlServer @Inject constructor(
     private val advertiser: ServiceAdvertiser,
     private val phoneStatus: PhoneStatusSource,
     private val tones: ToneEvents,
+    private val spam: SpamDesk,
 ) {
     private var engine: EmbeddedServer<*, *>? = null
     private val _running = MutableStateFlow(false)
@@ -120,7 +125,7 @@ class ControlServer @Inject constructor(
                 CIO,
                 rootConfig = serverConfig {
                     parentCoroutineContext = onFailure
-                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, live = live, presence = presence, transfers = transfers, phoneStatus = phoneStatus, tones = tones) }
+                    module { controlModule(feed, commands, audio, sms, dialer, pairingToken.value, capabilities = ::capabilities, history = history, push = push, live = live, presence = presence, transfers = transfers, phoneStatus = phoneStatus, tones = tones, spam = spam) }
                 },
                 configure = { connector { port = CONTROL_PORT; host = "0.0.0.0" } },
             ).also { server ->
@@ -156,6 +161,7 @@ class ControlServer @Inject constructor(
         if (push.available()) { add("push"); add("live") }
         if (audio.isAvailable()) add("transfer")
         add("hold")
+        add("spam")
         add("status")
     }
 
@@ -186,6 +192,7 @@ fun Application.controlModule(
     transfers: TransferController = TransferController(presence, audio),
     phoneStatus: PhoneStatusSource = NoPhoneStatus,
     tones: ToneEvents = ToneEvents(),
+    spam: SpamDesk = NoSpam,
 ) {
     install(WebSockets) {
         pingPeriod = 10.seconds
@@ -193,11 +200,13 @@ fun Application.controlModule(
         maxFrameSize = MAX_FRAME_BYTES
     }
     routing {
-        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, capabilitiesRecheck, history, push, live, presence, transfers, phoneStatus, tones).run() }
+        webSocket("/") { Session(this, feed, commands, audio, sms, dialer, token, capabilities, authFailureDelay, capabilitiesRecheck, history, push, live, presence, transfers, phoneStatus, tones, spam).run() }
     }
 }
 
-private const val MAX_FRAME_BYTES = 64L * 1024
+private fun SpamEntry.toItem() = SpamItem(id, kind, number, body, ts, reason)
+
+private const val MAX_FRAME_BYTES = 1024L * 1024
 private const val STATUS_INTERVAL_MS = 30_000L
 private const val CALL_LOG_LIMIT = 300
 private const val SMS_HISTORY_LIMIT = 500
@@ -222,6 +231,7 @@ private class Session(
     private val transfers: TransferController,
     private val phoneStatus: PhoneStatusSource,
     private val tones: ToneEvents,
+    private val spam: SpamDesk,
 ) {
     suspend fun run() {
         val hello = ws.incoming.receive().let { (it as? Frame.Text)?.readText() }?.let(::decodeClientMessage)
@@ -292,6 +302,12 @@ private class Session(
                     send(it.toMessage())
                 }
             }
+            val spamForwarder = launch(start = CoroutineStart.UNDISPATCHED) {
+                spam.blocked.collect {
+                    acked.await()
+                    send(ServerMessage.SpamBlocked(it.toItem()))
+                }
+            }
             val offered = capabilities()
             send(ServerMessage.HelloAck(PROTOCOL_VERSION, offered))
             // An `ended` sent while the socket was down is gone: the list lets the client end what no longer exists.
@@ -341,6 +357,7 @@ private class Session(
                 statusForwarder.cancel()
                 toneForwarder.cancel()
                 capabilitiesForwarder.cancel()
+                spamForwarder.cancel()
                 statusSmsForwarder.cancel()
                 smsForwarder.cancel()
             }
@@ -361,6 +378,11 @@ private class Session(
             )
         },
     )
+
+    private suspend fun spamList(): ServerMessage {
+        val snapshot = spam.snapshot()
+        return ServerMessage.SpamList(snapshot.items.map { it.toItem() }, snapshot.strict, snapshot.screening)
+    }
 
     private suspend fun handle(message: ClientMessage?, scope: CoroutineScope) {
         val (callId, accepted) = when (message) {
@@ -440,9 +462,27 @@ private class Session(
             is ClientMessage.SmsHistoryRequest -> {
                 val since = message.since ?: (System.currentTimeMillis() - HISTORY_DAYS * DAY_MS)
                 val items = if (sms.isAvailable()) history.texts(since, SMS_HISTORY_LIMIT) else emptyList()
-                send(ServerMessage.SmsHistory(items.map { SmsHistoryItem(it.id, it.peer, it.body, it.timestamp, if (it.outgoing) "out" else "in") }))
+                send(ServerMessage.SmsHistory(items.filterNot { !it.outgoing && spam.isSpamSms(it.peer, it.body) }.map { SmsHistoryItem(it.id, it.peer, it.body, it.timestamp, if (it.outgoing) "out" else "in") }))
                 return
             }
+            is ClientMessage.ContactsSync -> {
+                spam.syncContacts(message.keys)
+                return
+            }
+            is ClientMessage.SpamReport -> {
+                spam.report(message.number, message.body)
+                return send(spamList())
+            }
+            is ClientMessage.SpamNot -> {
+                spam.notSpam(message.number)
+                sms.release(message.number) // the texts it held back were never acknowledged: give them to the client now
+                return send(spamList())
+            }
+            is ClientMessage.SpamSettings -> {
+                spam.setStrict(message.strict)
+                return send(spamList())
+            }
+            is ClientMessage.SpamListRequest -> return send(spamList())
             is ClientMessage.LiveStartToken -> {
                 if (!push.available() || message.token.length < 32) return send(ServerMessage.Error("bad_message"))
                 live.startToken(message.token)

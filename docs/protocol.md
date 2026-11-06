@@ -17,7 +17,7 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | type | dir | fields |
 |---|---|---|
 | `hello` | iOS -> host | `version` (int, currently 1), `token` |
-| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `live`, `hold`, `transfer`, `status`, `conference` (draft)) |
+| `hello_ack` | host -> iOS | `version`, `capabilities` (`calls`, `sms`, `audio`, `calllog`, `smshistory`, `push`, `live`, `hold`, `spam`, `transfer`, `status`, `conference` (draft)) |
 | `call_list` | host -> iOS | `callIds` (every call that is still live) |
 | `capabilities` | host -> iOS | `capabilities` (the full list again, sent when it changes) |
 | `tone` | host -> iOS | `action` (`start`/`stop`), `kind?` (`generator`/`media`), `id?` (ToneGenerator constant), `name?` (media tone) |
@@ -57,6 +57,13 @@ Host listens on `ws://<host>:8765`. Every message has `"type"`.
 | `live_start_token` | iOS -> host | `token` (hex) |
 | `live_update_token` | iOS -> host | `callId`, `token` (hex) |
 | `push_token` | iOS -> host | `token` (hex), `env` (`sandbox`/`production`), `topic`, `key` (base64, 32 bytes), `alert_token?` (hex), `alert_topic?` |
+| `contacts_sync` | iOS -> host | `keys` (the last 10 digits of every contact number, digits only, no names; replaces the host's list) |
+| `spam_report` | iOS -> host | `number`, `body?` (the text, for an SMS) |
+| `spam_not` | iOS -> host | `number` |
+| `spam_settings` | iOS -> host | `strict` (bool) |
+| `spam_list_request` | iOS -> host | (none) |
+| `spam_list` | host -> iOS | `items`: `{id, kind` (`call`/`sms`)`, number, body?, ts, reason}`, `strict`, `screening` (bool: the host may screen calls) |
+| `spam_blocked` | host -> iOS | `item` (as one of the `spam_list` items) (a call or text was just blocked) |
 
 `audio` is advertised only when the root audio daemon is reachable; without it the host runs in control-only mode
 (calls and SMS work, call audio stays on the phone) and the client must not open the audio channel.
@@ -121,6 +128,19 @@ Hold: `hold` puts a call on hold at the network (the other party hears the hold 
 in `capabilities`. The host asks Telecom, which acts only if the carrier allows it for that call; the result is the call's `status` in `call_state` (`holding`
 or `active`, `onClient` unchanged), which the client watches, so a hold from the phone's own screen shows on the client as well. Asking about a
 call that is not live is `unknown_call`. A held call stays relayed: the client simply stops sending its microphone while it is held.
+
+## Spam filter
+`spam` is advertised in `capabilities` always. The host judges every incoming call (Android `CallScreeningService`, needs the
+`CALL_SCREENING` role: `adb shell cmd role add-role-holder android.app.role.CALL_SCREENING com.cellbridge`) and every incoming
+text. A blocked call is rejected before it rings anywhere (the stock call log still lists it); a blocked text stays in the stock
+Messages app (nothing is deleted) but is not announced: no `sms`, no push, and `sms_history` leaves it out.
+Rules, strongest first: reported number (`spam_report`) blocks; a number in `contacts_sync`, or one cleared with `spam_not`, passes;
+then a score (block at 60): same 8-digit range as a reported number +50, `0850` marketing prefix +40, foreign number +30 (a withheld number has nothing to score: only `strict` blocks it, as `withheld`);
+for texts a gambling word +60, each scam phrase +30, a link +30, the same text as a reported one blocks. `strict` blocks every
+unknown caller and every unknown numeric text sender. Short numbers (under 7 digits) and one-time-code texts without a link pass.
+`reason` is one of `reported`, `range`, `same_text`, `marketing`, `foreign`, `withheld`, `gambling`, `scam`, `link`, `unknown`.
+`spam_not` also replays that number's unacknowledged texts as `sms`. The host keeps the last 200 blocked items. Numbers are
+compared by their last 10 digits; the client sends `contacts_sync` after login and whenever its contacts change.
 
 Conference (DRAFT, not implemented; `conference` is advertised in `capabilities` only when the carrier allows holding and merging; a client that
 does not know it never sees these messages): `hold` / `unhold` put a call on hold on the phone or take it off again. The host answers with

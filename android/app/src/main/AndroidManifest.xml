@@ -78,6 +78,15 @@
             </intent-filter>
         </service>
 
+        <service
+            android:name=".telecom.CellBridgeCallScreeningService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
         <receiver android:name=".sms.SmsDeliveryReceiver" android:exported="false" />
     </application>
 </manifest>

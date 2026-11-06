@@ -24,6 +24,7 @@ used to bring along; the app asks for them itself, the commands skip the dialog)
 
 ```
 adb shell appops set com.cellbridge MANAGE_ONGOING_CALLS allow          # without it Telecom never binds the screenless InCallService
+adb shell cmd role add-role-holder android.app.role.CALL_SCREENING com.cellbridge   # spam filter for calls (texts need nothing extra)
 adb shell pm grant com.cellbridge android.permission.CALL_PHONE          # place the iPhone's outgoing calls
 adb shell pm grant com.cellbridge android.permission.READ_PHONE_STATE    # signal strength for the iPhone's status
 adb shell cmd notification allow_dnd com.cellbridge                      # lets the app quieten the ringer while the iPhone rings

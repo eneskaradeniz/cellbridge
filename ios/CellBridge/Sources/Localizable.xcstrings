@@ -7,6 +7,101 @@
         "tr": { "stringUnit": { "state": "translated", "value": "Beklet" } }
       }
     },
+    "Blocked": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Engellenenler" } }
+      }
+    },
+    "Block unknown numbers": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Bilinmeyen numaraları engelle" } }
+      }
+    },
+    "Spam": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Spam" } }
+      }
+    },
+    "Not Spam": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Spam Değil" } }
+      }
+    },
+    "Report Spam": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Spam Bildir" } }
+      }
+    },
+    "Nothing Blocked": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Engellenen Yok" } }
+      }
+    },
+    "Spam calls and texts the phone stops show up here.": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Telefonun durdurduğu spam arama ve mesajlar burada görünür." } }
+      }
+    },
+    "The phone is not screening calls yet. Texts are filtered; give CellBridge the call screening role on the Android phone.": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Telefon henüz aramaları denetlemiyor. Mesajlar süzülüyor; Android telefonda CellBridge'e arama tarama rolünü ver." } }
+      }
+    },
+    "Calls and texts from numbers that are not in your contacts are blocked. Contacts always get through.": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Rehberinde olmayan numaralardan gelen arama ve mesajlar engellenir. Rehberdekiler her zaman geçer." } }
+      }
+    },
+    "You reported this number": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Bu numarayı sen bildirdin" } }
+      }
+    },
+    "Number close to a reported one": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Bildirilen bir numaraya yakın numara" } }
+      }
+    },
+    "Same text as a reported one": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Bildirilen bir metinle aynı" } }
+      }
+    },
+    "Marketing number": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Pazarlama numarası" } }
+      }
+    },
+    "Foreign number": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Yurt dışı numara" } }
+      }
+    },
+    "Hidden number": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Gizli numara" } }
+      }
+    },
+    "Betting ad": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Bahis reklamı" } }
+      }
+    },
+    "Looks like a scam": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Dolandırıcılığa benziyor" } }
+      }
+    },
+    "Suspicious link": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Şüpheli bağlantı" } }
+      }
+    },
+    "Not in your contacts": {
+      "localizations": {
+        "tr": { "stringUnit": { "state": "translated", "value": "Rehberinde yok" } }
+      }
+    },
     "Resume": {
       "localizations": {
         "tr": { "stringUnit": { "state": "translated", "value": "Devam Et" } }

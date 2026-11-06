@@ -14,6 +14,9 @@ interface SmsGateway {
     /** Received texts the client has not acknowledged yet, oldest first. */
     suspend fun unacknowledged(): List<IncomingSms>
 
+    /** Announces again the unacknowledged texts of [number], which the spam filter held back until now. */
+    suspend fun release(number: String) = Unit
+
     /** Acknowledges [id] and every earlier text. */
     suspend fun acknowledge(id: Long)
 

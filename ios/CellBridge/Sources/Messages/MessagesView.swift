@@ -17,6 +17,15 @@ struct MessagesView: View {
                         .onTapGesture { model.tab = .settings }
                         .accessibilityAddTraits(.isButton)
                 }
+                if model.spam.supported {
+                    NavigationLink { SpamView() } label: {
+                        HStack {
+                            Label("Blocked", systemImage: "shield.lefthalf.filled").foregroundStyle(.red)
+                            Spacer()
+                            if model.spam.unseen > 0 { Text("\(model.spam.unseen)").font(.footnote).foregroundStyle(.secondary) }
+                        }
+                    }
+                }
                 ForEach(model.messages.conversations) { conversation in
                 NavigationLink(value: ThreadRoute(key: conversation.key, peer: conversation.peer)) {
                     Row(conversation: conversation, name: model.displayName(for: conversation.peer))
@@ -39,6 +48,9 @@ struct MessagesView: View {
                         Button { model.messages.markRead(key: conversation.key) } label: { Label("Mark as Read", systemImage: "message") }
                     } else {
                         Button { model.messages.markUnread(key: conversation.key) } label: { Label("Mark as Unread", systemImage: "message.badge") }
+                    }
+                    if model.spam.supported {
+                        Button(role: .destructive) { model.reportSpam(conversation: conversation) } label: { Label("Report Spam", systemImage: "hand.raised") }
                     }
                     Button(role: .destructive) { deleting = conversation } label: { Label("Delete", systemImage: "trash") }
                 }

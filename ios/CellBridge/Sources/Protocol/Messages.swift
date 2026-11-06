@@ -24,6 +24,11 @@ enum ClientMessage: Equatable {
     case pushToken(token: String, env: String, topic: String, key: String, alertToken: String?, alertTopic: String?)
     case callStateRequest
     case transferRequest(callId: String)
+    case contactsSync(keys: [String])
+    case spamReport(number: String, body: String?)
+    case spamNot(number: String)
+    case spamSettings(strict: Bool)
+    case spamListRequest
 
     func encoded() -> String {
         var object: [String: Any]
@@ -75,6 +80,17 @@ enum ClientMessage: Equatable {
             object = ["type": "call_state_request"]
         case .transferRequest(let callId):
             object = ["type": "transfer_request", "callId": callId]
+        case .contactsSync(let keys):
+            object = ["type": "contacts_sync", "keys": keys]
+        case .spamReport(let number, let body):
+            object = ["type": "spam_report", "number": number]
+            if let body { object["body"] = body }
+        case .spamNot(let number):
+            object = ["type": "spam_not", "number": number]
+        case .spamSettings(let strict):
+            object = ["type": "spam_settings", "strict": strict]
+        case .spamListRequest:
+            object = ["type": "spam_list_request"]
         }
         let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
         return String(decoding: data, as: UTF8.self)
@@ -102,6 +118,22 @@ struct HostText: Equatable {
     let body: String
     let ts: Int64
     let outgoing: Bool
+}
+
+/// A call or text the host blocked (docs/protocol.md `spam_list`). `kind` is call or sms; `reason` is the host's code.
+struct SpamItem: Equatable, Identifiable {
+    let id: String
+    let kind: String
+    let number: String
+    let body: String?
+    let ts: Int64
+    let reason: String
+
+    static func decode(_ row: [String: Any]) -> SpamItem? {
+        guard let id = row["id"] as? String, let kind = row["kind"] as? String, let number = row["number"] as? String,
+              let ts = (row["ts"] as? NSNumber)?.int64Value, let reason = row["reason"] as? String else { return nil }
+        return SpamItem(id: id, kind: kind, number: number, body: row["body"] as? String, ts: ts, reason: reason)
+    }
 }
 
 /// A call the phone has right now (docs/protocol.md `call_state`): on the phone itself, or carried to a client.
@@ -148,6 +180,8 @@ enum ServerMessage: Equatable {
     case callState(calls: [PhoneCall])
     case callLog(entries: [HostCall])
     case smsHistory(items: [HostText])
+    case spamList(items: [SpamItem], strict: Bool, screening: Bool)
+    case spamBlocked(SpamItem)
     case error(code: String, message: String?)
 
     /// Returns nil for anything that is not a message this client understands; unknown types are ignored on purpose
@@ -230,6 +264,13 @@ enum ServerMessage: Equatable {
                       let ts = (row["ts"] as? NSNumber)?.int64Value, let dir = row["dir"] as? String else { return nil }
                 return HostText(id: id, peer: peer, body: body, ts: ts, outgoing: dir == "out")
             })
+        case "spam_list":
+            let rows = object["items"] as? [[String: Any]] ?? []
+            return .spamList(items: rows.compactMap(SpamItem.decode), strict: object["strict"] as? Bool ?? false,
+                             screening: object["screening"] as? Bool ?? false)
+        case "spam_blocked":
+            guard let row = object["item"] as? [String: Any], let item = SpamItem.decode(row) else { return nil }
+            return .spamBlocked(item)
         case "error":
             guard let code = object["code"] as? String else { return nil }
             return .error(code: code, message: object["message"] as? String)

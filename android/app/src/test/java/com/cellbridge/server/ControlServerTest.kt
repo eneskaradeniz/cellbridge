@@ -124,6 +124,11 @@ class ControlServerTest {
     private val transfers = TransferController(presence, bridge)
     private val incomingRinging = CallSnapshot("c1", "+90555", CallDirection.INCOMING, CallStatus.RINGING)
 
+    private val spam = com.cellbridge.spam.SpamGuard(object : com.cellbridge.spam.SpamStore {
+        override fun load() = com.cellbridge.spam.SpamState()
+        override fun save(state: com.cellbridge.spam.SpamState) = Unit
+    }, { true })
+
     private fun withServer(
         status: com.cellbridge.status.PhoneStatusSource = com.cellbridge.status.NoPhoneStatus,
         historySource: HistorySource = history,
@@ -143,6 +148,7 @@ class ControlServerTest {
                     transfers = transfers,
                     phoneStatus = status,
                     tones = tones,
+                    spam = spam,
                 )
             }
             val client = createClient { install(WebSockets) }
@@ -397,6 +403,21 @@ class ControlServerTest {
             say("""{"type":"sms_ack","id":"seven"}""")
             assertEquals("bad_message", hear().str("code"))
             assertEquals(listOf(7L), sms.acknowledged)
+        }
+    }
+
+    @Test
+    fun `a reported number is listed, a blocked text is pushed, strict is remembered, and not-spam clears it`() = withServer { connect ->
+        connect {
+            login()
+            say("""{"type":"spam_report","number":"+905321234567"}""")
+            val list = hear()
+            assertEquals("spam_list", list.str("type"))
+            say("""{"type":"spam_settings","strict":true}""")
+            assertEquals("true", hear()["strict"]!!.jsonPrimitive.content)
+            say("""{"type":"spam_not","number":"05321234567"}""")
+            val cleared = hear()
+            assertEquals(0, cleared["items"]!!.toString().count { it == '{' })
         }
     }
 

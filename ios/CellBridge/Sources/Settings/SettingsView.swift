@@ -65,6 +65,17 @@ struct SettingsView: View {
                     }
                 }
 
+                if model.spam.supported {
+                    Section {
+                        NavigationLink { SpamView() } label: { Label("Blocked", systemImage: "shield.lefthalf.filled") }
+                        Toggle("Block unknown numbers", isOn: Binding(get: { model.spam.strict }, set: { model.spam.setStrict($0) }))
+                    } header: {
+                        Text("Spam")
+                    } footer: {
+                        Text("Calls and texts from numbers that are not in your contacts are blocked. Contacts always get through.")
+                    }
+                }
+
                 Section {
                     ForEach(PermissionKind.allCases) { PermissionRow(kind: $0) }
                 } header: {

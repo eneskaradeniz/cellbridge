@@ -34,6 +34,7 @@ final class AppModel: ObservableObject {
     let permissions = PermissionCenter()
     private let push = PushRegistry()
     private let liveTokens = LiveActivityTokens()
+    private(set) var spam: SpamCenter!
     /// The first-run sheet (pairing and permissions) is on screen.
     @Published var showSetup = false
     /// Why the last pull to refresh had nothing to refresh from; cleared once the phone is reached.
@@ -98,6 +99,7 @@ final class AppModel: ObservableObject {
             },
             log: { [weak self] in self?.log($0) }
         )
+        spam = SpamCenter(transmit: { [weak self] in self?.client.send($0) })
         messages.alreadyAnnounced = { PushedTexts.contains($0) }
         messages.notifyBacklog = { [weak self] count, senders in
             guard let self else { return }
@@ -111,6 +113,7 @@ final class AppModel: ObservableObject {
             self?.log(Self.describe(message))
             self?.calls.handle(message)
             self?.messages.handle(message)
+            self?.spam.handle(message)
             self?.handleHistory(message)
             self?.handleHostStatus(message)
         }
@@ -192,6 +195,7 @@ final class AppModel: ObservableObject {
         }
         #endif
         messages.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
+        spam.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         // Forward state changes of the nested object so the main screen refreshes.
         client.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         calls.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
@@ -297,6 +301,13 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Reports the sender of a conversation as spam (with its latest text, so the same text is caught again) and drops it from this iPhone.
+    func reportSpam(conversation: Conversation) {
+        let latest = conversation.messages.last { $0.direction == .incoming }?.body
+        spam.report(number: conversation.peer, body: latest)
+        messages.delete(conversation: conversation.key)
+    }
+
     func refreshContacts() {
         #if DEBUG
         if Sample.enabled { return }
@@ -304,7 +315,9 @@ final class AppModel: ObservableObject {
         contactsAuthorized = contactProvider.isAuthorized
         guard contactsAuthorized else { return }
         Task {
-            contactBook = ContactBook(contacts: await contactProvider.load())
+            let loaded = await contactProvider.load()
+            contactBook = ContactBook(contacts: loaded)
+            spam.syncContacts(loaded)
             liveTokens.refreshNames()
         }
     }
@@ -512,6 +525,7 @@ final class AppModel: ObservableObject {
         case .helloAck(_, let capabilities):
             markSynced()
             sendPushToken(offered: capabilities)
+            spam.connected(capabilities: capabilities)
             if capabilities.contains("live") { liveTokens.resend() }
             if capabilities.contains("transfer") { client.send(.callStateRequest) }
             messages.resendPending()
@@ -686,6 +700,8 @@ final class AppModel: ObservableObject {
         case .callState(let calls): return "phone calls \(calls.count)"
         case .callLog(let entries): return "call log \(entries.count)"
         case .smsHistory(let items): return "text history \(items.count)"
+        case .spamList(let items, _, _): return "spam list \(items.count)"
+        case .spamBlocked(let item): return "spam blocked \(item.kind)" // never log the number or the text
         case .error(let code, _): return "error \(code)"
         }
     }
